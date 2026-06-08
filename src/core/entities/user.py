@@ -23,9 +23,18 @@ from .base import (
 )
 
 if TYPE_CHECKING:
-    from .log import Log
-    from .pendingUser import PendingUser
     from .year import Year
+    from .department import Department
+    from .faculty import Faculty
+    from .role import Role
+    from .pendingUser import PendingUser
+    from .material import Material
+    from .task import Task
+    from .announcement import Announcement
+    from .notification import Notification
+    from .log import Log
+    from .subject import Subject
+    from .requestLimit import RequestLimit
 
 
 class User(Base):
@@ -121,9 +130,9 @@ class User(Base):
     materials: Mapped[list["Material"]] = relationship(
         "Material", back_populates="author", cascade="all, delete-orphan"
     )
-    grades: Mapped[list["Grade"]] = relationship(
-        "Grade", back_populates="author", cascade="all, delete-orphan"
-    )
+    # grades: Mapped[list["Grade"]] = relationship(
+    #     "Grade", back_populates="author", cascade="all, delete-orphan"
+    # )
     tasks: Mapped[list["Task"]] = relationship(
         "Task", back_populates="author", cascade="all, delete-orphan"
     )
@@ -136,30 +145,30 @@ class User(Base):
         back_populates="users",
         cascade="all, delete",
     )
-    marks: Mapped[list["Mark"]] = relationship(
-        "Mark", back_populates="author", cascade="all, delete-orphan"
-    )
-    events: Mapped[list["Event"]] = relationship(
-        "Event", back_populates="author", cascade="all, delete-orphan"
-    )
-    roadmaps: Mapped[list["Roadmap"]] = relationship(
-        "Roadmap", back_populates="author", cascade="all, delete-orphan"
-    )
-    questions: Mapped[list["Question"]] = relationship(
-        "Question", back_populates="author", cascade="all, delete-orphan"
-    )
-    answers: Mapped[list["Answer"]] = relationship(
-        "Answer", back_populates="author", cascade="all, delete-orphan"
-    )
-    timetables: Mapped[list["Timetable"]] = relationship(
-        "Timetable", back_populates="author", cascade="all, delete-orphan"
-    )
-    reviews: Mapped[list["Review"]] = relationship(
-        "Review", back_populates="author", cascade="all, delete-orphan"
-    )
-    going_events: Mapped[list["Event"]] = relationship(
-        "Event", secondary="event_users", back_populates="users", cascade="all, delete"
-    )
+    # marks: Mapped[list["Mark"]] = relationship(
+    #     "Mark", back_populates="author", cascade="all, delete-orphan"
+    # )
+    # events: Mapped[list["Event"]] = relationship(
+    #     "Event", back_populates="author", cascade="all, delete-orphan"
+    # )
+    # roadmaps: Mapped[list["Roadmap"]] = relationship(
+    #     "Roadmap", back_populates="author", cascade="all, delete-orphan"
+    # )
+    # questions: Mapped[list["Question"]] = relationship(
+    #     "Question", back_populates="author", cascade="all, delete-orphan"
+    # )
+    # answers: Mapped[list["Answer"]] = relationship(
+    #     "Answer", back_populates="author", cascade="all, delete-orphan"
+    # )
+    # timetables: Mapped[list["Timetable"]] = relationship(
+    #     "Timetable", back_populates="author", cascade="all, delete-orphan"
+    # )
+    # reviews: Mapped[list["Review"]] = relationship(
+    #     "Review", back_populates="author", cascade="all, delete-orphan"
+    # )
+    # going_events: Mapped[list["Event"]] = relationship(
+    #     "Event", secondary="event_users", back_populates="users", cascade="all, delete"
+    # )
     logs: Mapped[list["Log"]] = relationship(
         "Log", back_populates="user", cascade="all, delete-orphan"
     )
@@ -316,18 +325,18 @@ class User(Base):
         role: Optional[Role.Model]
         pending_user: Optional[PendingUser.Model]
         materials: list[Material.Model]
-        grades: list[Grade.Model]
+        # grades: list[Grade.Model]
         tasks: list[Task.Model]
         announcements: list[Announcement.Model]
         notifications: list[Notification.Model]
-        marks: list[Mark.Model]
-        events: list[Event.Model]
-        roadmaps: list[Roadmap.Model]
-        questions: list[Question.Model]
-        answers: list[Answer.Model]
-        timetables: list[Timetable.Model]
-        reviews: list[Review.Model]
-        going_events: list[Event.Model]
+        # marks: list[Mark.Model]
+        # events: list[Event.Model]
+        # roadmaps: list[Roadmap.Model]
+        # questions: list[Question.Model]
+        # answers: list[Answer.Model]
+        # timetables: list[Timetable.Model]
+        # reviews: list[Review.Model]
+        # going_events: list[Event.Model]
         logs: list[Log.Model]
         subjects: list[Subject.Model]
         request_limits: list[RequestLimit.Model]

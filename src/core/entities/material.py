@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+from .base import (
+    Base,
+    Integer,
+    String,
+    TIMESTAMP,
+    datetime,
+    JSON,
+    MutableDict,
+    ForeignKey,
+    Index,
+    Mapped,
+    Optional,
+    TimezoneHandler,
+    TypedDict,
+    TYPE_CHECKING,
+    mapped_column,
+    relationship,
+)
+
+if TYPE_CHECKING:
+    from .user import User
+    from .subject import Subject
+
+
+class Material(Base):
+    # Tablename
+    __tablename__ = "materials"
+
+    # Columns
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    type: Mapped[str] = mapped_column(String(30), nullable=False)
+    url: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    details: Mapped[dict] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True, default=dict
+    )
+
+    # Timestamps
+    created_at: Mapped[Optional[datetime]] = mapped_column(
+        TIMESTAMP(timezone=True),
+        default=lambda: TimezoneHandler.now("UTC"),
+        nullable=True,
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        TIMESTAMP(timezone=True),
+        default=lambda: TimezoneHandler.now("UTC"),
+        onupdate=lambda: TimezoneHandler.now("UTC"),
+        nullable=True,
+    )
+
+    # Relationships
+    subject_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("subjects.id", ondelete="CASCADE", name="fk_subject_material"),
+        nullable=True,
+    )
+    subject: Mapped[Optional["Subject"]] = relationship(
+        "Subject", back_populates="materials", cascade="save-update, merge"
+    )
+    author_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL", name="fk_user_material"),
+        nullable=False,
+    )
+    author: Mapped["User"] = relationship("User", back_populates="materials")
+    parent_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("materials.id", ondelete="CASCADE", name="fk_parent_material"),
+        nullable=True,
+    )
+    parent: Mapped[Optional["Material"]] = relationship(
+        "Material", remote_side=[id], back_populates="children"
+    )
+    children: Mapped[list["Material"]] = relationship(
+        "Material", back_populates="parent", cascade="all, delete-orphan"
+    )
+
+    # Indexes
+    __table_args__ = (Index("idx_material_subject_parent", "subject_id", "parent_id"),)
+
+    # Representation
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "type": self.type,
+            "url": self.url,
+            "details": self.details,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "subject": self.subject.to_dict() if self.subject else None,
+            "author": self.author.to_dict() if self.author else None,
+            "parent_id": self.parent_id,
+        }
+
+    class Model(TypedDict):
+        id: int
+        name: Optional[str]
+        type: str
+        url: Optional[str]
+        details: dict
+        created_at: Optional[datetime]
+        updated_at: Optional[datetime]
+        subject: Optional[Subject.Model]
+        author: User.Model
+        parent_id: Optional[int]

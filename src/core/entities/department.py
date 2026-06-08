@@ -21,6 +21,10 @@ from .base import (
 
 if TYPE_CHECKING:
     from .user import User
+    from .faculty import Faculty
+    from .subject import Subject
+    from .task import Task
+    from .announcement import Announcement
 
 
 class Department(Base):
@@ -74,18 +78,18 @@ class Department(Base):
     announcements: Mapped[list["Announcement"]] = relationship(
         "Announcement", back_populates="department", cascade="all, delete-orphan"
     )
-    events: Mapped[list["Event"]] = relationship(
-        "Event", back_populates="department", cascade="all, delete-orphan"
-    )
-    roadmaps: Mapped[list["Roadmap"]] = relationship(
-        "Roadmap", back_populates="department", cascade="all, delete-orphan"
-    )
-    questions: Mapped[list["Question"]] = relationship(
-        "Question", back_populates="department", cascade="all, delete-orphan"
-    )
-    timetables: Mapped[list["Timetable"]] = relationship(
-        "Timetable", back_populates="department", cascade="all, delete-orphan"
-    )
+    # events: Mapped[list["Event"]] = relationship(
+    #     "Event", back_populates="department", cascade="all, delete-orphan"
+    # )
+    # roadmaps: Mapped[list["Roadmap"]] = relationship(
+    #     "Roadmap", back_populates="department", cascade="all, delete-orphan"
+    # )
+    # questions: Mapped[list["Question"]] = relationship(
+    #     "Question", back_populates="department", cascade="all, delete-orphan"
+    # )
+    # timetables: Mapped[list["Timetable"]] = relationship(
+    #     "Timetable", back_populates="department", cascade="all, delete-orphan"
+    # )
 
     # Indexes
     __table_args__ = (
@@ -162,7 +166,7 @@ class Department(Base):
         subjects: list["Subject.Model"]
         tasks: list["Task.Model"]
         announcements: list["Announcement.Model"]
-        events: list["Event.Model"]
-        roadmaps: list["Roadmap.Model"]
-        questions: list["Question.Model"]
-        timetables: list["Timetable.Model"]
+        # events: list["Event.Model"]
+        # roadmaps: list["Roadmap.Model"]
+        # questions: list["Question.Model"]
+        # timetables: list["Timetable.Model"]
