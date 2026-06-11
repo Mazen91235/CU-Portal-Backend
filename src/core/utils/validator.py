@@ -1,5 +1,5 @@
 from email_validator import validate_email, EmailNotValidError
-from core.dtos.baseResponseDto import BaseResponseDto
+from core.dtos.baseDtos import BaseResponseDto
 
 
 class Validator:

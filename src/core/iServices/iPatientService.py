@@ -1,6 +1,6 @@
 from abc import abstractmethod
 from typing import Any, Coroutine
-from core.dtos.baseResponseDto import BaseResponseDto
+from core.dtos.baseDtos import BaseResponseDto
 from core.iServices.bases.iCrudService import ICrudService
 from core.entities.patient import Patient
 from core.dtos.patientDtos import (

@@ -1,216 +1,118 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import TypedDict, TYPE_CHECKING
+from pydantic import BaseModel, EmailStr, Field
 
 if TYPE_CHECKING:
+    from .baseDtos import BaseSearchDto
     from core.entities.user import User
-    from core.entities.token import Token
-    from .patientDtos import PatientResponseDto
-    from .logDtos import LogResponseDto
 
 
-class UserRegisterDto:
-    def __init__(self, name: str = "", email: str = "", password: str = ""):
-        self.name = name
-        self.email = email
-        self.password = password
-
-    def to_dict(self):
-        return {"name": self.name, "email": self.email, "password": self.password}
-
-    class Model(TypedDict):
-        name: str
-        email: str
-        password: str
-
-
-class UserResponseDto:
-    def __init__(
-        self,
-        id: int | None = None,
-        name: str = "",
-        email: str = "",
-        is_verified: bool | None = None,
-        created_at: datetime | None = None,
-        updated_at: datetime | None = None,
-        tokens: list[Token] | None = None,
-        patients: list[PatientResponseDto] | None = None,
-        logs: list[LogResponseDto] = [],
-    ):
-        self.id = id
-        self.name = name
-        self.email = email
-        self.is_verified = is_verified
-        self.created_at = created_at
-        self.updated_at = updated_at
-        self.tokens = tokens
-        self.patients = patients
-        self.logs = logs
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "email": self.email,
-            "is_verified": self.is_verified,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "tokens": [token.to_dict() for token in self.tokens] if self.tokens else [],
-            "patients": (
-                [patient.to_dict() for patient in self.patients]
-                if self.patients
-                else []
-            ),
-            "logs": [log.to_dict() for log in self.logs] if self.logs else [],
-        }
-
-    class Model(TypedDict):
-        id: int
-        name: str
-        email: str
-        is_verified: bool
-        created_at: datetime
-        updated_at: datetime
-        tokens: list[Token.Model]
-        patients: list[PatientResponseDto.Model]
-        logs: list[LogResponseDto.Model]
+class UserRegisterDto(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60, description="Name of User")
+    email: EmailStr = Field(
+        ..., min_length=1, max_length=100, description="Unique Email of User"
+    )
+    phone: str = Field(
+        ..., min_length=1, max_length=13, description="Phone number of User"
+    )
+    gender: str = Field(..., min_length=1, max_length=6, description="Gender of User")
+    early_access: bool = Field(
+        default=False, description="Whether the user is an early access user"
+    )
+    agreed: bool = Field(
+        default=False, description="Whether the user agreed to terms and conditions"
+    )
+    google_details_token: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Google details token for authentication",
+    )
 
 
-class UserUpdateDto:
-    def __init__(self, name: str = ""):
-        self.name = name
+class UserResponseDto(BaseModel):
+    id: int | None = None
+    name: str = ""
+    email: EmailStr = ""
+    phone: str = ""
+    gender: str = ""
+    type: User.Type = User.Type.MAINSTREAM
+    section: int | None = None
+    status: bool | None = None
+    is_early_access: bool | None = None
+    manages: dict | None = None
+    details: dict | None = None
+    google_id: str = ""
+    google_name: str = ""
+    google_email: EmailStr = ""
+    google_avatar: str = ""
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
-    def to_dict(self):
-        return {"name": self.name}
+    # Relationships
+    year: YearResponseDto | None = None
+    department: DepartmentResponseDto | None = None
+    faculty: FacultyResponseDto | None = None
+    role: RoleResponseDto | None = None
+    pending_user: PendingUserResponseDto | None = None
+    materials: list[MaterialResponseDto] | None = None
+    tasks: list[TaskResponseDto] | None = None
+    announcements: list[AnnouncementResponseDto] | None = None
+    notifications: list[NotificationResponseDto] | None = None
+    logs: list[LogResponseDto] | None = None
+    subjects: list[SubjectResponseDto] | None = None
 
-    class Model(TypedDict):
-        name: str
-
-
-class UserSearchDto:
-    def __init__(
-        self,
-        id: int | None = None,
-        name: str = "",
-        email: str = "",
-        is_verified: bool | None = None,
-        created_at_from: str = "",
-        created_at_to: str = "",
-        updated_at_from: str = "",
-        updated_at_to: str = "",
-    ):
-        self.id = id
-        self.name = name
-        self.email = email
-        self.is_verified = is_verified
-        self.created_at_from = created_at_from
-        self.created_at_to = created_at_to
-        self.updated_at_from = updated_at_from
-        self.updated_at_to = updated_at_to
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "email": self.email,
-            "is_verified": self.is_verified,
-            "created_at_from": self.created_at_from,
-            "created_at_to": self.created_at_to,
-            "updated_at_from": self.updated_at_from,
-            "updated_at_to": self.updated_at_to,
-        }
-
-    class Model(TypedDict):
-        id: int
-        name: str
-        email: str
-        is_verified: bool
-        created_at_from: str
-        created_at_to: str
-        updated_at_from: str
-        updated_at_to: str
+    # Pydantic Configuration
+    model_config = {
+        "from_attributes": True,
+    }
 
 
-class UserLoginDto:
-    def __init__(self, email: str = "", password: str = ""):
-        self.email = email
-        self.password = password
-
-    def to_dict(self):
-        return {"email": self.email, "password": self.password}
-
-    class Model(TypedDict):
-        email: str
-        password: str
+class UserUpdateDto(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60, description="Name of User")
+    url: str = Field(..., min_length=1, max_length=255, description="URL of User")
 
 
-class UserLoginResponseDto:
-    def __init__(self, user: User | None = None, token: str = ""):
-        self.user = user
-        self.token = token
-
-    def to_dict(self):
-        return {"user": self.user.to_dict() if self.user else None, "token": self.token}
-
-    class Model(TypedDict):
-        user: User.Model
-        token: str
+class UserSearchDto(BaseSearchDto, BaseModel):
+    faculty_id: int | None = Field(None, description="ID of Faculty to filter by")
+    department_id: int | None = Field(None, description="ID of Department to filter by")
+    year_id: int | None = Field(None, description="ID of Year to filter by")
+    is_active: bool | None = Field(None, description="Whether the user is active")
 
 
-class UserVerifyEmailDto:
-    def __init__(self, token: str = ""):
-        self.token = token
-
-    def to_dict(self):
-        return {"token": self.token}
-
-    class Model(TypedDict):
-        token: str
+# User-Specific DTOs
+class UserUpdateUsersRecordDto(BaseModel):
+    id: int = Field(..., description="ID of the user to update")
+    approved: bool = Field(True, description="Whether the user is approved")
+    role_id: int | None = Field(None, description="ID of the new role for the user")
 
 
-class UserForgotPasswordDto:
-    def __init__(self, email: str = ""):
-        self.email = email
-
-    def to_dict(self):
-        return {"email": self.email}
-
-    class Model(TypedDict):
-        email: str
+class UserUpdateUsersDto(BaseModel):
+    data_to_update: list[UserUpdateUsersRecordDto] = Field(
+        ..., description="List of user records to update"
+    )
 
 
-class UserResetPasswordDto:
-    def __init__(self, token: str = "", new_password: str = ""):
-        self.token = token
-        self.new_password = new_password
-
-    def to_dict(self):
-        return {"token": self.token, "new_password": self.new_password}
-
-    class Model(TypedDict):
-        token: str
-        new_password: str
+class UserHasPermissionsDto(BaseModel):
+    required_permissions: list[str] = Field(
+        ..., description="List of permissions to check for the user"
+    )
+    is_and: bool = Field(
+        default=True,
+        description="Whether the user needs to have all permissions (AND) or at least one (OR)",
+    )
 
 
-class UserChangePasswordDto:
-    def __init__(self, old_password: str = "", new_password: str = ""):
-        self.old_password = old_password
-        self.new_password = new_password
-
-    def to_dict(self):
-        return {"old_password": self.old_password, "new_password": self.new_password}
-
-    class Model(TypedDict):
-        old_password: str
-        new_password: str
-
-
-class UserResendTokenDto:
-    def __init__(self, email: str = ""):
-        self.email = email
-
-    def to_dict(self):
-        return {"email": self.email}
-
-    class Model(TypedDict):
-        email: str
+class UserUpdateAcademicDataDto(BaseModel):
+    faculty_id: int | None = Field(
+        None, description="ID of the new faculty for the user"
+    )
+    department_id: int | None = Field(
+        None, description="ID of the new department for the user"
+    )
+    year_id: int | None = Field(None, description="ID of the new year for the user")
+    study_type: User.Type | None = Field(
+        None,
+        description="New study type for the user (e.g., 'undergraduate', 'graduate')",
+    )

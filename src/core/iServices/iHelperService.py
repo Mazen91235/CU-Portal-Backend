@@ -3,7 +3,7 @@ from typing import Generic, TypeVar, Any, Type, Coroutine
 from fastapi import UploadFile
 from core.entities.user import User
 from core.entities.patient import Patient
-from core.dtos.baseResponseDto import BaseResponseDto
+from core.dtos.baseDtos import BaseResponseDto
 
 T = TypeVar("T")  # Entity Type
 U = TypeVar("U")  # EntitySearchDto Type

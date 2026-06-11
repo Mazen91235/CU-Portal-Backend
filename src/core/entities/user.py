@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from enum import Enum
 from .base import (
     Base,
     Integer,
@@ -349,6 +349,6 @@ class User(Base):
     class VerificationToken:
         EXPIRE_HOURS = 1
 
-    class Type:
+    class Type(str, Enum):
         MAINSTREAM = "Mainstream"
         CREDIT = "Credit"

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import TypeVar, Generic, List, Any, Coroutine
-from core.dtos.baseResponseDto import BaseResponseDto
+from core.dtos.baseDtos import BaseResponseDto
 
 T = TypeVar("T")
 

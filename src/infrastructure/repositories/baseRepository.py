@@ -5,7 +5,7 @@ from sqlalchemy.future import select
 from sqlalchemy import text, desc, func, inspect
 from business.contextVars.sessionContext import session_context
 from core.iRepositories.iBaseRepository import IBaseRepository, T
-from core.dtos.baseResponseDto import BaseResponseDto
+from core.dtos.baseDtos import BaseResponseDto
 from core.utils.entitiesHandler import EntitiesHandler
 from core.utils.timezoneHandler import TimezoneHandler
 

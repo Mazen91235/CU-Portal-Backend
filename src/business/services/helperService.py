@@ -8,7 +8,7 @@ from email.message import EmailMessage
 from sqlalchemy.orm import selectinload
 from pgvector import Vector
 from core.iServices.iHelperService import IHelperService
-from core.dtos.baseResponseDto import BaseResponseDto
+from core.dtos.baseDtos import BaseResponseDto
 from core.entities.user import User
 from core.entities.patient import Patient
 from business.contextVars.requestContext import request_context

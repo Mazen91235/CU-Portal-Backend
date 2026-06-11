@@ -3,7 +3,7 @@ from pgvector import Vector
 from sqlalchemy.orm import selectinload
 from core.iServices.iPatientUserService import IPatientUserService
 from core.entities.patientUser import PatientUser
-from core.dtos.baseResponseDto import BaseResponseDto
+from core.dtos.baseDtos import BaseResponseDto
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iServices.iHelperService import IHelperService

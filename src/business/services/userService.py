@@ -6,7 +6,7 @@ from core.entities.patient import Patient
 from core.dtos.userDtos import (
     UserLoginResponseDto,
 )
-from core.dtos.baseResponseDto import BaseResponseDto
+from core.dtos.baseDtos import BaseResponseDto
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iServices.iHelperService import IHelperService
