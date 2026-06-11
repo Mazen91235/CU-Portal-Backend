@@ -64,24 +64,3 @@ class RequestLimit(Base):
         # Composite Indexes
         Index("idx_request_limit_ip_created_at", "ip", "created_at"),
     )
-
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "ip": self.ip,
-            "route": self.route,
-            "status": self.status,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "user": self.user.to_dict() if self.user else None,
-        }
-
-    class Model(TypedDict):
-        id: int
-        ip: Optional[str]
-        route: Optional[str]
-        status: Optional[bool]
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]
-        user: Optional[User.Model]

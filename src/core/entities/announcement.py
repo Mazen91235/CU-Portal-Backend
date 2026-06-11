@@ -114,38 +114,3 @@ class Announcement(Base):
             "subject_id",
         ),
     )
-
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "title": self.title,
-            "content": self.content,
-            "date": self.date.isoformat() if self.date else None,
-            "urls": self.urls,
-            "links": self.links,
-            "details": self.details,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "year": self.year.to_dict() if self.year else None,
-            "faculty": self.faculty.to_dict() if self.faculty else None,
-            "department": self.department.to_dict() if self.department else None,
-            "author": self.author.to_dict() if self.author else None,
-            "subject": self.subject.to_dict() if self.subject else None,
-        }
-
-    class Model(TypedDict):
-        id: int
-        title: Optional[str]
-        content: Optional[str]
-        date: Optional[datetime]
-        urls: list[str]
-        links: list[str]
-        details: dict
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]
-        year: Optional[Year.Model]
-        faculty: Optional[Faculty.Model]
-        department: Optional[Department.Model]
-        author: User.Model
-        subject: Optional[Subject.Model]

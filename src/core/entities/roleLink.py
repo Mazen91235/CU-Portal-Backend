@@ -65,24 +65,3 @@ class RoleLink(Base):
         Index("idx_role_exact_role", "role_id", "exact_role_id", unique=True),
         Index("idx_exact_role_role", "exact_role_id", "role_id"),
     )
-
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "role_id": self.role_id,
-            "exact_role_id": self.exact_role_id,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "role": self.role.to_dict() if self.role else None,
-            "exact_role": self.exact_role.to_dict() if self.exact_role else None,
-        }
-
-    class Model(TypedDict):
-        id: int
-        role_id: int
-        exact_role_id: int
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]
-        role: Role.Model
-        exact_role: ExactRole.Model

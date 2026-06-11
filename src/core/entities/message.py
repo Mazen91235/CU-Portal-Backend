@@ -42,24 +42,3 @@ class Message(Base):
 
     # Indexes
     __table_args__ = (Index("idx_message_created_at", "created_at"),)
-
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "email": self.email,
-            "phone": self.phone,
-            "content": self.content,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-        }
-
-    class Model(TypedDict):
-        id: int
-        name: str
-        email: str
-        phone: Optional[str]
-        content: str
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]

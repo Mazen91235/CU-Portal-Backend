@@ -67,25 +67,6 @@ class Token(Base):
             raise ValueError("Invalid token type")
         return value
 
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "token": self.token,
-            "expire_at": self.expire_at.isoformat(),
-            "type": self.type,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-        }
-
-    class Model(TypedDict):
-        id: int
-        token: str
-        expire_at: datetime
-        type: int
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]
-
     # Attributes
     class TokenType:
         EMAIL_VERIFICATION = {

@@ -79,30 +79,3 @@ class Material(Base):
 
     # Indexes
     __table_args__ = (Index("idx_material_subject_parent", "subject_id", "parent_id"),)
-
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "type": self.type,
-            "url": self.url,
-            "details": self.details,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "subject": self.subject.to_dict() if self.subject else None,
-            "author": self.author.to_dict() if self.author else None,
-            "parent_id": self.parent_id,
-        }
-
-    class Model(TypedDict):
-        id: int
-        name: Optional[str]
-        type: str
-        url: Optional[str]
-        details: dict
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]
-        subject: Optional[Subject.Model]
-        author: User.Model
-        parent_id: Optional[int]

@@ -48,20 +48,3 @@ class ExactRole(Base):
 
     # Indexes
     __table_args__ = (Index("idx_exact_role_name", "name", unique=True),)
-
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "roles": [role.to_dict() for role in self.roles] if self.roles else [],
-        }
-
-    class Model(TypedDict):
-        id: int
-        name: str
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]
-        roles: list["Role.Model"]

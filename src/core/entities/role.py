@@ -51,32 +51,3 @@ class Role(Base):
 
     # Indexes
     __table_args__ = (Index("idx_role_name", "name", unique=True),)
-
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "level": self.level,
-            "permissions": (
-                [exact_role.name for exact_role in self.exact_roles]
-                if self.exact_roles
-                else []
-            ),
-            "permissions_count": len(self.exact_roles) if self.exact_roles else 0,
-            "users_count": len(self.users) if self.users else 0,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "users": [user.to_dict() for user in self.users] if self.users else [],
-        }
-
-    class Model(TypedDict):
-        id: int
-        name: str
-        level: Optional[int]
-        permissions: list[str]
-        permissions_count: int
-        users_count: int
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]
-        users: list["User.Model"]

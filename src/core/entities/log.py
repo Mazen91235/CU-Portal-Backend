@@ -83,36 +83,3 @@ class Log(Base):
             "route",
         ),
     )
-
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "action": self.action,
-            "entity": self.entity,
-            "level": self.level,
-            "response_code": self.response_code,
-            "message": self.message,
-            "details": self.details,
-            "source": self.source,
-            "route": self.route,
-            "ip": self.ip,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "user": self.user.to_dict() if self.user else None,
-        }
-
-    class Model(TypedDict):
-        id: int
-        action: str
-        entity: str
-        level: str
-        response_code: int
-        message: Optional[str]
-        details: dict
-        source: Optional[str]
-        route: Optional[str]
-        ip: Optional[str]
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]
-        user: Optional[User.Model]

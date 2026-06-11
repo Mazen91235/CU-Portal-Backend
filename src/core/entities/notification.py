@@ -50,26 +50,3 @@ class Notification(Base):
     users: Mapped[list["User"]] = relationship(
         "User", secondary="user_notifications", back_populates="notifications"
     )
-
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "content": self.content,
-            "type": self.type,
-            "parent_id": self.parent_id,
-            "url": self.url,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "users": [user.to_dict() for user in self.users] if self.users else [],
-        }
-
-    class Model(TypedDict):
-        id: int
-        content: str
-        type: Optional[str]
-        parent_id: Optional[int]
-        url: Optional[str]
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]
-        users: list["User.Model"]

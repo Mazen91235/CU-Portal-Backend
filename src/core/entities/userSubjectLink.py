@@ -60,24 +60,3 @@ class UserSubjectLink(Base):
     subject: Mapped["Subject"] = relationship(
         "Subject", backref="user_subject_links_associations"
     )
-
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "user_id": self.user_id,
-            "subject_id": self.subject_id,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "user": self.user.to_dict() if self.user else None,
-            "subject": self.subject.to_dict() if self.subject else None,
-        }
-
-    class Model(TypedDict):
-        id: int
-        user_id: int
-        subject_id: int
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]
-        user: Optional[User.Model]
-        subject: Optional[Subject.Model]

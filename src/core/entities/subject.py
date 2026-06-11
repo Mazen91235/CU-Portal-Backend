@@ -28,10 +28,11 @@ if TYPE_CHECKING:
     from .task import Task
     from .announcement import Announcement
     from .material import Material
-    from .grade import Grade
-    from .mark import Mark
-    from .question import Question
-    from .roadmapCourse import RoadmapCourse
+
+    # from .grade import Grade
+    # from .mark import Mark
+    # from .question import Question
+    # from .roadmapCourse import RoadmapCourse
 
 
 class Subject(Base):
@@ -99,21 +100,21 @@ class Subject(Base):
     materials: Mapped[list["Material"]] = relationship(
         "Material", back_populates="subject", cascade="all, delete-orphan"
     )
-    grades: Mapped[list["Grade"]] = relationship(
-        "Grade", back_populates="subject", cascade="all, delete-orphan"
-    )
-    marks: Mapped[list["Mark"]] = relationship(
-        "Mark", back_populates="subject", cascade="all, delete-orphan"
-    )
-    questions: Mapped[list["Question"]] = relationship(
-        "Question", back_populates="subject", cascade="all, delete-orphan"
-    )
+    # grades: Mapped[list["Grade"]] = relationship(
+    #     "Grade", back_populates="subject", cascade="all, delete-orphan"
+    # )
+    # marks: Mapped[list["Mark"]] = relationship(
+    #     "Mark", back_populates="subject", cascade="all, delete-orphan"
+    # )
+    # questions: Mapped[list["Question"]] = relationship(
+    #     "Question", back_populates="subject", cascade="all, delete-orphan"
+    # )
     users: Mapped[list["User"]] = relationship(
         "User", secondary="user_subject_links", back_populates="subjects"
     )
-    roadmap_courses: Mapped[list["RoadmapCourse"]] = relationship(
-        "RoadmapCourse", back_populates="subject", cascade="all, delete-orphan"
-    )
+    # roadmap_courses: Mapped[list["RoadmapCourse"]] = relationship(
+    #     "RoadmapCourse", back_populates="subject", cascade="all, delete-orphan"
+    # )
 
     # Indexes
     __table_args__ = (
@@ -141,70 +142,3 @@ class Subject(Base):
             "name",
         ),
     )
-
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "name": self.name,
-            "code": self.code,
-            "details": self.details,
-            "is_old": self.is_old,
-            "year_rank": self.year_rank,
-            "term": self.term,
-            "credits": self.credits,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "year": self.year.to_dict() if self.year else None,
-            "department": self.department.to_dict() if self.department else None,
-            "faculty": self.faculty.to_dict() if self.faculty else None,
-            "users_count": len(self.users) if self.users else 0,
-            "users": [user.to_dict() for user in self.users] if self.users else [],
-            "tasks": [task.to_dict() for task in self.tasks] if self.tasks else [],
-            "announcements": (
-                [announcement.to_dict() for announcement in self.announcements]
-                if self.announcements
-                else []
-            ),
-            "materials": (
-                [material.to_dict() for material in self.materials]
-                if self.materials
-                else []
-            ),
-            "grades": [grade.to_dict() for grade in self.grades] if self.grades else [],
-            "marks": [mark.to_dict() for mark in self.marks] if self.marks else [],
-            "questions": (
-                [question.to_dict() for question in self.questions]
-                if self.questions
-                else []
-            ),
-            "roadmap_courses": (
-                [roadmap_course.to_dict() for roadmap_course in self.roadmap_courses]
-                if self.roadmap_courses
-                else []
-            ),
-        }
-
-    class Model(TypedDict):
-        id: int
-        name: str
-        code: Optional[str]
-        details: dict
-        is_old: bool
-        year_rank: Optional[int]
-        term: Optional[int]
-        credits: Optional[int]
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]
-        year: Optional[Year.Model]
-        department: Optional[Department.Model]
-        faculty: Optional[Faculty.Model]
-        users_count: int
-        users: list["User.Model"]
-        tasks: list["Task.Model"]
-        announcements: list["Announcement.Model"]
-        materials: list["Material.Model"]
-        grades: list["Grade.Model"]
-        marks: list["Mark.Model"]
-        questions: list["Question.Model"]
-        roadmap_courses: list["RoadmapCourse.Model"]

@@ -54,20 +54,3 @@ class PendingUser(Base):
 
     # Indexes
     __table_args__ = (Index("idx_pending_user_user_id", "user_id", unique=True),)
-
-    # Representation
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "url": self.url,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "user": self.user.to_dict() if self.user else None,
-        }
-
-    class Model(TypedDict):
-        id: int
-        url: str
-        created_at: Optional[datetime]
-        updated_at: Optional[datetime]
-        user: User.Model
