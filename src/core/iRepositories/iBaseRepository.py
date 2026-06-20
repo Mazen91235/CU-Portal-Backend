@@ -7,21 +7,18 @@ T = TypeVar("T")
 
 class IBaseRepository(ABC, Generic[T]):
     @abstractmethod
-    def find_one(
+    async def find_one(
         self,
         predicate: Any = None,
         includes: List[Any] = [],
         selects: List[Any] = [],
         order_by: list[Any] = [],
         descending: bool = False,
-    ) -> (
-        Coroutine[Any, Any, BaseResponseDto[T | None]]
-        | Coroutine[Any, Any, BaseResponseDto[None]]
-    ):
+    ) -> BaseResponseDto[T]:
         pass
 
     @abstractmethod
-    def find(
+    async def find(
         self,
         predicate: Any = None,
         includes: List[Any] = [],
@@ -30,51 +27,39 @@ class IBaseRepository(ABC, Generic[T]):
         descending: bool = False,
         page: int = 1,
         limit: int = 50,
-    ) -> Coroutine[Any, Any, BaseResponseDto[List[T]]]:
+    ) -> BaseResponseDto[List[T]]:
         pass
 
     @abstractmethod
-    def count(
-        self, predicate: Any = None
-    ) -> Coroutine[Any, Any, BaseResponseDto[int]]:
+    async def count(self, predicate: Any = None) -> BaseResponseDto[int]:
         pass
 
     @abstractmethod
-    def create(
-        self, entity: T
-    ) -> (
-        Coroutine[Any, Any, BaseResponseDto[T | None]]
-        | Coroutine[Any, Any, BaseResponseDto[None]]
-    ):
+    async def create(self, entity: T) -> BaseResponseDto[T]:
         pass
 
     @abstractmethod
-    def update(
-        self, entity: T, updates: List[str] = []
-    ) -> (
-        Coroutine[Any, Any, BaseResponseDto[T | None]]
-        | Coroutine[Any, Any, BaseResponseDto[None]]
-    ):
+    async def update(self, entity: T, updates: List[str] = []) -> BaseResponseDto[T]:
         pass
 
     @abstractmethod
-    def delete(self, entity: T) -> Coroutine[Any, Any, BaseResponseDto[bool]]:
+    async def delete(self, entity: T) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod
-    def execute_sql(
+    async def execute_sql(
         self, command: str, params: dict = {}
-    ) -> Coroutine[Any, Any, BaseResponseDto[bool]]:
+    ) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod
-    def begin_transaction(self) -> Coroutine[Any, Any, None]:
+    async def begin_transaction(self) -> None:
         pass
 
     @abstractmethod
-    def commit_transaction(self) -> Coroutine[Any, Any, None]:
+    async def commit_transaction(self) -> None:
         pass
 
     @abstractmethod
-    def rollback_transaction(self) -> Coroutine[Any, Any, None]:
+    async def rollback_transaction(self) -> None:
         pass

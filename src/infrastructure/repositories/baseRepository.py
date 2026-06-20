@@ -45,8 +45,9 @@ class BaseRepository(IBaseRepository[T]):
         level: str,
         code: int,
         message: str,
-        source: str,
-        path: str = "",
+        details: dict | None = None,
+        source: str = "",
+        route: str = "",
         ip: str = "",
         user_id: int | None = None,
         created_at: datetime = TimezoneHandler.now("UTC"),
@@ -57,15 +58,16 @@ class BaseRepository(IBaseRepository[T]):
         if len(safe_message) > max_message_len:
             safe_message = safe_message[: max_message_len - 3] + "..."
 
-        query = f"INSERT INTO {EntitiesHandler.TABLES.get('Log')} (action, entity, level, code, message, source, path, ip, user_id, created_at, updated_at) VALUES (:action, :entity, :level, :code, :message, :source, :path, :ip, :user_id, :created_at, :updated_at)"
+        query = f"INSERT INTO {EntitiesHandler.TABLES.get('Log')} (action, entity, level, response_code, message, details, source, route, ip, user_id, created_at, updated_at) VALUES (:action, :entity, :level, :response_code, :message, :details, :source, :route, :ip, :user_id, :created_at, :updated_at)"
         params = {
             "action": action,
             "entity": self._model.__name__,
             "level": level,
-            "code": code,
+            "response_code": code,
             "message": safe_message,
+            "details": details,
             "source": source,
-            "path": path,
+            "route": route,
             "ip": ip,
             "user_id": user_id,
             "created_at": created_at,
@@ -76,9 +78,9 @@ class BaseRepository(IBaseRepository[T]):
     async def find_one(
         self,
         predicate=None,
-        includes=[],
-        selects=[],
-        order_by=[],
+        includes=None,
+        selects=None,
+        order_by=None,
         descending=False,
     ):
         try:
@@ -109,7 +111,7 @@ class BaseRepository(IBaseRepository[T]):
             result = await session.execute(query)
             entity = result.scalars().first()
 
-            return BaseResponseDto[T | None](
+            return BaseResponseDto[T](
                 success=True,
                 data=entity,
                 message="Found Successfully",
@@ -120,10 +122,11 @@ class BaseRepository(IBaseRepository[T]):
                 action="FindOne",
                 level="error",
                 code=500,
-                message=f"An error occurred while searching for {self._model.__name__} - {str(ex)}",
+                message=f"An error occurred while searching for {self._model.__name__}",
+                details={"error": str(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[T | None](
+            return BaseResponseDto[T](
                 success=False,
                 data=None,
                 message="An error occurred while searching for the entity",
@@ -134,9 +137,9 @@ class BaseRepository(IBaseRepository[T]):
     async def find(
         self,
         predicate=None,
-        includes=[],
-        selects=[],
-        order_by=[],
+        includes=None,
+        selects=None,
+        order_by=None,
         descending=False,
         page=1,
         limit=50,
@@ -183,7 +186,8 @@ class BaseRepository(IBaseRepository[T]):
                 action="Find",
                 level="error",
                 code=500,
-                message=f"An error occurred while searching for {self._model.__name__}s - {str(ex)}",
+                message=f"An error occurred while searching for {self._model.__name__}s",
+                details={"error": str(ex)},
                 source="BaseRepository",
             )
             return BaseResponseDto[List[T]](
@@ -212,7 +216,8 @@ class BaseRepository(IBaseRepository[T]):
                 action="Count",
                 level="error",
                 code=500,
-                message=f"An error occurred while counting {self._model.__name__}s - {str(ex)}",
+                message=f"An error occurred while counting {self._model.__name__}s",
+                details={"error": str(ex)},
                 source="BaseRepository",
             )
             return BaseResponseDto[int](
@@ -229,7 +234,7 @@ class BaseRepository(IBaseRepository[T]):
             session.add(entity)
             await session.flush()
             await session.refresh(entity)
-            return BaseResponseDto[T | None](
+            return BaseResponseDto[T](
                 success=True,
                 data=entity,
                 message="Entity Added Successfully",
@@ -240,10 +245,11 @@ class BaseRepository(IBaseRepository[T]):
                 action="Create",
                 level="error",
                 code=500,
-                message=f"An error occurred while creating {self._model.__name__} - {str(ex)}",
+                message=f"An error occurred while creating {self._model.__name__}",
+                details={"error": str(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[T | None](
+            return BaseResponseDto[T](
                 success=False,
                 data=None,
                 message=f"Error Creating {self._model.__name__}",
@@ -251,7 +257,7 @@ class BaseRepository(IBaseRepository[T]):
                 code=500,
             )
 
-    async def update(self, entity, updates=[]):
+    async def update(self, entity, updates=None):
         try:
             session = self._resolve_session()
             # Similar to EF Core's nuclear Clear(), we ensure the instance is merged
@@ -271,7 +277,7 @@ class BaseRepository(IBaseRepository[T]):
                     setattr(updated_entity, attr, val)
 
             await session.flush()
-            return BaseResponseDto[T | None](
+            return BaseResponseDto[T](
                 success=True,
                 data=updated_entity,
                 message="Updated Successfully",
@@ -282,10 +288,11 @@ class BaseRepository(IBaseRepository[T]):
                 action="Update",
                 level="error",
                 code=500,
-                message=f"An error occurred while updating {self._model.__name__} - {str(ex)}",
+                message=f"An error occurred while updating {self._model.__name__}",
+                details={"error": str(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[T | None](
+            return BaseResponseDto[T](
                 success=False,
                 data=None,
                 message="Update Failed",
@@ -307,7 +314,8 @@ class BaseRepository(IBaseRepository[T]):
                 action="Delete",
                 level="error",
                 code=500,
-                message=f"An error occurred while deleting {self._model.__name__} - {str(ex)}",
+                message=f"An error occurred while deleting {self._model.__name__}",
+                details={"error": str(ex)},
                 source="BaseRepository",
             )
             return BaseResponseDto[bool](
@@ -334,7 +342,8 @@ class BaseRepository(IBaseRepository[T]):
                 action="ExecuteSQL",
                 level="error",
                 code=500,
-                message=f"An error occurred while executing SQL - {str(ex)}",
+                message=f"An error occurred while executing SQL",
+                details={"error": str(ex)},
                 source="BaseRepository",
             )
             return BaseResponseDto[bool](
@@ -356,7 +365,8 @@ class BaseRepository(IBaseRepository[T]):
                 action="BeginTransaction",
                 level="error",
                 code=500,
-                message=f"An error occurred while beginning the transaction. - {str(ex)}",
+                message=f"An error occurred while beginning the transaction.",
+                details={"error": str(ex)},
                 source="BaseRepository",
             )
 
@@ -371,7 +381,8 @@ class BaseRepository(IBaseRepository[T]):
                 action="CommitTransaction",
                 level="error",
                 code=500,
-                message=f"An error occurred while committing the transaction. - {str(ex)}",
+                message=f"An error occurred while committing the transaction.",
+                details={"error": str(ex)},
                 source="BaseRepository",
             )
 
@@ -386,6 +397,7 @@ class BaseRepository(IBaseRepository[T]):
                 action="RollbackTransaction",
                 level="error",
                 code=500,
-                message=f"An error occurred while rolling back the transaction. - {str(ex)}",
+                message=f"An error occurred while rolling back the transaction.",
+                details={"error": str(ex)},
                 source="BaseRepository",
             )

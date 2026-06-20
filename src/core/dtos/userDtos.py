@@ -17,7 +17,10 @@ class UserRegisterDto(BaseModel):
         ..., min_length=1, max_length=13, description="Phone number of User"
     )
     gender: str = Field(..., min_length=1, max_length=6, description="Gender of User")
-    early_access: bool = Field(
+    url: str | None = Field(
+        None, max_length=255, description="URL of User Approval Image (if any)"
+    )
+    is_early_access: bool = Field(
         default=False, description="Whether the user is an early access user"
     )
     agreed: bool = Field(
@@ -32,36 +35,64 @@ class UserRegisterDto(BaseModel):
 
 
 class UserResponseDto(BaseModel):
-    id: int | None = None
-    name: str = ""
-    email: EmailStr = ""
-    phone: str = ""
-    gender: str = ""
-    type: User.Type = User.Type.MAINSTREAM
-    section: int | None = None
-    status: bool | None = None
-    is_early_access: bool | None = None
-    manages: dict | None = None
-    details: dict | None = None
-    google_id: str = ""
-    google_name: str = ""
-    google_email: EmailStr = ""
-    google_avatar: str = ""
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
+    id: int | None = Field(None, description="ID of the user")
+    name: str = Field(..., description="Name of User")
+    email: EmailStr = Field(..., description="Email of User")
+    phone: str = Field(..., description="Phone number of User")
+    gender: str = Field(..., description="Gender of User")
+    type: User.Type = Field(..., description="Type of User")
+    section: int | None = Field(None, description="Section ID of the user")
+    status: bool | None = Field(None, description="Status of the user")
+    is_early_access: bool | None = Field(
+        None, description="Whether the user is an early access user"
+    )
+    manages: dict | None = Field(
+        None, description="Dictionary of items managed by this user"
+    )
+    details: dict | None = Field(None, description="Additional details about the user")
+    google_id: str = Field("", description="Google ID of the user")
+    google_name: str = Field("", description="Google name of the user")
+    google_email: EmailStr = Field("", description="Google email of the user")
+    google_avatar: str = Field("", description="Google avatar URL of the user")
+    created_at: datetime | None = Field(None, description="Creation Date of the user")
+    updated_at: datetime | None = Field(
+        None, description="Last Update Date of the user"
+    )
 
     # Relationships
-    year: YearResponseDto | None = None
-    department: DepartmentResponseDto | None = None
-    faculty: FacultyResponseDto | None = None
-    role: RoleResponseDto | None = None
-    pending_user: PendingUserResponseDto | None = None
-    materials: list[MaterialResponseDto] | None = None
-    tasks: list[TaskResponseDto] | None = None
-    announcements: list[AnnouncementResponseDto] | None = None
-    notifications: list[NotificationResponseDto] | None = None
-    logs: list[LogResponseDto] | None = None
-    subjects: list[SubjectResponseDto] | None = None
+    year: YearResponseDto | None = Field(
+        None, description="Year associated with the user"
+    )
+    department: DepartmentResponseDto | None = Field(
+        None, description="Department associated with the user"
+    )
+    faculty: FacultyResponseDto | None = Field(
+        None, description="Faculty associated with the user"
+    )
+    role: RoleResponseDto | None = Field(
+        None, description="Role associated with the user"
+    )
+    pending_user: PendingUserResponseDto | None = Field(
+        None, description="Pending user associated with the user (if any)"
+    )
+    materials: list[MaterialResponseDto] | None = Field(
+        None, description="Materials associated with the user"
+    )
+    tasks: list[TaskResponseDto] | None = Field(
+        None, description="Tasks associated with the user"
+    )
+    announcements: list[AnnouncementResponseDto] | None = Field(
+        None, description="Announcements associated with the user"
+    )
+    notifications: list[NotificationResponseDto] | None = Field(
+        None, description="Notifications associated with the user"
+    )
+    logs: list[LogResponseDto] | None = Field(
+        None, description="Logs associated with the user"
+    )
+    subjects: list[SubjectResponseDto] | None = Field(
+        None, description="Subjects associated with the user"
+    )
 
     # Pydantic Configuration
     model_config = {
@@ -82,6 +113,11 @@ class UserSearchDto(BaseSearchDto, BaseModel):
 
 
 # User-Specific DTOs
+class UserLoginResponseDto(BaseModel):
+    user: UserResponseDto = Field(..., description="Logged in user details")
+    token: str = Field(..., description="Authentication token for the user")
+
+
 class UserUpdateUsersRecordDto(BaseModel):
     id: int = Field(..., description="ID of the user to update")
     approved: bool = Field(True, description="Whether the user is approved")

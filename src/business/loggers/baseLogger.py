@@ -11,9 +11,7 @@ class BaseLogger(IBaseLogger):
         self.repository = repository
         self.helper_service = helper_service
 
-    async def log(
-        self, action: str, entity: str, level: str, code: int, message: str, source: str
-    ):
+    async def log(self, action, entity, level, code, message, source, details=None):
         try:
             ip_address_response = await self.helper_service.get_ip_address()
             ip_address = (
@@ -26,27 +24,20 @@ class BaseLogger(IBaseLogger):
                 else None
             )
 
-            # When deleting the current user, the FK row may already be gone.
-            if (
-                entity.lower() == "user"
-                and action.lower() == "delete"
-                and level.lower() == "info"
-            ):
-                logged_in_user_id = None
-
             request = request_context.get(None)
-            path = request.url.path if request else None
+            route = request.url.path if request else None
 
             await self.repository.execute_sql(
-                f"INSERT INTO {EntitiesHandler.TABLES.get('Log')} (action, entity, level, code, message, source, path, ip, user_id, created_at, updated_at) VALUES (:action, :entity, :level, :code, :message, :source, :path, :ip, :user_id, :created_at, :updated_at)",
+                f"INSERT INTO {EntitiesHandler.TABLES.get('Log')} (action, entity, level, response_code, message, details, source, route, ip, user_id, created_at, updated_at) VALUES (:action, :entity, :level, :code, :message, :details, :source, :route, :ip, :user_id, :created_at, :updated_at)",
                 {
                     "action": action,
                     "entity": entity,
                     "level": level,
-                    "code": code,
+                    "response_code": code,
                     "message": message,
+                    "details": details,
                     "source": source,
-                    "path": path,
+                    "route": route,
                     "ip": ip_address,
                     "user_id": logged_in_user_id,
                     "created_at": TimezoneHandler.now("UTC"),

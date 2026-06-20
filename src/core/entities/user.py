@@ -88,6 +88,23 @@ class User(Base):
         nullable=True,
     )
 
+    # Not Mapped
+    @property
+    def url(self) -> Optional[str]:
+        return getattr(self, "_url", None)
+
+    @url.setter
+    def url(self, value: Optional[str]) -> None:
+        setattr(self, "_url", value)
+
+    @property
+    def google_details_token(self) -> Optional[str]:
+        return getattr(self, "_google_details_token", None)
+
+    @google_details_token.setter
+    def google_details_token(self, value: Optional[str]) -> None:
+        setattr(self, "_google_details_token", value)
+
     # Relationships
     year_id: Mapped[Optional[int]] = mapped_column(
         Integer,
@@ -217,3 +234,6 @@ class User(Base):
     class Type(str, Enum):
         MAINSTREAM = "Mainstream"
         CREDIT = "Credit"
+
+    MAX_ALLOWED_FILE_SIZE_MB = 10  # 10 MB in bytes
+    MAX_ALLOWED_FILE_SIZE_B = MAX_ALLOWED_FILE_SIZE_MB * 1024**2  # 10 MB in bytes

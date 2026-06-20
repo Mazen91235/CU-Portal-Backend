@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import TypeVar, Generic, Any, Coroutine
+from typing import TypeVar, Generic
 from core.dtos.baseDtos import BaseResponseDto
 from core.iServices.bases.iBaseService import IBaseService
 
@@ -9,7 +9,7 @@ U = TypeVar("U")  # EntitySearchDto Type
 
 class IQueryableService(Generic[T, U], IBaseService):
     @abstractmethod
-    def find_one(
+    async def find_one(
         self,
         data: U | None = None,
         includes: list[str] = [],
@@ -19,14 +19,11 @@ class IQueryableService(Generic[T, U], IBaseService):
         is_exact: bool = True,
         order_by: list[str] = [],
         descending: bool = False,
-    ) -> (
-        Coroutine[Any, Any, BaseResponseDto[T | None]]
-        | Coroutine[Any, Any, BaseResponseDto[None]]
-    ):
+    ) -> BaseResponseDto[T]:
         pass
 
     @abstractmethod
-    def find(
+    async def find(
         self,
         data: U | None = None,
         includes: list[str] = [],
@@ -38,8 +35,5 @@ class IQueryableService(Generic[T, U], IBaseService):
         descending: bool = False,
         page: int = 1,
         limit: int = 50,
-    ) -> (
-        Coroutine[Any, Any, BaseResponseDto[list[T] | None]]
-        | Coroutine[Any, Any, BaseResponseDto[None]]
-    ):
+    ) -> BaseResponseDto[list[T]]:
         pass

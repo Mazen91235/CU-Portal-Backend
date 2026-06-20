@@ -1,6 +1,6 @@
 from importlib import import_module
 from typing import Any, TypeVar, Generic, Type
-
+from pydantic import BaseModel
 from sqlalchemy import inspect
 
 T = TypeVar("T")
@@ -20,7 +20,6 @@ class Mapper(Generic[T, U]):
             f"{entity_cls.__name__[0].lower()}{entity_cls.__name__[1:]}Dtos"
         )
 
-        dto_cls = None
         try:
             dto_module = import_module(f"core.dtos.{dto_module_name}")
             dto_cls = getattr(dto_module, dto_cls_name, None)
@@ -46,11 +45,11 @@ class Mapper(Generic[T, U]):
         if not cls._is_orm_instance(value):
             return value
 
+        # FIX: Track the individual instance ID to break cycles without blocking sibling objects
         if id(value) in visited:
-            # Break cyclic ORM references (e.g., Patient -> PatientUser -> Patient).
             return None
 
-        visited.add(id(type(value)))
+        visited.add(id(value))
 
         dto_cls = cls._resolve_response_dto(type(value))
         if not dto_cls:
@@ -60,38 +59,49 @@ class Mapper(Generic[T, U]):
 
     @staticmethod
     def map(
-        src: T,
+        src: Any,
         cls: Type[U],
         to_dict: bool = False,
         visited: set[int] | None = None,
     ) -> U | dict:
-        dest = cls()  # Create an instance of the destination type
+        dest = cls()
         active_visited = set(visited) if visited is not None else set()
         active_visited.add(id(src))
 
-        try:
-            inspected = inspect(src)
-            loaded_attrs = inspected.dict.keys() if inspected else []
-        except Exception:
-            loaded_attrs = dir(src)  # Fallback to dir() if inspect fails
+        # Identify source attributes cleanly based on structure type
+        if isinstance(src, BaseModel):
+            source_attrs = list(src.model_fields.keys())
+        else:
+            try:
+                inspected = inspect(src)
+                source_attrs = list(inspected.dict.keys()) if inspected else []
+            except Exception:
+                source_attrs = dir(src)
 
-        for attr in loaded_attrs:
+            # Keep your explicit property visible to the mapper
             if (
-                not attr.startswith("_")
-                and not attr.startswith("Model")
-                and not attr.startswith("to_dict")
-                and hasattr(dest, attr)
+                hasattr(src, "google_details_token")
+                and "google_details_token" not in source_attrs
             ):
+                source_attrs.append("google_details_token")
+
+        # Map matching field names directly across
+        for attr in source_attrs:
+            if attr.startswith("_") or attr.startswith("Model"):
+                continue
+
+            if hasattr(dest, attr):
                 raw_value = getattr(src, attr)
                 mapped_value = Mapper._map_nested_value(raw_value, active_visited)
                 setattr(dest, attr, mapped_value)
 
-        if to_dict and hasattr(dest, "to_dict"):
-            return getattr(dest, "to_dict")()
+        if to_dict:
+            return dest.model_dump() if isinstance(dest, BaseModel) else dest.__dict__
+
         return dest
 
     @staticmethod
     def map_list(
         src_list: list[T], cls: Type[U], to_dict: bool = False
     ) -> list[U] | list[dict]:
-        return [Mapper.map(src, cls, to_dict) for src in src_list]
+        return [Mapper.map(src, cls, to_dict=to_dict) for src in src_list]

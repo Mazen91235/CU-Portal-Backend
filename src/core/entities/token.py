@@ -73,8 +73,8 @@ class Token(Base):
             "name": "Email Verification",
             "value": 0,
         }
-        PASSWORD_RESET = {
-            "name": "Password Reset",
+        GOOGLE_TOKEN = {
+            "name": "Google Token",
             "value": 1,
         }
         REFRESH_TOKEN = {
