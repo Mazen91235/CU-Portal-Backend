@@ -2,136 +2,222 @@ from fastapi import APIRouter, Request, Depends
 from core.iControllers.iUserController import IUserController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
+from core.dtos.baseDtos import BaseResponseDto
+from core.dtos.userDtos import UserResponseDto, UserStatisticsResponseDto
 
 
-def create_user_router(
+def create_user_user_router(
+    controller_provider, auth_middleware_provider, validation_middleware_provider
+):
+    router = APIRouter(prefix="", tags=[])
+
+    def _get_controller() -> IUserController:
+        return controller_provider()
+
+    def _get_auth_middleware() -> IAuthMiddleware:
+        return auth_middleware_provider()
+
+    def _get_validation_middleware() -> IValidationMiddleware:
+        return validation_middleware_provider()
+
+    async def _is_logged_in(
+        request: Request,
+        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+    ):
+        return await auth_middleware.is_logged_in(request)
+
+    def _validate(*keys):
+        async def validate_request(
+            request: Request,
+            validation_middleware: IValidationMiddleware = Depends(
+                _get_validation_middleware
+            ),
+        ):
+            return await validation_middleware.validate(request, *keys)
+
+        return validate_request
+
+    @router.get(
+        "/me",
+        dependencies=[Depends(_is_logged_in)],
+        response_model=BaseResponseDto[UserResponseDto],
+        status_code=200,
+        summary="Get Current User",
+        description="Get the currently logged in user",
+    )
+    async def get_current_user(
+        request: Request, controller: IUserController = Depends(_get_controller)
+    ):
+        return await controller.get_current_user(request)
+
+    @router.get(
+        "/permissions",
+        dependencies=[Depends(_is_logged_in)],
+        response_model=BaseResponseDto[list[str]],
+        status_code=200,
+        summary="Get User Permissions",
+        description="Get the permissions of the currently logged in user",
+    )
+    async def get_user_permissions(
+        request: Request, controller: IUserController = Depends(_get_controller)
+    ):
+        return await controller.get_user_permissions(request)
+
+    @router.post(
+        "/has-permissions",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_validate("permissions", "is_and")),
+        ],
+        response_model=BaseResponseDto[bool],
+        status_code=200,
+        summary="Check User Permissions",
+        description="Check if the currently logged in user has the specified permissions",
+    )
+    async def has_permissions(
+        request: Request, controller: IUserController = Depends(_get_controller)
+    ):
+        return await controller.has_permissions(request)
+
+    @router.patch(
+        "/",
+        dependencies=[Depends(_is_logged_in), Depends(_validate("name", "url"))],
+        response_model=BaseResponseDto[UserResponseDto],
+        status_code=200,
+        summary="Update User",
+        description="Update the currently logged in user",
+    )
+    async def update(
+        request: Request, controller: IUserController = Depends(_get_controller)
+    ):
+        return await controller.update(request)
+
+    @router.patch(
+        "/academic-data",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_validate("faculty_id", "department_id", "year_id", "study_type")),
+        ],
+        response_model=BaseResponseDto,
+        status_code=200,
+        summary="Update Academic Data",
+        description="Update the academic data of the currently logged in user",
+    )
+    async def update_academic_data(
+        request: Request, controller: IUserController = Depends(_get_controller)
+    ):
+        return await controller.update_academic_data(request)
+
+    return router
+
+
+def create_user_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
     router = APIRouter(prefix="/users", tags=["Users"])
 
-    def get_controller() -> IUserController:
+    def _get_controller() -> IUserController:
         return controller_provider()
 
-    def get_auth_middleware() -> IAuthMiddleware:
+    def _get_auth_middleware() -> IAuthMiddleware:
         return auth_middleware_provider()
 
-    def get_validation_middleware() -> IValidationMiddleware:
+    def _get_validation_middleware() -> IValidationMiddleware:
         return validation_middleware_provider()
 
-    async def is_logged_in(
+    async def _is_logged_in(
         request: Request,
-        auth_middleware: IAuthMiddleware = Depends(get_auth_middleware),
+        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
     ):
         return await auth_middleware.is_logged_in(request)
 
-    async def is_logged_out(
-        request: Request,
-        auth_middleware: IAuthMiddleware = Depends(get_auth_middleware),
-    ):
-        return await auth_middleware.is_logged_out(request)
+    def _is_authorized(*permissions):
+        async def authorize(
+            request: Request,
+            auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        ):
+            return await auth_middleware.is_authorized(request, *permissions)
 
-    def validate(*keys):
+        return authorize
+
+    def _validate(*keys):
         async def validate_request(
             request: Request,
             validation_middleware: IValidationMiddleware = Depends(
-                get_validation_middleware
+                _get_validation_middleware
             ),
         ):
-            return await validation_middleware.handle(request, *keys)
+            return await validation_middleware.validate(request, *keys)
 
         return validate_request
 
-    @router.get("/", dependencies=[Depends(is_logged_in)])
+    @router.get(
+        "/statistics",
+        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
+        response_model=BaseResponseDto[UserStatisticsResponseDto],
+        status_code=200,
+        summary="Get User Statistics",
+        description="Get statistics for the users in the system, including total count, new users this month, percentage increase, active users, and pending users.",
+    )
+    async def get_statistics(
+        request: Request, controller: IUserController = Depends(_get_controller)
+    ):
+        return await controller.get_statistics(request)
+
+    @router.get(
+        "/{user_id}",
+        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
+        response_model=BaseResponseDto[UserResponseDto],
+        status_code=200,
+        summary="Find User",
+        description="Find a user by their ID",
+    )
     async def find_one(
-        request: Request, controller: IUserController = Depends(get_controller)
+        request: Request, controller: IUserController = Depends(_get_controller)
     ):
         return await controller.find_one(request)
 
-    @router.post(
+    @router.get(
+        "/",
+        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
+        response_model=BaseResponseDto[list[UserResponseDto]],
+        status_code=200,
+        summary="Find Users",
+        description="Find users based on query parameters",
+    )
+    async def find(
+        request: Request, controller: IUserController = Depends(_get_controller)
+    ):
+        return await controller.find(request)
+
+    @router.get(
+        "/search",
+        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
+        response_model=BaseResponseDto[list[UserResponseDto]],
+        status_code=200,
+        summary="Search Users",
+        description="Search for users based on query parameters",
+    )
+    async def search(
+        request: Request, controller: IUserController = Depends(_get_controller)
+    ):
+        return await controller.search(request)
+
+    @router.patch(
         "/",
         dependencies=[
-            Depends(is_logged_out),
-            Depends(validate("name", "email", "password")),
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Manage Users")),
+            Depends(_validate("data_to_update")),
         ],
+        response_model=BaseResponseDto,
+        status_code=200,
+        summary="Update Multiple Users",
+        description="Update multiple users at once, including their approval status and role",
     )
-    async def create(
-        request: Request, controller: IUserController = Depends(get_controller)
+    async def update_many(
+        request: Request, controller: IUserController = Depends(_get_controller)
     ):
-        return await controller.create(request)
-
-    @router.patch("/", dependencies=[Depends(is_logged_in), Depends(validate("name"))])
-    async def update(
-        request: Request, controller: IUserController = Depends(get_controller)
-    ):
-        return await controller.update(request)
-
-    @router.delete("/", dependencies=[Depends(is_logged_in)])
-    async def delete(
-        request: Request, controller: IUserController = Depends(get_controller)
-    ):
-        return await controller.delete(request)
-
-    @router.post(
-        "/verify-email",
-        dependencies=[Depends(is_logged_out), Depends(validate("token"))],
-    )
-    async def verify_email(
-        request: Request, controller: IUserController = Depends(get_controller)
-    ):
-        return await controller.verify_email(request)
-
-    @router.post(
-        "/login",
-        dependencies=[Depends(is_logged_out), Depends(validate("email", "password"))],
-    )
-    async def login(
-        request: Request, controller: IUserController = Depends(get_controller)
-    ):
-        return await controller.login(request)
-
-    @router.post("/logout", dependencies=[Depends(is_logged_in)])
-    async def logout(
-        request: Request, controller: IUserController = Depends(get_controller)
-    ):
-        return await controller.logout(request)
-
-    @router.post(
-        "/forget-password",
-        dependencies=[Depends(is_logged_out), Depends(validate("email"))],
-    )
-    async def forget_password(
-        request: Request, controller: IUserController = Depends(get_controller)
-    ):
-        return await controller.forget_password(request)
-
-    @router.post(
-        "/reset-password",
-        dependencies=[
-            Depends(is_logged_out),
-            Depends(validate("token", "new_password")),
-        ],
-    )
-    async def reset_password(
-        request: Request, controller: IUserController = Depends(get_controller)
-    ):
-        return await controller.reset_password(request)
-
-    @router.post(
-        "/change-password",
-        dependencies=[
-            Depends(is_logged_in),
-            Depends(validate("old_password", "new_password")),
-        ],
-    )
-    async def change_password(
-        request: Request, controller: IUserController = Depends(get_controller)
-    ):
-        return await controller.change_password(request)
-
-    @router.post("/resend-token", dependencies=[Depends(is_logged_out)])
-    async def resend_token(
-        request: Request, controller: IUserController = Depends(get_controller)
-    ):
-        return await controller.resend_token(request)
+        return await controller.update_many(request)
 
     return router

@@ -31,13 +31,20 @@ class Validator:
                 success=True, code=200, data=validated.normalized.lower()
             )
         except EmailNotValidError as ex:
-            return BaseResponseDto(success=False, code=400, data="", message=str(ex))
-        except Exception:
+            return BaseResponseDto(
+                success=False,
+                code=400,
+                data="",
+                message="Invalid email address provided",
+                error=str(ex),
+            )
+        except Exception as ex:
             return BaseResponseDto(
                 success=False,
                 code=500,
                 data="",
                 message="An error occurred while validating the email address.",
+                error=str(ex),
             )
 
     @staticmethod

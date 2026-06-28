@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import TypeVar, Generic
-from core.dtos.baseDtos import BaseResponseDto
 from core.iServices.bases.iBaseService import IBaseService
+from core.dtos.baseDtos import BaseResponseDto
 
 T = TypeVar("T")  # Entity Type
 U = TypeVar("U")  # EntitySearchDto Type
@@ -12,12 +12,12 @@ class IQueryableService(Generic[T, U], IBaseService):
     async def find_one(
         self,
         data: U | None = None,
-        includes: list[str] = [],
-        selects: list[str] = [],
+        includes: list[str] | None = None,
+        selects: list[str] | None = None,
         is_and: bool = False,
         starts_with: bool = True,
         is_exact: bool = True,
-        order_by: list[str] = [],
+        order_by: list[str] | None = None,
         descending: bool = False,
     ) -> BaseResponseDto[T]:
         pass
@@ -26,12 +26,12 @@ class IQueryableService(Generic[T, U], IBaseService):
     async def find(
         self,
         data: U | None = None,
-        includes: list[str] = [],
-        selects: list[str] = [],
+        includes: list[str] | None = None,
+        selects: list[str] | None = None,
         is_and: bool = False,
         starts_with: bool = True,
         is_exact: bool = True,
-        order_by: list[str] = [],
+        order_by: list[str] | None = None,
         descending: bool = False,
         page: int = 1,
         limit: int = 50,

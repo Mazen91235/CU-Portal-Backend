@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Any, Coroutine
 
 
 class IBaseLogger(ABC):
     @abstractmethod
-    def log(
+    async def log(
         self,
         action: str,
         entity: str,
@@ -13,5 +12,5 @@ class IBaseLogger(ABC):
         message: str,
         source: str,
         details: dict | None = None,
-    ) -> Coroutine[Any, Any, None]:
+    ) -> None:
         pass

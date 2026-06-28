@@ -1,13 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Coroutine
 from fastapi import Request, Response
 
 
 class IQueryableController(ABC):
     @abstractmethod
-    def find_one(self, request: Request) -> Coroutine[None, None, Response]:
+    async def find_one(self, request: Request) -> Response:
         pass
 
     @abstractmethod
-    def find(self, request: Request) -> Coroutine[None, None, Response]:
+    async def find(self, request: Request) -> Response:
         pass

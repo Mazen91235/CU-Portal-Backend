@@ -228,6 +228,10 @@ class User(Base):
         EXPIRE_DAYS = 30
         MINIMUM_DAYS = 7
 
+    class GoogleToken:
+        TOKEN_LENGTH = 40
+        EXPIRE_HOURS = 1
+
     class VerificationToken:
         EXPIRE_HOURS = 1
 

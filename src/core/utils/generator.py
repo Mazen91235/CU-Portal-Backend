@@ -1,79 +1,68 @@
-from typing import TypeVar, Generic, Type
+from typing import Any, TypeVar, Generic, Type, get_args, get_origin
+from pydantic import BaseModel
 from .typesHandler import TypesHandler
 from core.models.queryModel import QueryModel
 
-T = TypeVar("T")
+T = TypeVar("T", bound=BaseModel)
 
 
 class Generator(Generic[T]):
 
-    @staticmethod
-    def generate(cls: Type[T], data: dict) -> T:
-        item = cls()
-        for key, value in data.items():
-            if hasattr(item, key):
-                attr_type = type(getattr(item, key))
-                if attr_type in TypesHandler.PRIMITIVE_TYPES:
-                    setattr(item, key, value)
-                elif issubclass(attr_type, list) and isinstance(value, list):
-                    single_item_type = (
-                        getattr(attr_type, "__args__", [None])[0]
-                        if hasattr(attr_type, "__args__")
-                        else None
-                    )
-                    if (
-                        not single_item_type
-                        or single_item_type in TypesHandler.PRIMITIVE_TYPES
-                    ):
-                        setattr(item, key, value)
-                    else:
-                        setattr(
-                            item,
-                            key,
-                            [
-                                Generator[single_item_type].generate(
-                                    single_item_type, v
-                                )
-                                for v in value
-                            ],
-                        )
-                else:
-                    setattr(item, key, value)
-        return item
+    @classmethod
+    def _unwrap_list_type(cls, annotation: Any) -> type | None:
+        """Safely extracts the inner type of a generic list or union containing a list."""
+        origin = get_origin(annotation)
+
+        if origin is list:
+            args = get_args(annotation)
+            return args[0] if args else None
+
+        if origin is not None and hasattr(annotation, "__args__"):
+            for arg in get_args(annotation):
+                if get_origin(arg) is list:
+                    sub_args = get_args(arg)
+                    return sub_args[0] if sub_args else None
+        return None
 
     @staticmethod
-    def generate_from_query(cls: Type[T], data: QueryModel) -> T:
-        item = cls()
-        if not data or not hasattr(data, "data"):
-            return item
-        model = data["data"]
-        for key, value in getattr(model, "items")():
-            if hasattr(item, key):
-                attr_type = type(getattr(item, key))
-                if attr_type in TypesHandler.PRIMITIVE_TYPES:
-                    setattr(item, key, value)
-                elif issubclass(attr_type, list) and isinstance(value, list):
-                    single_item_type = (
-                        getattr(attr_type, "__args__", [None])[0]
-                        if hasattr(attr_type, "__args__")
-                        else None
-                    )
-                    if (
-                        not single_item_type
-                        or single_item_type in TypesHandler.PRIMITIVE_TYPES
-                    ):
-                        setattr(item, key, value)
-                    else:
-                        setattr(
-                            item,
-                            key,
-                            [
-                                Generator[single_item_type].generate(
-                                    single_item_type, v
-                                )
-                                for v in value
-                            ],
-                        )
+    def generate(cls: Type[T], data: dict) -> T:
+        if not data:
+            return cls.model_construct()
+
+        init_kwargs = {}
+        fields = cls.model_fields
+
+        for key, value in data.items():
+            if key not in fields:
+                continue
+
+            field_def = fields[key]
+            annotation = field_def.annotation
+            inner_type = Generator._unwrap_list_type(annotation)
+
+            if inner_type and isinstance(value, list):
+                if inner_type not in TypesHandler.PRIMITIVE_TYPES and issubclass(
+                    inner_type, BaseModel
+                ):
+                    init_kwargs[key] = [
+                        Generator.generate(inner_type, item)
+                        for item in value
+                        if isinstance(item, dict)
+                    ]
                 else:
-                    setattr(item, key, value)
-        return item
+                    init_kwargs[key] = value
+            else:
+                init_kwargs[key] = value
+
+        return cls.model_validate(init_kwargs)
+
+    @staticmethod
+    def generate_from_query(cls: Type[T], query: QueryModel) -> T:
+        if not query or not hasattr(query, "data") or query.data is None:
+            return cls.model_construct()
+
+        # Extract only the fields explicitly provided in the search criteria DTO
+        search_criteria = query.data
+        dict_payload = search_criteria.model_dump(exclude_unset=True)
+
+        return Generator.generate(cls, dict_payload)

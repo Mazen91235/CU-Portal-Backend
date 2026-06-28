@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import TypeVar, Generic, List, Any, Coroutine
+from typing import TypeVar, Generic, List, Any
 from core.dtos.baseDtos import BaseResponseDto
 
 T = TypeVar("T")
@@ -50,6 +50,12 @@ class IBaseRepository(ABC, Generic[T]):
     async def execute_sql(
         self, command: str, params: dict = {}
     ) -> BaseResponseDto[bool]:
+        pass
+
+    @abstractmethod
+    async def execute_stored_function(
+        self, function_name: str, params: dict = {}
+    ) -> BaseResponseDto[Any]:
         pass
 
     @abstractmethod

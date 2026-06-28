@@ -354,6 +354,38 @@ class BaseRepository(IBaseRepository[T]):
                 error=str(ex),
             )
 
+    async def execute_stored_function(self, function_name, params=None):
+        try:
+            session = self._resolve_session()
+            if not params:
+                params = {}
+            param_placeholders = ", ".join([f":{key}" for key in params.keys()])
+            command = f"SELECT {function_name}({param_placeholders})"
+            result = await session.execute(text(command), params)
+            await session.flush()
+            return BaseResponseDto(
+                success=True,
+                data=result.scalar(),
+                message="Stored Function Executed",
+                code=200,
+            )
+        except Exception as ex:
+            await self._log_error(
+                action="ExecuteStoredFunction",
+                level="error",
+                code=500,
+                message=f"An error occurred while executing stored function {function_name}",
+                details={"error": str(ex)},
+                source="BaseRepository",
+            )
+            return BaseResponseDto(
+                success=False,
+                data=None,
+                message="Stored Function Execution Failed",
+                code=500,
+                error=str(ex),
+            )
+
     async def begin_transaction(self):
         try:
             session = self._resolve_session()

@@ -29,18 +29,11 @@ class ValidationMiddleware(IValidationMiddleware):
                 entity="Request",
                 level="error",
                 code=400,
-                message=str(ex),
+                message="An error occurred during request validation.",
+                details={"error": str(ex)},
                 source="ValidationMiddleware",
             )
             raise HTTPException(
                 status_code=500,
                 detail="An error occurred during request validation. Please try again later.",
-            )
-
-    async def validate_files_count(self, request, expected_count):
-        files = getattr(request.state, "upload_files", [])
-        if len(files) != expected_count:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Expected {expected_count} file(s), but received {len(files)}.",
             )

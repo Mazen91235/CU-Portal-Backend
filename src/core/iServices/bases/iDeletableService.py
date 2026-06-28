@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import TypeVar, Generic
-from core.dtos.baseDtos import BaseResponseDto
 from core.iServices.bases.iBaseService import IBaseService
+from core.dtos.baseDtos import BaseResponseDto
 
 T = TypeVar("T")  # Entity Type
 

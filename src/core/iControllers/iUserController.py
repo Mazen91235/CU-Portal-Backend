@@ -1,34 +1,74 @@
 from abc import abstractmethod
-from typing import Coroutine
 from fastapi import Request, Response
-from core.iControllers.bases.iCrudController import ICrudController
+from core.iControllers.bases.iQueryableController import IQueryableController
+from core.iControllers.bases.iCreatableController import ICreatableController
+from core.iControllers.bases.iUpdatableController import IUpdatableController
 
 
-class IUserController(ICrudController):
+class IUserController(IQueryableController, ICreatableController, IUpdatableController):
+    # Additional Query Functions
     @abstractmethod
-    def verify_email(self, request: Request) -> Coroutine[None, None, Response]:
+    async def search(self, request: Request) -> Response:
+        pass
+
+    # Auth Functions
+    @abstractmethod
+    async def verify_email(self, request: Request) -> Response:
         pass
 
     @abstractmethod
-    def login(self, request: Request) -> Coroutine[None, None, Response]:
+    async def login_with_google(self, request: Request) -> Response:
         pass
 
     @abstractmethod
-    def logout(self, request: Request) -> Coroutine[None, None, Response]:
+    async def google_authentication_redirect(self, request: Request) -> Response:
         pass
 
     @abstractmethod
-    def forget_password(self, request: Request) -> Coroutine[None, None, Response]:
+    async def is_logged_in(self, request: Request) -> Response:
         pass
 
     @abstractmethod
-    def reset_password(self, request: Request) -> Coroutine[None, None, Response]:
+    async def logout(self, request: Request) -> Response:
         pass
 
     @abstractmethod
-    def change_password(self, request: Request) -> Coroutine[None, None, Response]:
+    async def get_token_details(self, request: Request) -> Response:
         pass
 
     @abstractmethod
-    def resend_token(self, request: Request) -> Coroutine[None, None, Response]:
+    async def resend_token(self, request: Request) -> Response:
+        pass
+
+    @abstractmethod
+    async def get_google_stored_token(self, request: Request) -> Response:
+        pass
+
+    @abstractmethod
+    async def get_google_access_token(self, request: Request) -> Response:
+        pass
+
+    # User Functions
+    @abstractmethod
+    async def get_statistics(self, request: Request) -> Response:
+        pass
+
+    @abstractmethod
+    async def update_many(self, request: Request) -> Response:
+        pass
+
+    @abstractmethod
+    async def update_academic_data(self, request: Request) -> Response:
+        pass
+
+    @abstractmethod
+    async def get_current_user(self, request: Request) -> Response:
+        pass
+
+    @abstractmethod
+    async def get_user_permissions(self, request: Request) -> Response:
+        pass
+
+    @abstractmethod
+    async def has_permissions(self, request: Request) -> Response:
         pass

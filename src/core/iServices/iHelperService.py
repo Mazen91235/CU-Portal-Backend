@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar, Any, Type, Coroutine
+from typing import Generic, TypeVar, Any, Type
 from core.entities.user import User
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import FetchedModel, DownloadedFileModel, FileModel
@@ -10,42 +10,38 @@ U = TypeVar("U")  # EntitySearchDto Type
 
 class IHelperService(ABC, Generic[U]):
     @abstractmethod
-    def get_ip_address(
+    async def get_ip_address(
         self,
-    ) -> (
-        Coroutine[Any, Any, BaseResponseDto[str | None]]
-        | Coroutine[Any, Any, BaseResponseDto[None]]
-    ):
+    ) -> BaseResponseDto[str]:
         pass
 
     @abstractmethod
-    def get_logged_in_user(
+    async def get_logged_in_user(
         self,
-    ) -> (
-        Coroutine[Any, Any, BaseResponseDto[User | None]]
-        | Coroutine[Any, Any, BaseResponseDto[None]]
-    ):
+    ) -> BaseResponseDto[User]:
         pass
 
     @abstractmethod
-    def send_email(
+    async def send_email(
         self, to_email: str, subject: str, body: str
-    ) -> Coroutine[Any, Any, BaseResponseDto[bool]]:
+    ) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod
-    def generate_dynamic_includes(self, cls: Type[T], includes: list[str]) -> list[Any]:
+    def generate_dynamic_includes(
+        self, cls: Type[T], includes: list[str] | None
+    ) -> list[Any]:
         pass
 
     @abstractmethod
     def generate_dynamic_selects(
-        self, entity_name: str, selects: list[str]
+        self, entity_name: str, selects: list[str] | None
     ) -> list[Any]:
         pass
 
     @abstractmethod
     def generate_dynamic_order_by(
-        self, entity_name: str, order_by: list[str]
+        self, entity_name: str, order_by: list[str] | None
     ) -> list[Any]:
         pass
 

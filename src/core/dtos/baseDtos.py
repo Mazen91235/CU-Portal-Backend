@@ -21,8 +21,10 @@ class BaseResponseDto(Generic[T]):
 
 
 class BaseSearchDto(BaseModel):
-    query: str = Field("", description="Search query string")
-    page: int | None = Field(None, ge=1, description="Page number for pagination")
+    query: str | None = Field(default=None, description="Search query string")
+    page: int | None = Field(
+        default=None, ge=1, description="Page number for pagination"
+    )
     limit: int | None = Field(
-        None, ge=1, le=50, description="Number of items per page for pagination"
+        default=None, ge=1, le=50, description="Number of items per page for pagination"
     )

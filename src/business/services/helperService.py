@@ -3,19 +3,17 @@ import aiohttp
 from aiohttp import ClientResponse
 import asyncio
 import json
-from pathlib import Path
 from typing import TypeVar, cast
-from fastapi import UploadFile
 from sqlalchemy import and_, or_
 from aiosmtplib import SMTP
 from email.message import EmailMessage
 from sqlalchemy.orm import selectinload
-from core.iServices.iHelperService import IHelperService
-from core.dtos.baseDtos import BaseResponseDto
-from core.entities.user import User
-from core.models.fileModels import FetchedModel, DownloadedFileModel, FileModel
 from business.contextVars.requestContext import request_context
 from business.contextVars.userContext import user_context
+from core.iServices.iHelperService import IHelperService
+from core.entities.user import User
+from core.dtos.baseDtos import BaseResponseDto
+from core.models.fileModels import FetchedModel, DownloadedFileModel, FileModel
 from core.utils.entitiesHandler import EntitiesHandler
 from core.utils.fernetHandler import FernetHandler
 
@@ -53,9 +51,9 @@ class HelperService(IHelperService[U]):
         try:
             request = request_context.get(None)
             ip_address = request.client.host if request and request.client else None
-            return BaseResponseDto[str | None](success=True, data=ip_address)
+            return BaseResponseDto(success=True, data=ip_address)
         except Exception as ex:
-            return BaseResponseDto[str | None](
+            return BaseResponseDto(
                 success=False,
                 code=500,
                 data=None,

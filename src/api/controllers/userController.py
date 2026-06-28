@@ -1,10 +1,14 @@
 from core.iControllers.iUserController import IUserController
 from core.iServices.iUserService import IUserService
+from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
-from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.responseHandler import ResponseHandler
 from core.utils.cookieHandler import CookieHandler
+from core.utils.parser import Parser
+from core.utils.oauthHandler import OAuthHandler
+from core.utils.timezoneHandler import TimezoneHandler
+from core.utils.jsonHandler import JSONHandler
 
 # Entities & DTOs
 from core.entities.user import User
@@ -12,12 +16,14 @@ from core.dtos.userDtos import (
     UserRegisterDto,
     UserResponseDto,
     UserUpdateDto,
-    UserLoginDto,
+    UserSearchDto,
     UserVerifyEmailDto,
-    UserForgotPasswordDto,
-    UserResetPasswordDto,
-    UserChangePasswordDto,
+    UserGetStoredAccessTokenDto,
+    UserUpdateUsersDto,
+    UserUpdateAcademicDataDto,
+    UserHasPermissionsDto,
 )
+from core.models.queryModel import QueryModel
 
 
 class UserController(IUserController):
@@ -28,20 +34,54 @@ class UserController(IUserController):
     # CRUD Functions
     async def find_one(self, request):
         try:
-            response = await self.user_service.find_one(None)
+            user_id = request.path_params.get("user_id")
+            if not user_id:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=400,
+                    message="User ID is required",
+                )
+            entity_search_dto = Generator[UserSearchDto].generate(
+                UserSearchDto, {"id": user_id}
+            )
+            response = await self.user_service.find_one(
+                entity_search_dto,
+                [
+                    "role.exact_roles",
+                    "faculty",
+                    "department",
+                    "year",
+                    "pending_user",
+                    "notifications",
+                    "subjects",
+                ],
+            )
             if not response.success:
                 return ResponseHandler.generate_response(
                     success=False,
                     code=response.code,
                     message=response.message,
                 )
-            user = Mapper[User, UserResponseDto].map(
-                response.data, UserResponseDto, True
-            )
+            user = response.data
+            if not user:
+                await self.logger.log(
+                    action="FindOne",
+                    entity="User",
+                    level="info",
+                    code=404,
+                    message="User not found",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=404,
+                    message="User not found",
+                )
+            user_mapped = Mapper[User, UserResponseDto].map(user, UserResponseDto, True)
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
-                data=user,
+                data=user_mapped,
             )
         except Exception as e:
             await self.logger.log(
@@ -49,21 +89,96 @@ class UserController(IUserController):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while processing the request - {str(e)}",
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
                 success=False,
                 code=500,
-                message="An error occurred while processing the request",
+                message="An error occurred while processing the request, please try again later",
             )
 
     async def find(self, request):
-        return ResponseHandler.generate_response(
-            success=False,
-            code=400,
-            message="Finding multiple users is not supported",
-        )
+        try:
+            query = Parser.parse_query(
+                request.query_params.get("query", "{}"),
+                QueryModel[UserSearchDto],
+            )
+            entity_search_dto = Generator[UserSearchDto].generate_from_query(
+                UserSearchDto, query
+            )
+            includes = query.includes
+            selects = query.selects
+            is_and = query.is_and
+            starts_with = query.starts_with
+            is_exact = query.is_exact
+            order_by = query.order_by
+            descending = query.descending
+            page = query.page or 1
+            limit = query.limit or 50
+
+            response = await self.user_service.find(
+                entity_search_dto,
+                includes,
+                selects,
+                is_and,
+                starts_with,
+                is_exact,
+                order_by,
+                descending,
+                page,
+                limit,
+            )
+
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+
+            users = response.data
+
+            if not users:
+                await self.logger.log(
+                    action="Find",
+                    entity="User",
+                    level="info",
+                    code=404,
+                    message="Users not found",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=404,
+                    message="Users not found",
+                )
+
+            users_mapped = Mapper[User, UserResponseDto].map_list(
+                users, UserResponseDto, True
+            )
+
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=users_mapped,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="Find",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
 
     async def create(self, request):
         try:
@@ -79,24 +194,42 @@ class UserController(IUserController):
                     code=response.code,
                     message=response.message,
                 )
-            user = Mapper[User, UserResponseDto].map(
-                response.data, UserResponseDto, True
-            )
-            await self.user_service.commit_transaction()
+            token = response.data.token if response.data else None
+            if not token:
+                await self.user_service.rollback_transaction()
+                await self.logger.log(
+                    action="Create",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to generate verification token",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            token_details = {
+                "token": token,
+                "can_resend_after": TimezoneHandler.add_minutes(1).isoformat(),
+            }
+            token_details_stringified = JSONHandler.stringify(token_details)
             response = ResponseHandler.generate_response(
                 success=True,
                 code=201,
-                data=user,
+                message="User created successfully, Please verify your email to complete the registration process",
             )
             CookieHandler.set_cookie(
                 response,
-                "email",
-                user.get("email") if isinstance(user, dict) else user.email,
+                "saved_token",
+                token_details_stringified,
                 httponly=True,
                 secure=True,
                 expires=User.VerificationToken.EXPIRE_HOURS * 60 * 60,
                 max_age=User.VerificationToken.EXPIRE_HOURS * 60 * 60,
             )
+            await self.user_service.commit_transaction()
             return response
         except Exception as e:
             await self.user_service.rollback_transaction()
@@ -105,13 +238,14 @@ class UserController(IUserController):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while processing the request - {str(e)}",
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
                 success=False,
                 code=500,
-                message="An error occurred while processing the request",
+                message="An error occurred while processing the request, please try again later",
             )
 
     async def update(self, request):
@@ -128,14 +262,29 @@ class UserController(IUserController):
                     code=response.code,
                     message=response.message,
                 )
-            user = Mapper[User, UserResponseDto].map(
-                response.data, UserResponseDto, True
-            )
+            user = response.data
+            if not user:
+                await self.user_service.rollback_transaction()
+                await self.logger.log(
+                    action="Update",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to update user",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            user_mapped = Mapper[User, UserResponseDto].map(user, UserResponseDto, True)
             await self.user_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
-                data=user,
+                data=user_mapped,
+                message="User updated successfully",
             )
         except Exception as e:
             await self.user_service.rollback_transaction()
@@ -144,52 +293,94 @@ class UserController(IUserController):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while processing the request - {str(e)}",
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
                 success=False,
                 code=500,
-                message="An error occurred while processing the request",
+                message="An error occurred while processing the request, please try again later",
             )
 
-    async def delete(self, request):
+    # Additional Query Functions
+    async def search(self, request):
         try:
-            await self.user_service.begin_transaction()
-            response = await self.user_service.delete(None)
+            query = Parser.parse_query(
+                request.query_params.get("query", "{}"),
+                QueryModel[UserSearchDto],
+            )
+            entity_search_dto = Generator[UserSearchDto].generate_from_query(
+                UserSearchDto, query
+            )
+            includes = query.includes
+            selects = query.selects
+            is_and = query.is_and
+            starts_with = query.starts_with
+            is_exact = query.is_exact
+            order_by = query.order_by
+            descending = query.descending
+            page = query.page or 1
+            limit = query.limit or 50
+
+            response = await self.user_service.find(
+                entity_search_dto,
+                includes,
+                selects,
+                is_and,
+                starts_with,
+                is_exact,
+                order_by,
+                descending,
+                page,
+                limit,
+            )
+
             if not response.success:
-                await self.user_service.rollback_transaction()
                 return ResponseHandler.generate_response(
                     success=False,
                     code=response.code,
                     message=response.message,
                 )
-            await self.user_service.commit_transaction()
-            response = ResponseHandler.generate_response(
+
+            users = response.data
+            if not users:
+                await self.logger.log(
+                    action="Search",
+                    entity="User",
+                    level="info",
+                    code=404,
+                    message="Users not found",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=404,
+                    message="Users not found",
+                )
+            return ResponseHandler.generate_response(
                 success=True,
                 code=200,
-                message="User deleted successfully",
+                data=users,
             )
-            CookieHandler.delete_cookie(response, "token")
-            CookieHandler.delete_cookie(response, "email")
-            return response
         except Exception as e:
-            await self.user_service.rollback_transaction()
             await self.logger.log(
-                action="Delete",
+                action="Search",
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while processing the request - {str(e)}",
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
                 success=False,
                 code=500,
-                message="An error occurred while processing the request",
+                message="An error occurred while processing the request, please try again later",
             )
 
     # User Specific Functions
+    # Auth Functions
     async def verify_email(self, request):
         try:
             await self.user_service.begin_transaction()
@@ -203,13 +394,13 @@ class UserController(IUserController):
                     code=response.code,
                     message=response.message,
                 )
-            await self.user_service.commit_transaction()
             response = ResponseHandler.generate_response(
                 success=True,
                 code=200,
-                message="Email verified successfully",
+                message="Email verified successfully, you can now log in to your account",
             )
-            CookieHandler.delete_cookie(response, "email")
+            CookieHandler.delete_cookie(response, "saved_token")
+            await self.user_service.commit_transaction()
             return response
         except Exception as e:
             await self.user_service.rollback_transaction()
@@ -218,21 +409,20 @@ class UserController(IUserController):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while processing the request - {str(e)}",
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
                 success=False,
                 code=500,
-                message="An error occurred while processing the request",
+                message="An error occurred while processing the request, please try again later",
             )
 
-    async def login(self, request):
+    async def login_with_google(self, request):
         try:
             await self.user_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserLoginDto].generate(UserLoginDto, payload)
-            response = await self.user_service.login(data.email, data.password)
+            response = await self.user_service.login_with_google()
             if not response.success:
                 await self.user_service.rollback_transaction()
                 return ResponseHandler.generate_response(
@@ -240,46 +430,148 @@ class UserController(IUserController):
                     code=response.code,
                     message=response.message,
                 )
-            user = response.data.user if response.data else None
-            if not user:
+            response_data = response.data
+            if not response_data:
                 await self.user_service.rollback_transaction()
+                await self.logger.log(
+                    action="LoginWithGoogle",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to generate Google login URL",
+                    source="UserController",
+                )
                 return ResponseHandler.generate_response(
                     success=False,
-                    code=404,
-                    message="User not found",
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
                 )
-            user_mapped = Mapper[User, UserResponseDto].map(user, UserResponseDto, True)
-            token = response.data.token if response.data else None
-            response = ResponseHandler.generate_response(
-                success=True,
-                code=200,
-                data=user_mapped,
-            )
-            CookieHandler.set_cookie(
-                response,
-                "token",
-                token,
-                httponly=True,
-                secure=True,
-                expires=User.RefreshToken.EXPIRE_DAYS * 24 * 60 * 60,
-                max_age=User.RefreshToken.EXPIRE_DAYS * 24 * 60 * 60,
-            )
             await self.user_service.commit_transaction()
-            return response
+            return await OAuthHandler.authorize_google_redirect(
+                request,
+                redirect_url=response_data.redirect_response_url,
+                state=response_data.state,
+                nonce=response_data.nonce,
+            )
         except Exception as e:
             await self.user_service.rollback_transaction()
             await self.logger.log(
-                action="Login",
+                action="LoginWithGoogle",
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while processing the request - {str(e)}",
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
                 success=False,
                 code=500,
-                message="An error occurred while processing the request",
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def google_authentication_redirect(self, request):
+        try:
+            await self.user_service.begin_transaction()
+            response = await self.user_service.authenticate_with_google()
+            if not response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            response_data = response.data
+            if not response_data:
+                await self.user_service.rollback_transaction()
+                await self.logger.log(
+                    action="GoogleAuthenticationRedirect",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to authenticate with Google",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            response = ResponseHandler.generate_redirect_response(
+                response_data.redirect_url or ""
+            )
+            if response_data.user:
+                CookieHandler.set_cookie(
+                    response,
+                    "token",
+                    response_data.token,
+                    httponly=True,
+                    secure=True,
+                    expires=response_data.token_expiration or 0,
+                    max_age=response_data.token_expiration or 0,
+                )
+            await self.user_service.commit_transaction()
+            return response
+        except Exception as e:
+            await self.user_service.rollback_transaction()
+            await self.logger.log(
+                action="GoogleAuthenticationRedirect",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def is_logged_in(self, request):
+        try:
+            response = await self.user_service.get_current_user_id()
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            user_id = response.data
+            if not user_id:
+                await self.logger.log(
+                    action="IsLoggedIn",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve current user ID",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=401,
+                    message="User is not logged in",
+                )
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                message="User is logged in",
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="IsLoggedIn",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
             )
 
     async def logout(self, request):
@@ -308,23 +600,160 @@ class UserController(IUserController):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while processing logout - {str(e)}",
+                message=f"An error occurred while processing logout",
+                details={"error": str(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
                 success=False,
                 code=500,
-                message="An error occurred while processing logout",
+                message="An error occurred while processing logout, please try again later",
             )
 
-    async def forget_password(self, request):
+    async def get_token_details(self, request):
+        try:
+            token_details_stringified = CookieHandler.get_cookie(request, "saved_token")
+            if not token_details_stringified:
+                await self.logger.log(
+                    action="GetTokenDetails",
+                    entity="User",
+                    level="warning",
+                    code=400,
+                    message="No saved token found in cookies for retrieving token details",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=400,
+                    message="No saved token found in cookies for retrieving token details",
+                )
+            token_details = JSONHandler.parse(token_details_stringified)
+            if not token_details:
+                await self.logger.log(
+                    action="GetTokenDetails",
+                    entity="User",
+                    level="warning",
+                    code=400,
+                    message="Failed to parse saved token details from cookies for retrieving token details",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=400,
+                    message="Failed to parse saved token details from cookies for retrieving token details",
+                )
+            token = str(token_details.get("token"))
+            can_resend_after = TimezoneHandler.from_isoformat(
+                str(token_details.get("can_resend_after"))
+            )
+            response = await self.user_service.get_token_details(token)
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            token_details = response.data
+            if not token_details:
+                await self.logger.log(
+                    action="GetTokenDetails",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve token details from service",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            token_details.can_resend_after = (
+                (can_resend_after - TimezoneHandler.now("UTC")).total_seconds()
+                if can_resend_after > TimezoneHandler.now("UTC")
+                else 0
+            )
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=token_details,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="GetTokenDetails",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def resend_token(self, request):
         try:
             await self.user_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserForgotPasswordDto].generate(
-                UserForgotPasswordDto, payload
+            token_details_stringified = CookieHandler.get_cookie(request, "saved_token")
+            if not token_details_stringified:
+                await self.user_service.rollback_transaction()
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="warning",
+                    code=400,
+                    message="No saved token found in cookies for resending token",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=400,
+                    message="No saved token found in cookies for resending token",
+                )
+            token_details = JSONHandler.parse(token_details_stringified)
+            if not token_details:
+                await self.user_service.rollback_transaction()
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="warning",
+                    code=400,
+                    message="Failed to parse saved token details from cookies for resending token",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=400,
+                    message="Failed to parse saved token details from cookies for resending token",
+                )
+            token = str(token_details.get("token"))
+            can_resend_after = TimezoneHandler.from_isoformat(
+                str(token_details.get("can_resend_after"))
             )
-            response = await self.user_service.forget_password(data.email)
+            remaining_time = (
+                (can_resend_after - TimezoneHandler.now("UTC")).total_seconds()
+                if can_resend_after > TimezoneHandler.now("UTC")
+                else 0
+            )
+            if remaining_time > 0:
+                await self.user_service.rollback_transaction()
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="warning",
+                    code=429,
+                    message=f"Token resend request is too soon, please wait {remaining_time:.0f} second{'' if remaining_time == 1 else 's'} before trying again",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=429,
+                    message=f"Token resend request is too soon, please wait {remaining_time:.0f} second{'' if remaining_time == 1 else 's'} before trying again",
+                )
+            response = await self.user_service.resend_token(token)
             if not response.success:
                 await self.user_service.rollback_transaction()
                 return ResponseHandler.generate_response(
@@ -336,12 +765,16 @@ class UserController(IUserController):
             response = ResponseHandler.generate_response(
                 success=True,
                 code=200,
-                message="Password reset instructions sent to email if it exists",
+                message="Token resent successfully if email exists",
             )
+            token_details["can_resend_after"] = TimezoneHandler.add_minutes(
+                1
+            ).isoformat()
+            token_details_stringified = JSONHandler.stringify(token_details)
             CookieHandler.set_cookie(
                 response,
-                "email",
-                data.email,
+                "saved_token",
+                token_details_stringified,
                 httponly=True,
                 secure=True,
                 expires=User.VerificationToken.EXPIRE_HOURS * 60 * 60,
@@ -351,144 +784,370 @@ class UserController(IUserController):
         except Exception as e:
             await self.user_service.rollback_transaction()
             await self.logger.log(
-                action="ForgetPassword",
-                entity="User",
-                level="error",
-                code=500,
-                message=f"An error occurred while processing the request - {str(e)}",
-                source="UserController",
-            )
-            return ResponseHandler.generate_response(
-                success=False,
-                code=500,
-                message="An error occurred while processing the request",
-            )
-
-    async def reset_password(self, request):
-        try:
-            await self.user_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserResetPasswordDto].generate(
-                UserResetPasswordDto, payload
-            )
-            response = await self.user_service.reset_password(
-                data.token, data.new_password
-            )
-            if not response.success:
-                await self.user_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=response.code,
-                    message=response.message,
-                )
-            await self.user_service.commit_transaction()
-            response = ResponseHandler.generate_response(
-                success=True,
-                code=200,
-                message="Password reset successfully",
-            )
-            CookieHandler.delete_cookie(response, "email")
-            return response
-        except Exception as e:
-            await self.user_service.rollback_transaction()
-            await self.logger.log(
-                action="ResetPassword",
-                entity="User",
-                level="error",
-                code=500,
-                message=f"An error occurred while processing the request - {str(e)}",
-                source="UserController",
-            )
-            return ResponseHandler.generate_response(
-                success=False,
-                code=500,
-                message="An error occurred while processing the request",
-            )
-
-    async def change_password(self, request):
-        try:
-            await self.user_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserChangePasswordDto].generate(
-                UserChangePasswordDto, payload
-            )
-            response = await self.user_service.change_password(
-                data.old_password, data.new_password
-            )
-            if not response.success:
-                await self.user_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=response.code,
-                    message=response.message,
-                )
-            await self.user_service.commit_transaction()
-            return ResponseHandler.generate_response(
-                success=True,
-                code=200,
-                message="Password changed successfully",
-            )
-        except Exception as e:
-            await self.user_service.rollback_transaction()
-            await self.logger.log(
-                action="ChangePassword",
-                entity="User",
-                level="error",
-                code=500,
-                message=f"An error occurred while processing the request - {str(e)}",
-                source="UserController",
-            )
-            return ResponseHandler.generate_response(
-                success=False,
-                code=500,
-                message="An error occurred while processing the request",
-            )
-
-    async def resend_token(self, request):
-        try:
-            await self.user_service.begin_transaction()
-            email = CookieHandler.get_cookie(request, "email")
-            if not email:
-                await self.user_service.rollback_transaction()
-                await self.logger.log(
-                    action="ResendToken",
-                    entity="User",
-                    level="warning",
-                    code=400,
-                    message="No email found in cookies for resending token",
-                    source="UserController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="No email found in cookies for resending token",
-                )
-            response = await self.user_service.resend_token(email)
-            if not response.success:
-                await self.user_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=response.code,
-                    message=response.message,
-                )
-            await self.user_service.commit_transaction()
-            return ResponseHandler.generate_response(
-                success=True,
-                code=200,
-                message="Token resent successfully if email exists",
-            )
-        except Exception as e:
-            await self.user_service.rollback_transaction()
-            await self.logger.log(
                 action="ResendToken",
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while processing the request - {str(e)}",
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
                 success=False,
                 code=500,
-                message="An error occurred while processing the request",
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def get_google_stored_token(self, request):
+        try:
+            payload = await request.json()
+            data = Generator[UserGetStoredAccessTokenDto].generate(
+                UserGetStoredAccessTokenDto, payload
+            )
+            response = await self.user_service.get_google_stored_token(
+                data.google_details_token
+            )
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            access_token = response.data
+            if not access_token:
+                await self.logger.log(
+                    action="GetGoogleStoredToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve Google stored access token",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=access_token,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="GetGoogleStoredToken",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def get_google_access_token(self, request):
+        try:
+            response = await self.user_service.get_google_access_token()
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            access_token = response.data
+            if not access_token:
+                await self.logger.log(
+                    action="GetGoogleAccessToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve Google access token",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=access_token,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="GetGoogleAccessToken",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    # User Functions
+    async def get_statistics(self, request):
+        try:
+            query = Parser.parse_query(
+                request.query_params.get("query", "{}"),
+                QueryModel[UserSearchDto],
+            )
+            entity_search_dto = Generator[UserSearchDto].generate_from_query(
+                UserSearchDto, query
+            )
+            response = await self.user_service.get_statistics(entity_search_dto)
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            statistics = response.data
+            if not statistics:
+                await self.logger.log(
+                    action="GetStatistics",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve user statistics",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=statistics,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="GetStatistics",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def update_many(self, request):
+        try:
+            await self.user_service.begin_transaction()
+            payload = await request.json()
+            data = Generator[UserUpdateUsersDto].generate(UserUpdateUsersDto, payload)
+            response = await self.user_service.update_many(data)
+            if not response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            await self.user_service.commit_transaction()
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                message="Users updated successfully",
+            )
+        except Exception as e:
+            await self.user_service.rollback_transaction()
+            await self.logger.log(
+                action="UpdateMany",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def update_academic_data(self, request):
+        try:
+            await self.user_service.begin_transaction()
+            payload = await request.json()
+            data = Generator[UserUpdateAcademicDataDto].generate(
+                UserUpdateAcademicDataDto, payload
+            )
+            response = await self.user_service.update_academic_data(data)
+            if not response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            await self.user_service.commit_transaction()
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                message="User academic data updated successfully",
+            )
+        except Exception as e:
+            await self.user_service.rollback_transaction()
+            await self.logger.log(
+                action="UpdateAcademicData",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def get_current_user(self, request):
+        try:
+            query = Parser.parse_query(
+                request.query_params.get("query", "{}"),
+                QueryModel[UserSearchDto],
+            )
+            includes = query.includes
+            response = await self.user_service.get_current_user(includes)
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            user = response.data
+            if not user:
+                await self.logger.log(
+                    action="GetCurrentUser",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve current user",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            user_mapped = Mapper[User, UserResponseDto].map(user, UserResponseDto, True)
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=user_mapped,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="GetCurrentUser",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def get_user_permissions(self, request):
+        try:
+            response = await self.user_service.get_user_permissions()
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            permissions = response.data
+            if not permissions:
+                await self.logger.log(
+                    action="GetUserPermissions",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve user permissions",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=permissions,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="GetUserPermissions",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def has_permissions(self, request):
+        try:
+            payload = await request.json()
+            data = Generator[UserHasPermissionsDto].generate(
+                UserHasPermissionsDto, payload
+            )
+            response = await self.user_service.has_permissions(data)
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            has_permissions = response.data
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=has_permissions,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="HasPermissions",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
             )

@@ -1,24 +1,30 @@
 import os
+from datetime import timedelta
 from typing import cast
-from sqlalchemy.orm import selectinload
 from sqlalchemy import and_
+from business.contextVars.requestContext import request_context
 from core.iServices.iUserService import IUserService
+from core.iServices.iHelperService import IHelperService
+from core.iLoggers.iBaseLogger import IBaseLogger
+from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.user import User
 from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
-from core.dtos.userDtos import (
-    UserLoginResponseDto,
-)
-from core.dtos.baseDtos import BaseResponseDto
-from core.iRepositories.iBaseRepository import IBaseRepository
-from core.iLoggers.iBaseLogger import IBaseLogger
-from core.iServices.iHelperService import IHelperService
 from core.entities.token import Token
+from core.dtos.baseDtos import BaseResponseDto
+from core.dtos.userDtos import (
+    UserLoginWithGoogleDto,
+    UserSignUpResponseDto,
+    UserLoginResponseDto,
+    UserStatisticsResponseDto,
+    UserTokenDetailsResponseDto,
+)
 from core.utils.timezoneHandler import TimezoneHandler
 from core.utils.fernetHandler import FernetHandler
 from core.utils.stringHandler import StringHandler
 from core.utils.validator import Validator
 from core.utils.jwtHandler import JWTHandler
+from core.utils.oauthHandler import OAuthHandler
 
 
 class UserService(IUserService):
@@ -52,12 +58,12 @@ class UserService(IUserService):
     async def find_one(
         self,
         data=None,
-        includes=[],
-        selects=[],
+        includes=None,
+        selects=None,
         is_and=False,
         starts_with=True,
         is_exact=True,
-        order_by=[],
+        order_by=None,
         descending=False,
     ):
         try:
@@ -86,7 +92,6 @@ class UserService(IUserService):
                     code=result.code,
                     data=None,
                     message=result.message,
-                    error=result.error,
                 )
             user = result.data
             return BaseResponseDto(success=True, data=user)
@@ -105,18 +110,17 @@ class UserService(IUserService):
                 code=500,
                 data=None,
                 message="An error occurred while finding user",
-                error=str(ex),
             )
 
     async def find(
         self,
         data=None,
-        includes=[],
-        selects=[],
+        includes=None,
+        selects=None,
         is_and=False,
         starts_with=True,
         is_exact=True,
-        order_by=[],
+        order_by=None,
         descending=False,
         page=1,
         limit=50,
@@ -149,7 +153,6 @@ class UserService(IUserService):
                     code=result.code,
                     data=None,
                     message=result.message,
-                    error=result.error,
                 )
             users = result.data
             return BaseResponseDto(success=True, data=users)
@@ -168,7 +171,6 @@ class UserService(IUserService):
                 code=500,
                 data=None,
                 message="An error occurred while finding users",
-                error=str(ex),
             )
 
     async def create(self, data):
@@ -193,7 +195,7 @@ class UserService(IUserService):
                 and_(
                     Token.token == google_token_received,
                     Token.type == Token.TokenType.GOOGLE_TOKEN,
-                    Token.expires_at > TimezoneHandler.now("UTC"),
+                    Token.expire_at > TimezoneHandler.now("UTC"),
                 )
             )
             if not google_token_response.success:
@@ -202,7 +204,6 @@ class UserService(IUserService):
                     code=google_token_response.code,
                     data=None,
                     message=google_token_response.message,
-                    error=google_token_response.error,
                 )
             google_token = cast(Token | None, google_token_response.data)
             if not google_token:
@@ -246,7 +247,6 @@ class UserService(IUserService):
                     code=update_google_token_response.code,
                     data=None,
                     message=update_google_token_response.message,
-                    error=update_google_token_response.error,
                 )
             google_user_details_response = JWTHandler.decode_jwt(
                 token=google_token_details.get("token"),
@@ -258,16 +258,16 @@ class UserService(IUserService):
                     action="Create",
                     entity="User",
                     level="error",
-                    code=400,
+                    code=google_user_details_response.code or 500,
                     message="Failed to decode Google token details",
-                    details={"error": google_user_details_response.message},
+                    details={"error": google_user_details_response.error},
                     source="UserService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=400,
+                    code=google_user_details_response.code,
                     data=None,
-                    message="Bad Request, Please try authorizing with Google again",
+                    message=google_user_details_response.message,
                 )
             google_user_details = google_user_details_response.data
             if not google_user_details:
@@ -291,9 +291,9 @@ class UserService(IUserService):
                     action="Create",
                     entity="User",
                     level="error",
-                    code=400,
+                    code=validate_email_response.code or 500,
                     message="Invalid email address provided",
-                    details={"error": validate_email_response.message},
+                    details={"error": validate_email_response.error},
                     source="UserService",
                 )
                 return BaseResponseDto(
@@ -363,7 +363,7 @@ class UserService(IUserService):
                         action="Create",
                         entity="User",
                         level="warning",
-                        code=400,
+                        code=file_response.code or 500,
                         message="Failed to fetch file from Google Drive",
                         details={"error": file_response.error},
                         source="UserService",
@@ -433,7 +433,6 @@ class UserService(IUserService):
                     code=email_exists_response.code,
                     data=None,
                     message=email_exists_response.message,
-                    error=email_exists_response.error,
                 )
             email_exists = email_exists_response.data
             if email_exists:
@@ -460,7 +459,6 @@ class UserService(IUserService):
                     code=phone_exists_response.code,
                     data=None,
                     message=phone_exists_response.message,
-                    error=phone_exists_response.error,
                 )
             phone_exists = phone_exists_response.data
             if phone_exists:
@@ -546,6 +544,7 @@ class UserService(IUserService):
                 },
                 type=Token.TokenType.EMAIL_VERIFICATION,
                 expires_at=expires_at,
+                is_valid=True,
             )
             created_token_response = await self.token_repository.create(token)
             if not created_token_response.success:
@@ -554,7 +553,6 @@ class UserService(IUserService):
                     code=created_token_response.code,
                     data=None,
                     message=created_token_response.message,
-                    error=created_token_response.error,
                 )
             created_token = created_token_response.data
             message = f"Please use the following code to verify your email: {token_str}. This code will expire in {User.VerificationToken.EXPIRE_HOURS} hour({f"s" if User.VerificationToken.EXPIRE_HOURS > 1 else ''})."
@@ -569,7 +567,6 @@ class UserService(IUserService):
                     code=email_response.code,
                     data=None,
                     message=email_response.message,
-                    error=email_response.error,
                 )
             await self.logger.log(
                 action="Create",
@@ -579,14 +576,16 @@ class UserService(IUserService):
                 message="User created successfully",
                 source="UserService",
             )
-            return BaseResponseDto(success=True, code=201, data=None)
+            response = UserSignUpResponseDto(token=token_str)
+            return BaseResponseDto(success=True, code=201, data=response)
         except Exception as ex:
             await self.logger.log(
                 action="Create",
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while creating user - {str(ex)}",
+                message=f"An error occurred while creating user",
+                details={"error": str(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -594,7 +593,6 @@ class UserService(IUserService):
                 code=500,
                 data=None,
                 message="An error occurred while creating user",
-                error=str(ex),
             )
 
     async def update(self, data):
@@ -606,7 +604,6 @@ class UserService(IUserService):
                     code=user_response.code,
                     data=None,
                     message=user_response.message,
-                    error=user_response.error,
                 )
             user = user_response.data
             if not user:
@@ -649,7 +646,7 @@ class UserService(IUserService):
                         action="Update",
                         entity="User",
                         level="warning",
-                        code=400,
+                        code=file_response.code or 500,
                         message="Failed to fetch file from Google Drive",
                         details={"error": file_response.error},
                         source="UserService",
@@ -721,7 +718,6 @@ class UserService(IUserService):
                     code=update_user_response.code,
                     data=None,
                     message=update_user_response.message,
-                    error=update_user_response.error,
                 )
             updated_user = update_user_response.data
             if not updated_user:
@@ -788,7 +784,8 @@ class UserService(IUserService):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while updating user - {str(ex)}",
+                message=f"An error occurred while updating user",
+                details={"error": str(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -796,7 +793,6 @@ class UserService(IUserService):
                 code=500,
                 data=None,
                 message="An error occurred while updating user",
-                error=str(ex),
             )
 
     # User Specific Functions
@@ -811,7 +807,6 @@ class UserService(IUserService):
                     code=tokens_response.code,
                     data=False,
                     message=tokens_response.message,
-                    error=tokens_response.error,
                 )
             tokens = tokens_response.data
             if not tokens:
@@ -832,7 +827,6 @@ class UserService(IUserService):
                         code=delete_token_response.code,
                         data=False,
                         message=delete_token_response.message,
-                        error=delete_token_response.error,
                     )
             return BaseResponseDto(success=True, data=True)
         except Exception as ex:
@@ -841,7 +835,8 @@ class UserService(IUserService):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while invalidating tokens - {str(ex)}",
+                message=f"An error occurred while invalidating tokens",
+                details={"error": str(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -849,7 +844,104 @@ class UserService(IUserService):
                 code=500,
                 data=False,
                 message="An error occurred while invalidating tokens",
-                error=str(ex),
+            )
+
+    async def _login(
+        self, google_id: str, google_refresh_token: str, redirect_url: str
+    ):
+        try:
+            user_response = await self.user_repository.find_one(
+                User.google_id == google_id
+            )
+            if not user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=user_response.code,
+                    data=None,
+                    message=user_response.message,
+                )
+            user = user_response.data
+            if not user:
+                await self.logger.log(
+                    action="Login",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="User not found with this Google ID",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="User not found",
+                )
+            user.refresh_token = StringHandler.generate_random_string(
+                Token.STANDARD_LENGTH
+            )
+            user.refresh_expire_at = TimezoneHandler.add_days(
+                User.RefreshToken.EXPIRE_DAYS
+            )
+            user.google_refresh_token = google_refresh_token
+            update_user_response = await self.user_repository.update(
+                user, ["refresh_token", "refresh_expire_at", "google_refresh_token"]
+            )
+            if not update_user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_user_response.code,
+                    data=None,
+                    message=update_user_response.message,
+                )
+            updated_user = update_user_response.data
+            if not updated_user:
+                await self.logger.log(
+                    action="Login",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to update user with new refresh token",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while logging in user, please try again.",
+                )
+            await self.logger.log(
+                action="Login",
+                entity="User",
+                level="info",
+                code=200,
+                message="User logged in successfully",
+                source="UserService",
+            )
+            response = UserLoginResponseDto(
+                user=updated_user,
+                token=updated_user.refresh_token or "",
+                redirect_url=redirect_url,
+                token_expiration=User.RefreshToken.EXPIRE_DAYS
+                * 24
+                * 60
+                * 60,  # Convert days to seconds
+            )
+            return BaseResponseDto(success=True, code=200, data=response)
+        except Exception as ex:
+            await self.logger.log(
+                action="Login",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while logging in user",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while logging in user",
             )
 
     async def verify_email(self, token):
@@ -858,7 +950,7 @@ class UserService(IUserService):
                 and_(
                     Token.token == token,
                     Token.type == Token.TokenType.EMAIL_VERIFICATION,
-                    Token.expires_at > TimezoneHandler.now("UTC"),
+                    Token.expire_at > TimezoneHandler.now("UTC"),
                 ),
             )
             if not token_response.success:
@@ -867,7 +959,6 @@ class UserService(IUserService):
                     code=token_response.code,
                     data=False,
                     message=token_response.message,
-                    error=token_response.error,
                 )
             token = token_response.data
             if not token:
@@ -912,9 +1003,9 @@ class UserService(IUserService):
                     action="VerifyEmail",
                     entity="User",
                     level="error",
-                    code=400,
+                    code=decoded_user_data_response.code or 500,
                     message="Failed to decode user data from token",
-                    details={"error": decoded_user_data_response.message},
+                    details={"error": decoded_user_data_response.error},
                     source="UserService",
                 )
                 return BaseResponseDto(
@@ -949,7 +1040,6 @@ class UserService(IUserService):
                     code=update_token_response.code,
                     data=False,
                     message=update_token_response.message,
-                    error=update_token_response.error,
                 )
             user_role_response = await self.role_repository.find_one(
                 Role.name == "user"
@@ -960,7 +1050,6 @@ class UserService(IUserService):
                     code=user_role_response.code,
                     data=False,
                     message=user_role_response.message,
-                    error=user_role_response.error,
                 )
             user_role = user_role_response.data
             if not user_role:
@@ -1000,7 +1089,6 @@ class UserService(IUserService):
                     code=create_user_response.code,
                     data=False,
                     message=create_user_response.message,
-                    error=create_user_response.error,
                 )
             created_user = create_user_response.data
             if not created_user:
@@ -1032,7 +1120,6 @@ class UserService(IUserService):
                         code=create_pending_user_response.code,
                         data=False,
                         message=create_pending_user_response.message,
-                        error=create_pending_user_response.error,
                     )
                 created_pending_user = create_pending_user_response.data
                 if not created_pending_user:
@@ -1070,7 +1157,8 @@ class UserService(IUserService):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while verifying email - {str(ex)}",
+                message=f"An error occurred while verifying email",
+                details={"error": str(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1078,13 +1166,185 @@ class UserService(IUserService):
                 code=500,
                 data=False,
                 message="An error occurred while verifying email",
-                error=str(ex),
             )
 
-    async def login(self, google_id, google_refresh_token):
+    async def login_with_google(self):
         try:
+            request = request_context.get()
+            is_localhost = (
+                request.query_params.get("localhost", "false").lower() == "true"
+            )
+            redirect_response_url = (
+                "https://"
+                + (request.url.hostname or "")
+                + "/google-authentication-redirect"
+            )
+            if is_localhost:
+                redirect_response_url += "?localhost=true"
+            google_client = OAuthHandler.create_google_client()
+            state = StringHandler.generate_random_string(User.GoogleToken.TOKEN_LENGTH)
+            nonce = StringHandler.generate_random_string(User.GoogleToken.TOKEN_LENGTH)
+            state_token = Token(
+                token=state,
+                type=Token.TokenType.GOOGLE_TOKEN,
+                expire_at=TimezoneHandler.add_hours(User.GoogleToken.EXPIRE_HOURS),
+                details={"nonce": nonce},
+                is_valid=True,
+            )
+            create_token_response = await self.token_repository.create(state_token)
+            if not create_token_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_token_response.code,
+                    data=None,
+                    message=create_token_response.message,
+                )
+            created_token = create_token_response.data
+            if not created_token:
+                await self.logger.log(
+                    action="LoginWithGoogle",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to create state token for Google login",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while initiating Google login, please try again.",
+                )
+            await self.logger.log(
+                action="LoginWithGoogle",
+                entity="User",
+                level="info",
+                code=200,
+                message="Initiating Google login",
+                source="UserService",
+            )
+            response = UserLoginWithGoogleDto(
+                redirect_response_url=redirect_response_url, state=state, nonce=nonce
+            )
+            return BaseResponseDto(success=True, code=200, data=response)
+        except Exception as ex:
+            await self.logger.log(
+                action="LoginWithGoogle",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while logging in",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while logging in",
+            )
+
+    async def authenticate_with_google(self):
+        try:
+            request = request_context.get()
+            redirect_url = os.environ.get("FRONTEND_URL")
+            if request.query_params.get("localhost", "false").lower() == "true":
+                redirect_url = os.environ.get("FRONTEND_URL_LOCALHOST")
+            requested_scopes = [
+                "openid",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "https://www.googleapis.com/auth/userinfo.profile",
+                "https://www.googleapis.com/auth/drive.file",
+            ]
+            details = {
+                "cookies": {k: v for k, v in request.cookies.items()},
+                "session": {k: v for k, v in request.session.items()},
+            }
+            oauth_state = request.query_params.get("state")
+            state_token_response = await self.token_repository.find_one(
+                and_(
+                    Token.token == oauth_state,
+                    Token.type == Token.TokenType.GOOGLE_TOKEN,
+                    Token.expire_at > TimezoneHandler.now("UTC"),
+                )
+            )
+            if not state_token_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=state_token_response.code,
+                    data=None,
+                    message=state_token_response.message,
+                )
+            state_token = state_token_response.data
+            if not state_token:
+                await self.logger.log(
+                    action="AuthenticateWithGoogle",
+                    entity="User",
+                    level="warning",
+                    code=400,
+                    message="Invalid or expired state token for Google authentication",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Invalid or expired Google Authentication, please try again.",
+                )
+            details["nonce"] = (
+                state_token.details.get("nonce") if state_token.details else None
+            )
+            token = await OAuthHandler.authorize_google_access_token(
+                request,
+                nonce=details.get("nonce"),
+            )
+            granted_scopes = token.get("scope")
+            ungranted_scopes = [
+                scope for scope in requested_scopes if scope not in granted_scopes
+            ]
+            if len(ungranted_scopes) > 0:
+                await self.logger.log(
+                    action="AuthenticateWithGoogle",
+                    entity="User",
+                    level="warning",
+                    code=403,
+                    message="User did not grant all requested scopes for Google authentication",
+                    details={"ungranted_scopes": ungranted_scopes},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message=f"Please grant all requested permissions: {', '.join(scope.replace('https://www.googleapis.com/auth/', '') for scope in ungranted_scopes)}.",
+                )
+            user_info = token.get("userinfo")
+            if not user_info:
+                await self.logger.log(
+                    action="AuthenticateWithGoogle",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve user info from Google token",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while retrieving user information from Google, please try again.",
+                )
+            google_user_details = {
+                "google_id": user_info.get("sub"),
+                "google_name": user_info.get("name"),
+                "google_email": user_info.get("email"),
+                "google_avatar": user_info.get("picture"),
+                "google_refresh_token": FernetHandler.encrypt(
+                    token.get("refresh_token") or ""
+                ),
+            }
             user_response = await self.user_repository.find_one(
-                User.google_id == google_id
+                User.google_id == google_user_details.get("google_id")
             )
             if not user_response.success:
                 return BaseResponseDto(
@@ -1092,69 +1352,114 @@ class UserService(IUserService):
                     code=user_response.code,
                     data=None,
                     message=user_response.message,
-                    error=user_response.error,
                 )
             user = user_response.data
-            if not user:
+            if user:
+                response = await self._login(
+                    google_id=str(google_user_details.get("google_id")),
+                    google_refresh_token=str(
+                        google_user_details.get("google_refresh_token")
+                    ),
+                    redirect_url=(redirect_url or "") + "/user",
+                )
+                return response
+            encoded_google_user_details_response = JWTHandler.encode_jwt(
+                payload=google_user_details,
+                secret_key=os.environ.get("GOOGLE_TOKEN_SECRET_KEY"),
+                algorithm="HS256",
+            )
+            if not encoded_google_user_details_response.success:
                 await self.logger.log(
-                    action="Login",
+                    action="AuthenticateWithGoogle",
                     entity="User",
-                    level="warning",
-                    code=404,
-                    message="User not found with this Google ID",
+                    level="error",
+                    code=500,
+                    message="Failed to encode Google user details into JWT",
+                    details={"error": encoded_google_user_details_response.error},
                     source="UserService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=404,
+                    code=500,
                     data=None,
-                    message="User not found, please verify your email first.",
+                    message="An error occurred while processing Google user information, please try again.",
                 )
-            refresh_token = StringHandler.generate_random_string(Token.LONG_LENGTH)
-            expires_at = TimezoneHandler.add_days(Token.REFRESH_TOKEN_EXPIRE_DAYS)
-            user.refresh_token = refresh_token
-            user.refresh_expire_at = expires_at
-            user.google_refresh_token = FernetHandler.encrypt(google_refresh_token)
-            update_user_response = await self.user_repository.update(
-                user, ["refresh_token", "refresh_expire_at", "google_refresh_token"]
-            )
-            if not update_user_response.success:
+            encoded_google_user_details = encoded_google_user_details_response.data
+            if not encoded_google_user_details:
+                await self.logger.log(
+                    action="AuthenticateWithGoogle",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Encoded Google user details are None after JWT encoding",
+                    source="UserService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=update_user_response.code,
+                    code=500,
                     data=None,
-                    message=update_user_response.message,
-                    error=update_user_response.error,
+                    message="An error occurred while processing Google user information, please try again.",
                 )
-            await self.logger.log(
-                action="Login",
-                entity="User",
-                level="info",
-                code=200,
-                message="User logged in successfully",
-                source="UserService",
+            google_token_str = StringHandler.generate_random_string(
+                User.GoogleToken.TOKEN_LENGTH
             )
-            return BaseResponseDto(
-                success=True,
-                code=200,
-                data=UserLoginResponseDto(user=user, token=refresh_token),
-                message="Login successful",
+            google_token = Token(
+                token=google_token_str,
+                type=Token.TokenType.GOOGLE_TOKEN,
+                expire_at=TimezoneHandler.add_hours(User.GoogleToken.EXPIRE_HOURS),
+                details={"token": encoded_google_user_details},
+                is_valid=True,
             )
+            create_google_token_response = await self.token_repository.create(
+                google_token
+            )
+            if not create_google_token_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_google_token_response.code,
+                    data=None,
+                    message=create_google_token_response.message,
+                )
+            created_google_token = create_google_token_response.data
+            if not created_google_token:
+                await self.logger.log(
+                    action="AuthenticateWithGoogle",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to create Google token for new user authentication",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while processing Google authentication, please try again.",
+                )
+            redirect_url = (
+                (redirect_url or "")
+                + f"/login-success?state={oauth_state}&token={google_token_str}___{int(timedelta(hours=User.GoogleToken.EXPIRE_HOURS).total_seconds())}"
+            )
+            response = UserLoginResponseDto(
+                token=google_token_str,
+                redirect_url=redirect_url,
+            )
+            return BaseResponseDto(success=True, code=200, data=response)
         except Exception as ex:
             await self.logger.log(
-                action="Login",
+                action="AuthenticateWithGoogle",
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while logging in - {str(ex)}",
+                message=f"An error occurred while authenticating with Google",
+                details={"error": str(ex)},
                 source="UserService",
             )
-            return BaseResponseDto[UserLoginResponseDto | None](
+            return BaseResponseDto(
                 success=False,
                 code=500,
                 data=None,
-                message="An error occurred while logging in",
-                error=str(ex),
+                message="An error occurred while authenticating with Google",
             )
 
     async def logout(self):
@@ -1166,7 +1471,6 @@ class UserService(IUserService):
                     code=user_response.code,
                     data=False,
                     message=user_response.message,
-                    error=user_response.error,
                 )
             user = user_response.data
             if not user:
@@ -1191,7 +1495,6 @@ class UserService(IUserService):
                     code=invalidate_tokens_response.code,
                     data=False,
                     message=invalidate_tokens_response.message,
-                    error=invalidate_tokens_response.error,
                 )
             await self.logger.log(
                 action="Logout",
@@ -1213,7 +1516,8 @@ class UserService(IUserService):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while logging out - {str(ex)}",
+                message=f"An error occurred while logging out",
+                details={"error": str(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1221,452 +1525,1320 @@ class UserService(IUserService):
                 code=500,
                 data=False,
                 message="An error occurred while logging out",
-                error=str(ex),
             )
 
-    async def forget_password(self, email):
-        try:
-            validate_email_response = Validator.validate_email(email)
-            if not validate_email_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=validate_email_response.code,
-                    data=False,
-                    message=validate_email_response.message,
-                )
-            normalized_email = validate_email_response.data
-            user_response = await self.user_repository.find_one(
-                User.email == normalized_email
-            )
-            if not user_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=user_response.code,
-                    data=False,
-                    message=user_response.message,
-                    error=user_response.error,
-                )
-
-            user = user_response.data
-            if user is None:
-                await self.logger.log(
-                    action="ForgetPassword",
-                    entity="User",
-                    level="warning",
-                    code=404,
-                    message="User not found with this email",
-                    source="UserService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=False,
-                    message="User not found",
-                )
-            invalidate_tokens_response = await self._invalidate_tokens(user.id)
-            if not invalidate_tokens_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=invalidate_tokens_response.code,
-                    data=False,
-                    message=invalidate_tokens_response.message,
-                    error=invalidate_tokens_response.error,
-                )
-            token_str = StringHandler.generate_random_string(Token.SHORT_LENGTH)
-            expires_at = TimezoneHandler.add_hours(User.VerificationToken.EXPIRE_HOURS)
-            token = Token(
-                token=token_str,
-                type=Token.TokenType.PASSWORD_RESET,
-                expires_at=expires_at,
-                user_id=user.id,
-            )
-            token_response = await self.token_repository.create(token)
-            if not token_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=token_response.code,
-                    data=False,
-                    message=token_response.message,
-                    error=token_response.error,
-                )
-            message = f"Please use the following token to reset your password: {token_str}. This token will expire in {User.VerificationToken.EXPIRE_HOURS} hours."
-            email_response = await self.helper_service.send_email(
-                to_email=user.email,
-                subject="Password Reset Request",
-                body=message,
-            )
-            if not email_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=email_response.code,
-                    data=False,
-                    message=email_response.message,
-                    error=email_response.error,
-                )
-            await self.logger.log(
-                action="ForgetPassword",
-                entity="User",
-                level="info",
-                code=200,
-                message="Password reset email sent successfully",
-                source="UserService",
-            )
-            return BaseResponseDto(
-                success=True,
-                code=200,
-                data=True,
-                message="Password reset email sent successfully",
-            )
-        except Exception as ex:
-            await self.logger.log(
-                action="ForgetPassword",
-                entity="User",
-                level="error",
-                code=500,
-                message=f"An error occurred while processing forget password - {str(ex)}",
-                source="UserService",
-            )
-            return BaseResponseDto(
-                success=False,
-                code=500,
-                data=False,
-                message="An error occurred while processing forget password",
-                error=str(ex),
-            )
-
-    async def reset_password(self, token, new_password):
+    async def get_token_details(self, token):
         try:
             token_response = await self.token_repository.find_one(
                 and_(
                     Token.token == token,
-                    Token.type == Token.TokenType.PASSWORD_RESET,
-                    Token.expires_at > TimezoneHandler.now("UTC"),
-                ),
-                [selectinload(Token.user)],
+                    Token.expire_at > TimezoneHandler.now("UTC"),
+                )
             )
             if not token_response.success:
                 return BaseResponseDto(
                     success=False,
                     code=token_response.code,
-                    data=False,
+                    data=None,
                     message=token_response.message,
-                    error=token_response.error,
                 )
             token = token_response.data
             if not token:
                 await self.logger.log(
-                    action="ResetPassword",
+                    action="GetTokenDetails",
                     entity="User",
                     level="warning",
                     code=404,
-                    message="token not found",
+                    message="Token not found or expired",
                     source="UserService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=404,
-                    data=False,
-                    message="token not found",
+                    data=None,
+                    message="Token not found or expired, please request a new one.",
                 )
-            user = token.user
-            validate_password_response = Validator.validate_password(new_password)
-            if not validate_password_response.success:
+            token_details = token.details
+            if not token_details:
+                await self.logger.log(
+                    action="GetTokenDetails",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Token details are missing",
+                    source="UserService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=validate_password_response.code,
-                    data=False,
-                    message=validate_password_response.message,
+                    code=500,
+                    data=None,
+                    message="An error occurred while retrieving token details, please try again.",
                 )
-            user.password = Hasher.hash_password(new_password)
-            user_response = await self.user_repository.update(user, ["password"])
-            if not user_response.success:
+            encoded_user_data = token_details.get("user")
+            if not encoded_user_data:
+                await self.logger.log(
+                    action="GetTokenDetails",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="User data is missing in token details",
+                    source="UserService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=user_response.code,
-                    data=False,
-                    message=user_response.message,
-                    error=user_response.error,
+                    code=500,
+                    data=None,
+                    message="An error occurred while retrieving token details, please try again.",
                 )
-            invalidate_tokens_response = await self._invalidate_tokens(user.id)
-            if not invalidate_tokens_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=invalidate_tokens_response.code,
-                    data=False,
-                    message=invalidate_tokens_response.message,
-                    error=invalidate_tokens_response.error,
-                )
-            await self.logger.log(
-                action="ResetPassword",
-                entity="User",
-                level="info",
-                code=201,
-                message="Reset Password successfully",
-                source="UserService",
+            user_data_response = JWTHandler.decode_jwt(
+                token=encoded_user_data,
+                secret_key=os.environ.get("USER_TOKEN_SECRET_KEY"),
+                algorithms=["HS256"],
             )
-            return BaseResponseDto(
-                success=True,
-                code=200,
-                data=True,
+            if not user_data_response.success:
+                await self.logger.log(
+                    action="GetTokenDetails",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to decode user data from token",
+                    details={"error": user_data_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while retrieving token details, please try again.",
+                )
+            user_data = user_data_response.data
+            if not user_data:
+                await self.logger.log(
+                    action="GetTokenDetails",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Decoded user data is None after JWT decoding",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while retrieving token details, please try again.",
+                )
+            response = UserTokenDetailsResponseDto(
+                name=user_data.get("name") or "",
+                email=user_data.get("email") or "",
             )
+            return BaseResponseDto(success=True, code=200, data=response)
         except Exception as ex:
             await self.logger.log(
-                action="ResetPassword",
+                action="GetTokenDetails",
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while resetting password - {str(ex)}",
-                source="UserService",
-            )
-            return BaseResponseDto(
-                success=False,
-                code=500,
-                data=False,
-                message="An error occurred while resetting password",
-                error=str(ex),
-            )
-
-    async def change_password(self, old_password, new_password):
-        try:
-            user_response = await self.helper_service.get_logged_in_user()
-            if not user_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=user_response.code,
-                    data=False,
-                    message=user_response.message,
-                    error=user_response.error,
-                )
-            user = user_response.data
-            if not user:
-                await self.logger.log(
-                    action="ChangePassword",
-                    entity="User",
-                    level="warning",
-                    code=404,
-                    message="Logged in user not found",
-                    source="UserService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=False,
-                    message="Logged in user not found",
-                )
-            if not Hasher.verify_password(old_password, user.password):
-                await self.logger.log(
-                    action="ChangePassword",
-                    entity="User",
-                    level="warning",
-                    code=400,
-                    message=f"An error occurred while veryfing password",
-                    source="UserService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=False,
-                    message="Invalid password",
-                )
-            validate_password_response = Validator.validate_password(new_password)
-            if not validate_password_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=validate_password_response.code,
-                    data=False,
-                    message=validate_password_response.message,
-                )
-            user.password = Hasher.hash_password(new_password)
-            user_response = await self.user_repository.update(user, ["password"])
-            if not user_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=user_response.code,
-                    data=False,
-                    message=user_response.message,
-                    error=user_response.error,
-                )
-            await self.logger.log(
-                action="ChangePassword",
-                entity="User",
-                level="info",
-                code=201,
-                message="Changed Password successfully",
-                source="UserService",
-            )
-            return BaseResponseDto(
-                success=True,
-                code=200,
-                data=True,
-            )
-        except Exception as ex:
-            await self.logger.log(
-                action="ChangePassword",
-                entity="User",
-                level="error",
-                code=500,
-                message=f"An error occurred while changing password - {str(ex)}",
-                source="UserService",
-            )
-            return BaseResponseDto(
-                success=False,
-                code=500,
-                data=False,
-                message="An error occurred while changing password",
-                error=str(ex),
-            )
-
-    async def resend_token(self, email):
-        try:
-            validate_email_response = Validator.validate_email(email)
-            if not validate_email_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=validate_email_response.code,
-                    data=None,
-                    message=validate_email_response.message,
-                )
-            normalized_email = validate_email_response.data
-            user_response = await self.user_repository.find_one(
-                User.email == normalized_email
-            )
-            if not user_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=user_response.code,
-                    data=None,
-                    message=user_response.message,
-                    error=user_response.error,
-                )
-            user = user_response.data
-            if not user:
-                await self.logger.log(
-                    action="ResendToken",
-                    entity="User",
-                    level="warning",
-                    code=404,
-                    message="User not found with this email",
-                    source="UserService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="User not found",
-                )
-            token_response = await self.token_repository.find_one(
-                and_(
-                    Token.user_id == user.id,
-                    Token.type != Token.TokenType.REFRESH_TOKEN,
-                    Token.expires_at > TimezoneHandler.now("UTC"),
-                ),
-                order_by=[Token.id],
-                descending=True,
-            )
-            if not token_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=token_response.code,
-                    data=None,
-                    message=token_response.message,
-                    error=token_response.error,
-                )
-            existing_token = token_response.data
-            if not existing_token:
-                await self.logger.log(
-                    action="ResendToken",
-                    entity="User",
-                    level="warning",
-                    code=404,
-                    message="No valid token found for this user",
-                    source="UserService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="No valid token found for this user",
-                )
-            invalidate_tokens_response = await self._invalidate_tokens(user.id)
-            if not invalidate_tokens_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=invalidate_tokens_response.code,
-                    data=None,
-                    message=invalidate_tokens_response.message,
-                    error=invalidate_tokens_response.error,
-                )
-            token_str = StringHandler.generate_random_string(Token.SHORT_LENGTH)
-            expires_at = TimezoneHandler.add_hours(User.VerificationToken.EXPIRE_HOURS)
-            new_token = Token(
-                token=token_str,
-                user_id=user.id,
-                type=existing_token.type,
-                expires_at=expires_at,
-            )
-            create_token_response = await self.token_repository.create(new_token)
-            if not create_token_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=create_token_response.code,
-                    data=None,
-                    message=create_token_response.message,
-                    error=create_token_response.error,
-                )
-
-            subject = ""
-            message = ""
-            if existing_token.type == Token.TokenType.EMAIL_VERIFICATION:
-                subject = "Email Verification Token"
-                message = f"Please use the following token to verify your email: {token_str}. This token will expire in {User.VerificationToken.EXPIRE_HOURS} hours."
-            elif existing_token.type == Token.TokenType.PASSWORD_RESET:
-                subject = "Password Reset Token"
-                message = f"Please use the following token to reset your password: {token_str}. This token will expire in {User.VerificationToken.EXPIRE_HOURS} hours."
-            email_response = await self.helper_service.send_email(
-                to_email=user.email,
-                subject=subject,
-                body=message,
-            )
-            if not email_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=email_response.code,
-                    data=None,
-                    message=email_response.message,
-                    error=email_response.error,
-                )
-            await self.logger.log(
-                action="ResendToken",
-                entity="User",
-                level="info",
-                code=200,
-                message="Verification token resent successfully",
-                source="UserService",
-            )
-            success_message = ""
-            if existing_token.type == Token.TokenType.EMAIL_VERIFICATION:
-                success_message = "Verification token resent successfully"
-            elif existing_token.type == Token.TokenType.PASSWORD_RESET:
-                success_message = "Password reset token resent successfully"
-            return BaseResponseDto(
-                success=True,
-                code=200,
-                data=True,
-                message=success_message,
-            )
-        except Exception as ex:
-            await self.logger.log(
-                action="ResendToken",
-                entity="User",
-                level="error",
-                code=500,
-                message=f"An error occurred while resending token - {str(ex)}",
+                message=f"An error occurred while retrieving token details",
+                details={"error": str(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
                 success=False,
                 code=500,
                 data=None,
-                message="An error occurred while resending token",
-                error=str(ex),
+                message="An error occurred while retrieving token details, please try again.",
+            )
+
+    async def resend_token(self, token):
+        try:
+            token_response = await self.token_repository.find_one(
+                and_(
+                    Token.token == token,
+                    Token.expire_at > TimezoneHandler.now("UTC"),
+                )
+            )
+            if not token_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=token_response.code,
+                    data=False,
+                    message=token_response.message,
+                )
+            token = token_response.data
+            if not token:
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="Token not found or expired",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=False,
+                    message="Token not found or expired, please request a new one.",
+                )
+            token.token = StringHandler.generate_random_number(Token.SHORT_LENGTH)
+            token.expires_at = TimezoneHandler.add_hours(Token.EXPIRE_HOURS)
+            update_token_response = await self.token_repository.update(
+                token, ["token", "expires_at"]
+            )
+            if not update_token_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_token_response.code,
+                    data=False,
+                    message=update_token_response.message,
+                )
+            updated_token = update_token_response.data
+            if not updated_token:
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to update token for resending",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="An error occurred while resending token, please try again.",
+                )
+            token_details = updated_token.details
+            if not token_details:
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Token details are missing for resending",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="An error occurred while resending token, please try again.",
+                )
+            encoded_user_data = token_details.get("user")
+            if not encoded_user_data:
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="User data is missing in token details for resending",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="An error occurred while resending token, please try again.",
+                )
+            user_data_response = JWTHandler.decode_jwt(
+                token=encoded_user_data,
+                secret_key=os.environ.get("USER_TOKEN_SECRET_KEY"),
+                algorithms=["HS256"],
+            )
+            if not user_data_response.success:
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to decode user data from token for resending",
+                    details={"error": user_data_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="An error occurred while resending token, please try again.",
+                )
+            user_data = user_data_response.data
+            if not user_data:
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Decoded user data is None after JWT decoding for resending",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="An error occurred while resending token, please try again.",
+                )
+            user_email = user_data.get("email")
+            if not user_email:
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="User email is missing in decoded data for resending",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="An error occurred while resending token, please try again.",
+                )
+            message = f"Please use the following code to verify your email: {updated_token.token}. This code will expire in {Token.EXPIRE_HOURS} hour({f's' if Token.EXPIRE_HOURS > 1 else ''})."
+            email_response = await self.helper_service.send_email(
+                to_email=user_email,
+                subject="CU Portal - Email Verification Code",
+                body=message,
+            )
+            if not email_response.success:
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="error",
+                    code=email_response.code or 500,
+                    message="Failed to send verification email",
+                    details={"error": email_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=email_response.code or 500,
+                    data=False,
+                    message="An error occurred while resending token, please try again.",
+                )
+            await self.logger.log(
+                action="ResendToken",
+                entity="User",
+                level="info",
+                code=200,
+                message="Verification email sent successfully",
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Verification email sent successfully.",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="ResendToken",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while resending token",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="An error occurred while resending token, please try again.",
+            )
+
+    async def refresh_token(self):
+        try:
+            user_response = await self.helper_service.get_logged_in_user()
+            if not user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=user_response.code,
+                    data=None,
+                    message=user_response.message,
+                )
+            user = user_response.data
+            if not user:
+                await self.logger.log(
+                    action="RefreshToken",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="Logged in user not found for token refresh",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Logged in user not found, please log in again.",
+                )
+            new_refresh_token = StringHandler.generate_random_string(Token.LONG_LENGTH)
+            new_expires_at = TimezoneHandler.add_days(Token.REFRESH_TOKEN_EXPIRE_DAYS)
+            user.refresh_token = new_refresh_token
+            user.refresh_expire_at = new_expires_at
+            update_user_response = await self.user_repository.update(
+                user, ["refresh_token", "refresh_expire_at"]
+            )
+            if not update_user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_user_response.code,
+                    data=None,
+                    message=update_user_response.message,
+                )
+            await self.logger.log(
+                action="RefreshToken",
+                entity="User",
+                level="info",
+                code=200,
+                message="User refresh token updated successfully",
+                source="UserService",
+            )
+            response_data = UserLoginResponseDto(user=user, token=new_refresh_token)
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=response_data,
+                message="Token refreshed successfully.",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="RefreshToken",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while refreshing token",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while refreshing token, please try again.",
+            )
+
+    async def get_google_stored_token(self, google_details_token):
+        try:
+            token_response = await self.token_repository.find_one(
+                and_(
+                    Token.token == google_details_token,
+                    Token.type == Token.TokenType.GOOGLE_TOKEN,
+                    Token.expire_at > TimezoneHandler.now("UTC"),
+                )
+            )
+            if not token_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=token_response.code,
+                    data=None,
+                    message=token_response.message,
+                )
+            token = token_response.data
+            if not token:
+                await self.logger.log(
+                    action="GetGoogleStoredToken",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="Google stored token not found or expired",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Google stored token not found or expired, please try again.",
+                )
+            google_token_details = token.details
+            if not google_token_details:
+                await self.logger.log(
+                    action="GetGoogleStoredToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Google token details are missing",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while retrieving Google stored token, please try again.",
+                )
+            encoded_google_user_data = google_token_details.get("token")
+            if not encoded_google_user_data:
+                await self.logger.log(
+                    action="GetGoogleStoredToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Encoded Google user data is missing in token details",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while retrieving Google stored token, please try again.",
+                )
+            google_user_data_response = JWTHandler.decode_jwt(
+                token=encoded_google_user_data,
+                secret_key=os.environ.get("GOOGLE_TOKEN_SECRET_KEY"),
+                algorithms=["HS256"],
+            )
+            if not google_user_data_response.success:
+                await self.logger.log(
+                    action="GetGoogleStoredToken",
+                    entity="User",
+                    level="error",
+                    code=google_user_data_response.code or 500,
+                    message="Failed to decode Google user data from token",
+                    details={"error": google_user_data_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=google_user_data_response.code,
+                    data=None,
+                    message=google_user_data_response.message,
+                )
+            google_user_data = google_user_data_response.data
+            if not google_user_data:
+                await self.logger.log(
+                    action="GetGoogleStoredToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Decoded Google user data is None after JWT decoding",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while retrieving Google stored token, please try again.",
+                )
+            access_token_response = await self.helper_service.get_google_access_token(
+                FernetHandler.decrypt(
+                    google_user_data.get("google_refresh_token") or ""
+                )
+            )
+            if not access_token_response.success:
+                await self.logger.log(
+                    action="GetGoogleStoredToken",
+                    entity="User",
+                    level="error",
+                    code=access_token_response.code or 500,
+                    message="Failed to retrieve Google access token using refresh token",
+                    details={"error": access_token_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=access_token_response.code,
+                    data=None,
+                    message=access_token_response.message,
+                )
+            access_token = access_token_response.data
+            if not access_token:
+                await self.logger.log(
+                    action="GetGoogleStoredToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Google access token is None after retrieval",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while retrieving Google stored token, please try again.",
+                )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=access_token,
+                message="Google stored token retrieved successfully.",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="GetGoogleStoredToken",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while retrieving Google stored token",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while retrieving Google stored token, please try again.",
+            )
+
+    async def get_google_access_token(self):
+        try:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="GetGoogleAccessToken",
+                    entity="User",
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message="Failed to retrieve logged in user for getting Google access token",
+                    details={"error": logged_in_user_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_response.code,
+                    data=None,
+                    message=logged_in_user_response.message,
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="GetGoogleAccessToken",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="Logged in user not found for getting Google access token",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Logged in user not found, please log in again.",
+                )
+            access_token_response = await self.helper_service.get_google_access_token(
+                FernetHandler.decrypt(logged_in_user.google_refresh_token or "")
+            )
+            if not access_token_response.success:
+                await self.logger.log(
+                    action="GetGoogleAccessToken",
+                    entity="User",
+                    level="error",
+                    code=access_token_response.code or 500,
+                    message="Failed to retrieve Google access token using refresh token",
+                    details={"error": access_token_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=access_token_response.code,
+                    data=None,
+                    message=access_token_response.message,
+                )
+            access_token = access_token_response.data
+            if not access_token:
+                await self.logger.log(
+                    action="GetGoogleAccessToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Google access token is None after retrieval",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while retrieving Google access token, please try again.",
+                )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=access_token,
+                message="Google access token retrieved successfully.",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="GetGoogleAccessToken",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while retrieving Google access token",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while retrieving Google access token, please try again.",
+            )
+
+    async def get_statistics(self, data):
+        try:
+            response = await self.user_repository.execute_stored_function(
+                "get_user_statistics",
+                {
+                    "p_faculty_id": data.faculty_id,
+                    "p_department_id": data.department_id,
+                    "p_year_id": data.year_id,
+                },
+            )
+            if not response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=response.code,
+                    data=None,
+                    message=response.message,
+                )
+            statistics_data = response.data
+            if not statistics_data:
+                await self.logger.log(
+                    action="GetStatistics",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="No statistics data found for the given criteria",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="No statistics data found for the given criteria.",
+                )
+            statistics_data = cast(UserStatisticsResponseDto, statistics_data)
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=statistics_data,
+                message="User statistics retrieved successfully.",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="GetStatistics",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while getting user statistics",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while getting user statistics, please try again.",
+            )
+
+    async def update_many(self, data):
+        try:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="UpdateMany",
+                    entity="User",
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message="Failed to retrieve logged in user for updating users",
+                    details={"error": logged_in_user_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_response.code,
+                    data=False,
+                    message=logged_in_user_response.message,
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="UpdateMany",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="Logged in user not found for updating users",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=False,
+                    message="Logged in user not found, please log in again.",
+                )
+            for record in data.data_to_update:
+                user_response = await self.user_repository.find_one(
+                    User.id == record.id
+                )
+                if not user_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=user_response.code,
+                        data=False,
+                        message=user_response.message,
+                    )
+                user = user_response.data
+                if not user:
+                    await self.logger.log(
+                        action="UpdateMany",
+                        entity="User",
+                        level="warning",
+                        code=404,
+                        message=f"User with ID {record.id} not found for updating",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"User with ID {record.id} not found.",
+                    )
+                if user.id == logged_in_user.id:
+                    await self.logger.log(
+                        action="UpdateMany",
+                        entity="User",
+                        level="warning",
+                        code=403,
+                        message=f"User with ID {user.id} attempted to update their own record, which is not allowed",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=403,
+                        data=False,
+                        message=f"You are not allowed to update your own user record through this endpoint.",
+                    )
+                if user.status:
+                    await self.logger.log(
+                        action="UpdateMany",
+                        entity="User",
+                        level="warning",
+                        code=400,
+                        message=f"User with ID {user.id} has already been approved, and their status cannot be updated again",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message=f"User with ID {user.id} has already been approved, and their status cannot be updated again.",
+                    )
+                user.status = record.approved
+                role_response = await self.role_repository.find_one(
+                    Role.id == record.role_id, ["exact_roles"]
+                )
+                if not role_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=role_response.code,
+                        data=False,
+                        message=role_response.message,
+                    )
+                role = role_response.data
+                if not role:
+                    await self.logger.log(
+                        action="UpdateMany",
+                        entity="Role",
+                        level="warning",
+                        code=404,
+                        message=f"Role with ID {record.role_id} not found for updating user with ID {user.id}",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Role with ID {record.role_id} not found.",
+                    )
+                user_permissions_response = await self.get_user_permissions()
+                if not user_permissions_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=user_permissions_response.code,
+                        data=False,
+                        message=user_permissions_response.message,
+                    )
+                user_permissions = user_permissions_response.data
+                if not user_permissions:
+                    await self.logger.log(
+                        action="UpdateMany",
+                        entity="User",
+                        level="warning",
+                        code=403,
+                        message=f"Logged in user does not have permissions to update user with ID {user.id}",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=403,
+                        data=False,
+                        message=f"You do not have permissions to update user records.",
+                    )
+                role_permissions = [perm.name for perm in role.exact_roles]
+                if not set(role_permissions).issubset(set(user_permissions)):
+                    await self.logger.log(
+                        action="UpdateMany",
+                        entity="User",
+                        level="warning",
+                        code=403,
+                        message=f"Logged in user does not have sufficient permissions to assign role with ID {record.role_id} to user with ID {user.id}",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=403,
+                        data=False,
+                        message=f"You do not have sufficient permissions to assign the role specified for user with ID {user.id}.",
+                    )
+                user.role = role
+                pending_user_response = await self.pending_user_repository.find_one(
+                    PendingUser.user_id == user.id
+                )
+                if not pending_user_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=pending_user_response.code,
+                        data=False,
+                        message=pending_user_response.message,
+                    )
+                pending_user = pending_user_response.data
+                if not pending_user:
+                    await self.logger.log(
+                        action="UpdateMany",
+                        entity="PendingUser",
+                        level="warning",
+                        code=404,
+                        message=f"Pending user record not found for user with ID {user.id} while updating their status",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Pending user record not found for user with ID {user.id}.",
+                    )
+                delete_pending_user_response = (
+                    await self.pending_user_repository.delete(pending_user)
+                )
+                if not delete_pending_user_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=delete_pending_user_response.code,
+                        data=False,
+                        message=delete_pending_user_response.message,
+                    )
+                if not user.status:
+                    delete_user_response = await self.user_repository.delete(user)
+                    if not delete_user_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=delete_user_response.code,
+                            data=False,
+                            message=delete_user_response.message,
+                        )
+            await self.logger.log(
+                action="UpdateMany",
+                entity="User",
+                level="info",
+                code=200,
+                message="Multiple users updated successfully",
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Users updated successfully.",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="UpdateMany",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while updating multiple users",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while updating users, please try again.",
+            )
+
+    async def update_academic_data(self, data):
+        try:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="UpdateAcademicData",
+                    entity="User",
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message="Failed to retrieve logged in user for updating academic data",
+                    details={"error": logged_in_user_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_response.code,
+                    data=False,
+                    message=logged_in_user_response.message,
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="UpdateAcademicData",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="Logged in user not found for updating academic data",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=False,
+                    message="Logged in user not found, please log in again.",
+                )
+            should_be_none = ["faculty_id", "department_id", "year_id", "type"]
+            for attr in should_be_none:
+                attr_value = getattr(logged_in_user, attr)
+                if type(attr_value) == str:
+                    attr_value = attr_value.strip().lower()
+                if attr_value:
+                    await self.logger.log(
+                        action="UpdateAcademicData",
+                        entity="User",
+                        level="warning",
+                        code=400,
+                        message=f"User with ID {logged_in_user.id} attempted to update academic data, but their academic data is already set, which is not allowed",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message=f"User has Set Academic Data already, and cannot update it again.",
+                    )
+            logged_in_user.faculty_id = data.faculty_id
+            logged_in_user.department_id = data.department_id
+            logged_in_user.year_id = data.year_id
+            logged_in_user.type = data.study_type
+            update_user_response = await self.user_repository.update(
+                logged_in_user, ["faculty_id", "department_id", "year_id", "type"]
+            )
+            if not update_user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_user_response.code,
+                    data=False,
+                    message=update_user_response.message,
+                )
+            await self.logger.log(
+                action="UpdateAcademicData",
+                entity="User",
+                level="info",
+                code=200,
+                message="User academic data updated successfully",
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Academic data updated successfully.",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="UpdateAcademicData",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while updating user academic data",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while updating academic data, please try again.",
+            )
+
+    async def get_current_user(self, includes=None):
+        try:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="GetCurrentUser",
+                    entity="User",
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message="Failed to retrieve logged in user",
+                    details={"error": logged_in_user_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_response.code,
+                    data=None,
+                    message=logged_in_user_response.message,
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="GetCurrentUser",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="Logged in user not found",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Logged in user not found, please log in again.",
+                )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                User, includes
+            )
+            user_response = await self.user_repository.find_one(
+                User.id == logged_in_user.id, dynamic_includes
+            )
+            if not user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=user_response.code,
+                    data=None,
+                    message=user_response.message,
+                )
+            user = user_response.data
+            if not user:
+                await self.logger.log(
+                    action="GetCurrentUser",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="Logged in user not found in database",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Logged in user not found in database, please log in again.",
+                )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=user,
+                message="Logged in user retrieved successfully.",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="GetCurrentUser",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while getting current user",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while getting current user, please try again.",
+            )
+
+    async def get_current_user_id(self):
+        try:
+            current_user_response = await self.get_current_user()
+            if not current_user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=current_user_response.code,
+                    data=None,
+                    message=current_user_response.message,
+                )
+            current_user = current_user_response.data
+            if not current_user:
+                await self.logger.log(
+                    action="GetCurrentUserId",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="Logged in user not found when getting current user ID",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Logged in user not found, please log in again.",
+                )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=current_user.id,
+                message="Current user ID retrieved successfully.",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="GetCurrentUserId",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while getting current user ID",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while getting current user ID, please try again.",
+            )
+
+    async def get_user_permissions(self):
+        try:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="GetUserPermissions",
+                    entity="User",
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message="Failed to retrieve logged in user for getting permissions",
+                    details={"error": logged_in_user_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_response.code,
+                    data=None,
+                    message=logged_in_user_response.message,
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="GetUserPermissions",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="Logged in user not found for getting permissions",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Logged in user not found, please log in again.",
+                )
+            role_response = await self.role_repository.find_one(
+                Role.id == logged_in_user.role_id, ["exact_roles"]
+            )
+            if not role_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=role_response.code,
+                    data=None,
+                    message=role_response.message,
+                )
+            role = role_response.data
+            if not role:
+                await self.logger.log(
+                    action="GetUserPermissions",
+                    entity="Role",
+                    level="warning",
+                    code=404,
+                    message=f"Role with ID {logged_in_user.role_id} not found for getting permissions of user with ID {logged_in_user.id}",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"Role not found for the logged in user, please contact support.",
+                )
+            permissions = [perm.name for perm in role.exact_roles]
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=permissions,
+                message="User permissions retrieved successfully.",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="GetUserPermissions",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while getting user permissions",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while getting user permissions, please try again.",
+            )
+
+    async def has_permissions(self, data):
+        try:
+            user_permissions_response = await self.get_user_permissions()
+            if not user_permissions_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=user_permissions_response.code,
+                    data=None,
+                    message=user_permissions_response.message,
+                )
+            user_permissions = user_permissions_response.data
+            if not user_permissions:
+                await self.logger.log(
+                    action="HasPermissions",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="Logged in user not found for checking permissions",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Logged in user not found, please log in again.",
+                )
+            if data.is_and:
+                has_perms = all(
+                    perm in user_permissions for perm in data.required_permissions
+                )
+            else:
+                has_perms = any(
+                    perm in user_permissions for perm in data.required_permissions
+                )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=has_perms,
+                message="Permission check completed successfully.",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="HasPermissions",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while checking user permissions",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while checking permissions, please try again.",
             )

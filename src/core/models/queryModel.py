@@ -1,4 +1,4 @@
-from typing import TypedDict, TypeVar, Generic
+from typing import TypeVar, Generic
 from pydantic import BaseModel, Field
 
 U = TypeVar("U")  # EntitySearchDto Type

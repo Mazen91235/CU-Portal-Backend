@@ -1,34 +1,34 @@
 import sys
 import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
 from dependency_injector import containers, providers
-
 
 # Fix for ModuleNotFoundError
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
+from business.contextVars.sessionContext import session_context
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
 from api.controllers.userController import UserController
-from api.controllers.patientController import PatientController
-from api.controllers.patientUserController import PatientUserController
-from api.routes.userRoutes import create_user_router
-from api.routes.patientRoutes import create_patient_router
-from api.routes.patientUserRoutes import create_patient_user_router
-from business.loggers.baseLogger import BaseLogger
-from business.services.helperService import HelperService
-from business.services.aiService import AIService
+from api.routes.mainRoutes import (
+    create_main_user_router,
+    create_main_admin_router,
+)
+from api.routes.authRoutes import create_auth_router
+from api.routes.userRoutes import create_user_user_router, create_user_admin_router
 from business.services.userService import UserService
-from business.services.patientService import PatientService
-from business.services.patientUserService import PatientUserService
+from business.services.requestLimitService import RequestLimitService
+from business.services.helperService import HelperService
+from business.loggers.baseLogger import BaseLogger
+from infrastructure.repositories.baseRepository import BaseRepository
 from core.entities.log import Log
 from core.entities.user import User
+from core.entities.pendingUser import PendingUser
+from core.entities.role import Role
 from core.entities.token import Token
-from core.entities.patient import Patient
-from core.entities.patientUser import PatientUser
+from core.entities.requestLimit import RequestLimit
 from core.utils.databaseHandler import DatabaseHandler
-from business.contextVars.sessionContext import session_context
-from infrastructure.repositories.baseRepository import BaseRepository
 
 DB_URL = DatabaseHandler.get_db_url()
 ENGINE_OPTIONS = DatabaseHandler.get_engine_options(DB_URL)
@@ -65,22 +65,24 @@ class Container(containers.DeclarativeContainer):
     user_repository = providers.Factory(
         BaseRepository, session=db_session, model=User, session_factory=session_factory
     )
-    patient_repository = providers.Factory(
+    pending_user_repository = providers.Factory(
         BaseRepository,
         session=db_session,
-        model=Patient,
+        model=PendingUser,
         session_factory=session_factory,
     )
-    patient_user_repository = providers.Factory(
+    role_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Role, session_factory=session_factory
+    )
+    request_limit_repository = providers.Factory(
         BaseRepository,
         session=db_session,
-        model=PatientUser,
+        model=RequestLimit,
         session_factory=session_factory,
     )
 
     # --- 4. Services ---
     helper_service = providers.Factory(HelperService)
-    ai_service = providers.Singleton(AIService)  # Singleton for Single Object
     logger = providers.Factory(
         BaseLogger, repository=log_repository, helper_service=helper_service
     )
@@ -88,34 +90,34 @@ class Container(containers.DeclarativeContainer):
     user_service = providers.Factory(
         UserService,
         user_repository=user_repository,
-        patient_repository=patient_repository,
         token_repository=token_repository,
+        role_repository=role_repository,
+        pending_repository=pending_user_repository,
         logger=logger,
         helper_service=helper_service,
     )
 
-    patient_service = providers.Factory(
-        PatientService,
-        patient_repository=patient_repository,
+    request_limit_service = providers.Factory(
+        RequestLimitService,
+        request_limit_repository=request_limit_repository,
         logger=logger,
         helper_service=helper_service,
     )
 
-    patient_user_service = providers.Factory(
-        PatientUserService,
-        patient_user_repository=patient_user_repository,
-        logger=logger,
-        helper_service=helper_service,
-        ai_service=ai_service,
-    )
-
-    # --- 5. Middlewares & Controllers ---
+    # --- 5. Middlewares ---
     auth_middleware = providers.Factory(
         AuthMiddleware,
-        user_repository=user_repository,
-        patient_repository=patient_repository,
-        token_repository=token_repository,
+        user_service=user_service,
+        token_service=None,  # Until Created
+        role_service=None,  # Until Created
         logger=logger,
+    )
+
+    request_limit_middleware = providers.Factory(
+        RequestLimitMiddleware,
+        request_limit_service=request_limit_service,
+        logger=logger,
+        helper_service=helper_service,
     )
 
     validation_middleware = providers.Factory(
@@ -123,40 +125,33 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
     )
 
+    # --- 6. Controllers ---
+
     user_controller = providers.Factory(
         UserController, user_service=user_service, logger=logger
     )
 
-    patient_controller = providers.Factory(
-        PatientController, patient_service=patient_service, logger=logger
-    )
+    # --- 7. Routes ---
+    main_user_routes = providers.Factory(create_main_user_router)
+    main_admin_routes = providers.Factory(create_main_admin_router)
 
-    patient_user_controller = providers.Factory(
-        PatientUserController,
-        patient_user_service=patient_user_service,
-        helper_service=helper_service,
-        ai_service=ai_service,
-        logger=logger,
-    )
-
-    # --- 6. Routes ---
-    user_routes = providers.Factory(
-        create_user_router,
+    auth_routes = providers.Factory(
+        create_auth_router,
         controller_provider=user_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
 
-    patient_routes = providers.Factory(
-        create_patient_router,
-        controller_provider=patient_controller.provider,
+    user_user_routes = providers.Factory(
+        create_user_user_router,
+        controller_provider=user_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
 
-    patient_user_routes = providers.Factory(
-        create_patient_user_router,
-        controller_provider=patient_user_controller.provider,
+    user_admin_routes = providers.Factory(
+        create_user_admin_router,
+        controller_provider=user_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )

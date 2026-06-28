@@ -4,8 +4,8 @@ from typing import TypedDict, TYPE_CHECKING
 from pydantic import BaseModel, EmailStr, Field
 
 if TYPE_CHECKING:
-    from .baseDtos import BaseSearchDto
     from core.entities.user import User
+    from .baseDtos import BaseSearchDto
 
 
 class UserRegisterDto(BaseModel):
@@ -106,16 +106,70 @@ class UserUpdateDto(BaseModel):
 
 
 class UserSearchDto(BaseSearchDto, BaseModel):
-    faculty_id: int | None = Field(None, description="ID of Faculty to filter by")
-    department_id: int | None = Field(None, description="ID of Department to filter by")
-    year_id: int | None = Field(None, description="ID of Year to filter by")
-    is_active: bool | None = Field(None, description="Whether the user is active")
+    faculty_id: int | None = Field(
+        default=None, description="ID of Faculty to filter by"
+    )
+    department_id: int | None = Field(
+        default=None, description="ID of Department to filter by"
+    )
+    year_id: int | None = Field(default=None, description="ID of Year to filter by")
+    is_active: bool | None = Field(
+        default=None, description="Whether the user is active"
+    )
+    refresh_token: str | None = Field(
+        default=None, description="Refresh token to filter by"
+    )
+    refresh_expire_at_from: datetime | None = Field(
+        default=None, description="Refresh token expiration date to filter by (>=)"
+    )
 
 
 # User-Specific DTOs
+class UserSignUpResponseDto(BaseModel):
+    token: str = Field(..., description="Verification token for the user")
+
+
+class UserVerifyEmailDto(BaseModel):
+    token: str = Field(..., description="Verification token for the user")
+
+
+class UserGetStoredAccessTokenDto(BaseModel):
+    google_details_token: str = Field(
+        ..., description="Google details token for authentication"
+    )
+
+
+class UserLoginWithGoogleDto(BaseModel):
+    redirect_response_url: str = Field(
+        ..., description="Redirect URL after Google login"
+    )
+    state: str = Field(..., description="State parameter for Google login")
+    nonce: str = Field(..., description="Nonce parameter for Google login")
+
+
 class UserLoginResponseDto(BaseModel):
-    user: UserResponseDto = Field(..., description="Logged in user details")
+    user: UserResponseDto | None = Field(
+        default=None, description="Logged in user details"
+    )
     token: str = Field(..., description="Authentication token for the user")
+    state: str | None = Field(
+        default=None, description="State parameter for google authentication"
+    )
+    token_expiration: int | None = Field(
+        default=None, description="Token expiration time in seconds"
+    )
+    redirect_url: str | None = Field(
+        default=None, description="Redirect URL after successful login"
+    )
+
+
+class UserTokenDetailsResponseDto(BaseModel):
+    name: str = Field(..., description="Name of the user")
+    email: EmailStr = Field(..., description="Email of the user")
+    can_resend_after: float | None = Field(
+        default=None,
+        description="Time in seconds after which the user can resend the token",
+    )
 
 
 class UserUpdateUsersRecordDto(BaseModel):
@@ -150,5 +204,22 @@ class UserUpdateAcademicDataDto(BaseModel):
     year_id: int | None = Field(None, description="ID of the new year for the user")
     study_type: User.Type | None = Field(
         None,
-        description="New study type for the user (e.g., 'undergraduate', 'graduate')",
+        description="New study type for the user (e.g., 'Mainstream', 'Credit')",
+    )
+
+
+class UserStatisticsResponseDto(BaseModel):
+    users_count: int = Field(..., description="Total number of users")
+    users_this_month_count: int = Field(
+        ..., description="Number of users registered this month"
+    )
+    percentage_increase: float = Field(
+        ..., description="Percentage increase in users compared to the previous month"
+    )
+    active_now_count: int = Field(..., description="Number of users currently active")
+    pending_users_count: int = Field(
+        ..., description="Number of users pending approval"
+    )
+    last_five_users_active: list[str] = Field(
+        ..., description="List of Avatar URLs of the last five users who were active"
     )
