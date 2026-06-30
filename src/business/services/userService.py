@@ -68,7 +68,7 @@ class UserService(IUserService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                User, data, is_and, starts_with, is_exact
+                User, data, ["name", "email", "phone"], is_and, starts_with, is_exact
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 User, includes
@@ -127,7 +127,7 @@ class UserService(IUserService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                User, data, is_and, starts_with, is_exact
+                User, data, ["name", "email", "phone"], is_and, starts_with, is_exact
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 User, includes

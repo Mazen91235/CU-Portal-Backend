@@ -4,7 +4,7 @@ from aiohttp import ClientResponse
 import asyncio
 import json
 from typing import TypeVar, cast
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, func, or_
 from aiosmtplib import SMTP
 from email.message import EmailMessage
 from sqlalchemy.orm import selectinload
@@ -189,10 +189,13 @@ class HelperService(IHelperService[U]):
                 order_by_arr.append(order_item)
         return order_by_arr
 
-    def generate_dynamic_predicate(self, cls, data, is_and, starts_with, is_exact):
+    def generate_dynamic_predicate(
+        self, cls, data, query_fields, is_and, starts_with, is_exact
+    ):
         if not data or not cls:
             return None
-
+        if not query_fields:
+            query_fields = []
         to_dict = getattr(data, "model_dump", None)
         if callable(to_dict):
             data_dict = cast(dict, to_dict())
@@ -212,6 +215,22 @@ class HelperService(IHelperService[U]):
 
             is_range_key = key.endswith("_from") or key.endswith("_to")
             field_name = key.rsplit("_", 1)[0] if is_range_key else key
+            if field_name == "query" and len(query_fields) > 0:
+                for query_field in query_fields:
+                    column = getattr(cls, query_field, None)
+                    if not column:
+                        continue
+                    if starts_with:
+                        conditions.append(
+                            func.lower(column).ilike(func.lower(f"{value}%"))
+                        )
+                    elif is_exact:
+                        conditions.append(column == value)
+                    else:
+                        conditions.append(
+                            func.lower(column).ilike(func.lower(f"%{value}%"))
+                        )
+                continue
             column = getattr(cls, field_name, None)
             if not column:
                 continue
@@ -224,11 +243,13 @@ class HelperService(IHelperService[U]):
                 if not self._is_string_column(column):
                     conditions.append(column == value)
                 elif starts_with:
-                    conditions.append(column.ilike(f"{value}%"))
+                    conditions.append(func.lower(column).ilike(func.lower(f"{value}%")))
                 elif is_exact:
                     conditions.append(column == value)
                 else:
-                    conditions.append(column.ilike(f"%{value}%"))
+                    conditions.append(
+                        func.lower(column).ilike(func.lower(f"%{value}%"))
+                    )
             else:
                 conditions.append(column == value)
 

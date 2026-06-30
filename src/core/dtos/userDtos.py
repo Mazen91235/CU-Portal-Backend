@@ -113,9 +113,7 @@ class UserSearchDto(BaseSearchDto, BaseModel):
         default=None, description="ID of Department to filter by"
     )
     year_id: int | None = Field(default=None, description="ID of Year to filter by")
-    is_active: bool | None = Field(
-        default=None, description="Whether the user is active"
-    )
+    status: bool | None = Field(default=None, description="Whether the user is active")
     refresh_token: str | None = Field(
         default=None, description="Refresh token to filter by"
     )

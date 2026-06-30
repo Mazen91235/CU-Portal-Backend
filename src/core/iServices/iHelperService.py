@@ -50,6 +50,7 @@ class IHelperService(ABC, Generic[U]):
         self,
         cls: Type[T],
         data: U,
+        query_fields: list[str] | None,
         is_and: bool,
         starts_with: bool,
         is_exact: bool,
