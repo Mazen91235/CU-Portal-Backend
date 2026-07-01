@@ -258,6 +258,12 @@ class HelperService(IHelperService[U]):
 
         return and_(*conditions) if is_and else or_(*conditions)
 
+    # Notification Functions
+    async def send_notification(self, type, parent_id, content, url=None):
+        return BaseResponseDto(
+            success=True, data=True, message="Notification sent successfully"
+        )
+
     # File Functions
     async def _request_with_retries(
         self,

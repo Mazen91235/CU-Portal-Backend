@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, Any, Type
 from core.entities.user import User
+from core.entities.notification import Notification
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import FetchedModel, DownloadedFileModel, FileModel
 
@@ -55,6 +56,17 @@ class IHelperService(ABC, Generic[U]):
         starts_with: bool,
         is_exact: bool,
     ) -> Any:
+        pass
+
+    # Notification Functions
+    @abstractmethod
+    async def send_notification(
+        self,
+        type: Notification.NOTIFICATION_TYPES,
+        parent_id: int,
+        content: str,
+        url: str | None = None,
+    ) -> BaseResponseDto[bool]:
         pass
 
     # File Functions

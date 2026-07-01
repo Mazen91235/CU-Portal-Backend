@@ -11,6 +11,7 @@ from .base import (
     Optional,
     TimezoneHandler,
     TypedDict,
+    Literal,
     TYPE_CHECKING,
     mapped_column,
     relationship,
@@ -50,3 +51,6 @@ class Notification(Base):
     users: Mapped[list["User"]] = relationship(
         "User", secondary="user_notifications", back_populates="notifications"
     )
+
+    # Attributes
+    NOTIFICATION_TYPES = Literal["task", "exam", "announcement", "material"]

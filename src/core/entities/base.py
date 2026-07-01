@@ -17,7 +17,7 @@ from sqlalchemy.orm import (
     mapped_column,
     validates,
 )
-from typing import Optional, TypedDict, TYPE_CHECKING
+from typing import Optional, TypedDict, Literal, TYPE_CHECKING
 from datetime import datetime
 from core.utils.timezoneHandler import TimezoneHandler
 
