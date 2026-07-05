@@ -7,16 +7,16 @@ from dependency_injector import containers, providers
 # Fix for ModuleNotFoundError
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-from business.contextVars.sessionContext import session_context
-from api.middlewares.authMiddleware import AuthMiddleware
-from api.middlewares.validationMiddleware import ValidationMiddleware
-from api.controllers.userController import UserController
 from api.routes.mainRoutes import (
     create_main_user_router,
     create_main_admin_router,
 )
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
+from api.controllers.userController import UserController
+from api.middlewares.authMiddleware import AuthMiddleware
+from api.middlewares.validationMiddleware import ValidationMiddleware
+from business.contextVars.sessionContext import session_context
 from business.services.userService import UserService
 from business.services.requestLimitService import RequestLimitService
 from business.services.helperService import HelperService
