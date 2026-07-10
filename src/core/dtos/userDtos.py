@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from .baseDtos import BaseSearchDto
 
 
-class UserRegisterDto(BaseModel):
+class UserCreateDto(BaseModel):
     name: str = Field(..., min_length=1, max_length=60, description="Name of User")
     email: EmailStr = Field(
         ..., min_length=1, max_length=100, description="Unique Email of User"

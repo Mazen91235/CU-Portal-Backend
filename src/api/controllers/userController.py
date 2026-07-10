@@ -13,7 +13,7 @@ from core.utils.jsonHandler import JSONHandler
 # Entities & DTOs
 from core.entities.user import User
 from core.dtos.userDtos import (
-    UserRegisterDto,
+    UserCreateDto,
     UserResponseDto,
     UserUpdateDto,
     UserSearchDto,
@@ -184,8 +184,8 @@ class UserController(IUserController):
         try:
             await self.user_service.begin_transaction()
             payload = await request.json()
-            data = Generator[UserRegisterDto].generate(UserRegisterDto, payload)
-            user = Mapper[UserRegisterDto, User].map(data, User)
+            data = Generator[UserCreateDto].generate(UserCreateDto, payload)
+            user = Mapper[UserCreateDto, User].map(data, User)
             response = await self.user_service.create(user)
             if not response.success:
                 await self.user_service.rollback_transaction()
