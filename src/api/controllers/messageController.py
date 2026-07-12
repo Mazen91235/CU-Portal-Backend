@@ -115,7 +115,7 @@ class MessageController(IMessageController):
                     message=response.message,
                 )
 
-            messages = response.data or []
+            messages = response.data 
             if not messages:
                 await self.logger.log(
                     action="Find",
@@ -171,10 +171,11 @@ class MessageController(IMessageController):
                 )
 
             await self.message_service.commit_transaction()
+            messages = response.data
             return ResponseHandler.generate_response(
                 success=True,
                 code=201,
-                data=response.data,
+                data=messages,
                 message="Message created successfully",
             )
         except Exception as ex:
@@ -194,81 +195,4 @@ class MessageController(IMessageController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    # Additional Query Functions
-    async def search(self, request):
-        try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[MessageSearchDto],
-            )
-            entity_search_dto = Generator[MessageSearchDto].generate_from_query(
-                MessageSearchDto, query
-            )
-            includes = query.includes
-            selects = query.selects
-            is_and = query.is_and
-            starts_with = query.starts_with
-            is_exact = query.is_exact
-            order_by = query.order_by
-            descending = query.descending
-            page = query.page or 1
-            limit = query.limit or 50
-
-            response = await self.message_service.find(
-                entity_search_dto,
-                includes,
-                selects,
-                is_and,
-                starts_with,
-                is_exact,
-                order_by,
-                descending,
-                page,
-                limit,
-            )
-            if not response.success:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=response.code,
-                    message=response.message,
-                )
-
-            messages = response.data or []
-            if not messages:
-                await self.logger.log(
-                    action="Search",
-                    entity="Message",
-                    level="info",
-                    code=404,
-                    message="Messages not found",
-                    source="MessageController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Messages not found",
-                )
-
-            messages_mapped = Mapper[Message, MessageResponseDto].map_list(
-                messages, MessageResponseDto, True
-            )
-            return ResponseHandler.generate_response(
-                success=True,
-                code=200,
-                data=messages_mapped,
-            )
-        except Exception as ex:
-            await self.logger.log(
-                action="Search",
-                entity="Message",
-                level="error",
-                code=500,
-                message="An error occurred while processing the request",
-                details={"error": str(ex)},
-                source="MessageController",
-            )
-            return ResponseHandler.generate_response(
-                success=False,
-                code=500,
-                message="An error occurred while processing the request, please try again later",
-            )
+    

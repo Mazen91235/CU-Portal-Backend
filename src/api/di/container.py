@@ -14,7 +14,7 @@ from api.routes.mainRoutes import (
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
 from api.routes.messageRoutes import (
-    create_message_public_router,
+    create_message_router,
     create_message_admin_router,
 )
 from api.controllers.userController import UserController
@@ -181,7 +181,7 @@ class Container(containers.DeclarativeContainer):
     )
 
     message_public_routes = providers.Factory(
-        create_message_public_router,
+        create_message_router,
         controller_provider=message_controller.provider,
         validation_middleware_provider=validation_middleware.provider,
     )

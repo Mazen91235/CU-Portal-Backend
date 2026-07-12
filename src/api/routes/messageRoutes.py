@@ -7,7 +7,7 @@ from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.messageDtos import MessageResponseDto
 
 
-def create_message_public_router(controller_provider, validation_middleware_provider):
+def create_message_router(controller_provider, validation_middleware_provider):
     router = APIRouter(prefix="/messages", tags=["Messages"])
 
     def _get_controller() -> IMessageController:
@@ -108,18 +108,5 @@ def create_message_admin_router(
         request: Request, controller: IMessageController = Depends(_get_controller)
     ):
         return await controller.find(request)
-
-    @router.get(
-        "/search",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Messages"))],
-        response_model=BaseResponseDto[list[MessageResponseDto]],
-        status_code=200,
-        summary="Search Messages",
-        description="Search contact-us messages based on query parameters",
-    )
-    async def search(
-        request: Request, controller: IMessageController = Depends(_get_controller)
-    ):
-        return await controller.search(request)
 
     return router

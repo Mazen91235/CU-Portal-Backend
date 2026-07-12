@@ -89,7 +89,7 @@ class MessageService(IMessageService):
 
     async def find(
         self,
-        data:MessageSearchDto|None=None,
+        data: MessageSearchDto | None = None,
         includes=None,
         selects=None,
         is_and=False,
@@ -150,67 +150,6 @@ class MessageService(IMessageService):
 
     async def create(self, data: Message) -> BaseResponseDto[Message]:
         try:
-            if not data.name:
-                await self.logger.log(
-                    action="Create",
-                    entity="Message",
-                    level="error",
-                    code=400,
-                    message="Name is required",
-                    source="MessageService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Name is required",
-                )
-            if not data.email:
-                await self.logger.log(
-                    action="Create",
-                    entity="Message",
-                    level="error",
-                    code=400,
-                    message="Email is required",
-                    source="MessageService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Email is required",
-                )
-            if not data.phone:
-                await self.logger.log(
-                    action="Create",
-                    entity="Message",
-                    level="error",
-                    code=400,
-                    message="Phone is required",
-                    source="MessageService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Phone is required",
-                )
-            if not data.content:
-                await self.logger.log(
-                    action="Create",
-                    entity="Message",
-                    level="error",
-                    code=400,
-                    message="Content is required",
-                    source="MessageService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Content is required",
-                )
-
             validate_email_result = Validator.validate_email(data.email, True)
             if not validate_email_result.success:
                 await self.logger.log(
@@ -263,6 +202,33 @@ class MessageService(IMessageService):
                     message="Invalid phone number format, please provide a valid phone number.",
                 )
 
+            message_exists_response = await self.message_repository.find_one(
+                Message.email == data.email
+            )
+            if not message_exists_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=message_exists_response.code,
+                    data=None,
+                    message=message_exists_response.message,
+                )
+            message_exists = message_exists_response.data
+            if message_exists:
+                await self.logger.log(
+                    action="Create",
+                    entity="Message",
+                    level="warning",
+                    code=400,
+                    message="A message from this email already exists",
+                    source="MessageService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="A message from this email already exists",
+                )
+
             created_message_response = await self.message_repository.create(data)
             if not created_message_response.success:
                 return BaseResponseDto(
@@ -271,8 +237,8 @@ class MessageService(IMessageService):
                     data=None,
                     message=created_message_response.message,
                 )
-
             created_message = created_message_response.data
+
             await self.logger.log(
                 action="Create",
                 entity="Message",

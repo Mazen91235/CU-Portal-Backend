@@ -24,8 +24,6 @@ class MessageResponseDto(BaseModel):
     email: EmailStr = Field(..., description="Sender email address")
     phone: str = Field(..., description="Sender phone number")
     content: str = Field(..., description="Message content")
-
-    # Timestamps
     created_at: datetime | None = Field(
         None, description="Creation Date of the message"
     )
@@ -49,10 +47,16 @@ class MessageSearchDto(BaseSearchDto, BaseModel):
         default=None, description="Sender phone number to filter by"
     )
     content: str | None = Field(default=None, description="Message content to filter by")
-    created_at: datetime | None = Field(
-        default=None, description="Creation Date to filter by"
+    created_at_from: datetime | None = Field(
+        default=None, description="Creation Date from sender to filter by"
     )
-    updated_at: datetime | None = Field(
-        default=None, description="Last Update Date to filter by"
+    created_at_to: datetime | None = Field(
+        default=None, description="Creation Date to user to filter by"
+    )
+    updated_at_from: datetime | None = Field(
+        default=None, description="Last Update Date from sender to filter by"
+    )
+    updated_at_to: datetime | None = Field(
+        default=None, description="Last Update Date to user to filter by"
     )
     
