@@ -13,11 +13,14 @@ from api.routes.mainRoutes import (
 )
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
+from api.routes.notificationRoutes import create_notification_router
 from api.controllers.userController import UserController
+from api.controllers.notificationController import NotificationController
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
 from business.contextVars.sessionContext import session_context
 from business.services.userService import UserService
+from business.services.notificationService import NotificationService
 from business.services.requestLimitService import RequestLimitService
 from business.services.helperService import HelperService
 from business.loggers.baseLogger import BaseLogger
@@ -28,6 +31,7 @@ from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
 from core.entities.token import Token
 from core.entities.requestLimit import RequestLimit
+from core.entities.userNotification import UserNotification
 from core.utils.databaseHandler import DatabaseHandler
 
 DB_URL = DatabaseHandler.get_db_url()
@@ -80,6 +84,12 @@ class Container(containers.DeclarativeContainer):
         model=RequestLimit,
         session_factory=session_factory,
     )
+    user_notification_repository = providers.Factory(
+        BaseRepository, 
+        session=db_session, 
+        model=UserNotification, 
+        session_factory=session_factory
+    )
 
     # --- 4. Services ---
     helper_service = providers.Factory(HelperService)
@@ -100,6 +110,12 @@ class Container(containers.DeclarativeContainer):
     request_limit_service = providers.Factory(
         RequestLimitService,
         request_limit_repository=request_limit_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+    notification_service = providers.Factory(
+        NotificationService,
+        user_notification_repository=user_notification_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -130,6 +146,11 @@ class Container(containers.DeclarativeContainer):
     user_controller = providers.Factory(
         UserController, user_service=user_service, logger=logger
     )
+    notification_controller = providers.Factory(
+        NotificationController, 
+        notification_service=notification_service, 
+        logger=logger
+    )
 
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
@@ -154,4 +175,10 @@ class Container(containers.DeclarativeContainer):
         controller_provider=user_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
+    )
+    notification_routes = providers.Factory(
+        create_notification_router,
+        controller_provider=notification_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        rate_limit_provider=request_limit_middleware.provider,
     )
