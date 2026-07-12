@@ -13,7 +13,7 @@ from api.routes.mainRoutes import (
 )
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
-from api.routes.examRoutes import create_exam_admin_router, create_exam_user_router
+from api.routes.examRoutes import create_exam_admin_router, create_exam_router
 from api.controllers.userController import UserController
 from api.controllers.examController import ExamController
 from api.middlewares.authMiddleware import AuthMiddleware
@@ -185,7 +185,7 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
-    admin_exam_routes = providers.Factory(
+    exam_admin_routes = providers.Factory(
         create_exam_admin_router,
         controller_provider=exam_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
@@ -193,8 +193,8 @@ class Container(containers.DeclarativeContainer):
         rate_limit_provider=request_limit_middleware.provider,
     )
 
-    user_exam_routes = providers.Factory(
-        create_exam_user_router,
+    exam_routes = providers.Factory(
+        create_exam_router,
         controller_provider=exam_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,

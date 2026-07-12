@@ -84,7 +84,7 @@ def create_exam_admin_router(
 # ---------------------------------------------------------
 # User Router
 # ---------------------------------------------------------
-def create_exam_user_router(
+def create_exam_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider, rate_limit_provider
 ):
     router = APIRouter(prefix="/exams", tags=["User Exams"])
