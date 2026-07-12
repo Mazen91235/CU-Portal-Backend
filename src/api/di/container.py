@@ -13,13 +13,16 @@ from api.routes.mainRoutes import (
 )
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
+from api.routes.examRoutes import create_exam_admin_router, create_exam_user_router
 from api.controllers.userController import UserController
+from api.controllers.examController import ExamController
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
 from business.contextVars.sessionContext import session_context
 from business.services.userService import UserService
 from business.services.requestLimitService import RequestLimitService
 from business.services.helperService import HelperService
+from business.services.examService import ExamService
 from business.loggers.baseLogger import BaseLogger
 from infrastructure.repositories.baseRepository import BaseRepository
 from core.entities.log import Log
@@ -28,6 +31,8 @@ from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
 from core.entities.token import Token
 from core.entities.requestLimit import RequestLimit
+from core.entities.task import Task
+from core.entities.subject import Subject
 from core.utils.databaseHandler import DatabaseHandler
 
 DB_URL = DatabaseHandler.get_db_url()
@@ -80,6 +85,18 @@ class Container(containers.DeclarativeContainer):
         model=RequestLimit,
         session_factory=session_factory,
     )
+    task_repository = providers.Factory(
+        BaseRepository, 
+        session=db_session, 
+        model=Task, 
+        session_factory=session_factory,
+    )
+    subject_repository = providers.Factory(
+        BaseRepository, 
+        session=db_session, 
+        model=Subject, 
+        session_factory=session_factory,
+    )
 
     # --- 4. Services ---
     helper_service = providers.Factory(HelperService)
@@ -104,6 +121,14 @@ class Container(containers.DeclarativeContainer):
         helper_service=helper_service,
     )
 
+    exam_service = providers.Factory(
+        ExamService,
+        task_repository=task_repository,
+        subject_repository=subject_repository,
+        user_service=user_service,
+        logger=logger,
+        helper_service=helper_service,
+    )
     # --- 5. Middlewares ---
     auth_middleware = providers.Factory(
         AuthMiddleware,
@@ -131,6 +156,10 @@ class Container(containers.DeclarativeContainer):
         UserController, user_service=user_service, logger=logger
     )
 
+    exam_controller = providers.Factory(
+        ExamController, exam_service=exam_service, logger=logger
+    )
+
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
     main_admin_routes = providers.Factory(create_main_admin_router)
@@ -154,4 +183,20 @@ class Container(containers.DeclarativeContainer):
         controller_provider=user_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
+    )
+
+    admin_exam_routes = providers.Factory(
+        create_exam_admin_router,
+        controller_provider=exam_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+        rate_limit_provider=request_limit_middleware.provider,
+    )
+
+    user_exam_routes = providers.Factory(
+        create_exam_user_router,
+        controller_provider=exam_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+        rate_limit_provider=request_limit_middleware.provider,
     )
