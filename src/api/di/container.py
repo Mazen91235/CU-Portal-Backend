@@ -30,6 +30,15 @@ from core.entities.token import Token
 from core.entities.requestLimit import RequestLimit
 from core.utils.databaseHandler import DatabaseHandler
 
+from api.routes.subjectRoutes import create_subject_admin_router, create_subject_user_router
+from api.controllers.subjectController import SubjectController
+from business.services.subjectService import SubjectService
+from core.entities.subject import Subject
+from core.entities.faculty import Faculty
+from core.entities.department import Department
+from core.entities.year import Year
+from core.entities.userSubjectLink import UserSubjectLink
+
 DB_URL = DatabaseHandler.get_db_url()
 ENGINE_OPTIONS = DatabaseHandler.get_engine_options(DB_URL)
 
@@ -81,6 +90,22 @@ class Container(containers.DeclarativeContainer):
         session_factory=session_factory,
     )
 
+    subject_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Subject, session_factory=session_factory
+    )
+    faculty_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Faculty, session_factory=session_factory
+    )
+    department_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Department, session_factory=session_factory
+    )
+    year_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Year, session_factory=session_factory
+    )
+    user_subject_link_repository = providers.Factory(
+        BaseRepository, session=db_session, model=UserSubjectLink, session_factory=session_factory
+    )
+
     # --- 4. Services ---
     helper_service = providers.Factory(HelperService)
     logger = providers.Factory(
@@ -100,6 +125,18 @@ class Container(containers.DeclarativeContainer):
     request_limit_service = providers.Factory(
         RequestLimitService,
         request_limit_repository=request_limit_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+
+    subject_service = providers.Factory(
+        SubjectService,
+        subject_repository=subject_repository,
+        faculty_repository=faculty_repository,
+        department_repository=department_repository,
+        year_repository=year_repository,
+        user_repository=user_repository,
+        user_subject_link_repository=user_subject_link_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -131,6 +168,13 @@ class Container(containers.DeclarativeContainer):
         UserController, user_service=user_service, logger=logger
     )
 
+    subject_controller = providers.Factory(
+        SubjectController,
+        subject_service=subject_service,
+        helper_service=helper_service,
+        logger=logger,
+    )
+
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
     main_admin_routes = providers.Factory(create_main_admin_router)
@@ -152,6 +196,20 @@ class Container(containers.DeclarativeContainer):
     user_admin_routes = providers.Factory(
         create_user_admin_router,
         controller_provider=user_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    subject_admin_routes = providers.Factory(
+        create_subject_admin_router,
+        controller_provider=subject_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    subject_user_routes = providers.Factory(
+        create_subject_user_router,
+        controller_provider=subject_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
