@@ -3,6 +3,7 @@ import sys
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from api.routes.customRoute import CustomRoute
 
 # Ensure `src` is importable as the top-level package root in serverless runtimes.
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -17,7 +18,8 @@ def create_app() -> FastAPI:
     app = FastAPI(title="CU - Portal", version="1.0.0")
     container = Container()
     app.state.container = container
-
+    app.router.route_class = CustomRoute
+    
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
         # Create one DB session per request and store it in ContextVar.

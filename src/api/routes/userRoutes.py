@@ -4,12 +4,13 @@ from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.userDtos import UserResponseDto, UserStatisticsResponseDto
+from customRoute import CustomRoute
 
 
 def create_user_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="", tags=[])
+    router = APIRouter(prefix="", tags=[],route_class=CustomRoute)
 
     def _get_controller() -> IUserController:
         return controller_provider()
@@ -114,7 +115,7 @@ def create_user_user_router(
 def create_user_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/users", tags=["Users"])
+    router = APIRouter(prefix="/users", tags=["Users"],route_class=CustomRoute)
 
     def _get_controller() -> IUserController:
         return controller_provider()
