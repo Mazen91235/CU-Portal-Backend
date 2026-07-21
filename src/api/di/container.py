@@ -13,17 +13,25 @@ from api.routes.mainRoutes import (
 )
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
+from api.routes.materialRoutes import (
+    create_material_admin_router,
+    create_material_user_router,
+)
 from api.controllers.userController import UserController
+from api.controllers.materialController import MaterialController
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
 from business.contextVars.sessionContext import session_context
 from business.services.userService import UserService
+from business.services.materialService import MaterialService
 from business.services.requestLimitService import RequestLimitService
 from business.services.helperService import HelperService
 from business.loggers.baseLogger import BaseLogger
 from infrastructure.repositories.baseRepository import BaseRepository
 from core.entities.log import Log
 from core.entities.user import User
+from core.entities.material import Material
+from core.entities.subject import Subject
 from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
 from core.entities.token import Token
@@ -65,6 +73,18 @@ class Container(containers.DeclarativeContainer):
     user_repository = providers.Factory(
         BaseRepository, session=db_session, model=User, session_factory=session_factory
     )
+    material_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Material,
+        session_factory=session_factory,
+    )
+    subject_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Subject,
+        session_factory=session_factory,
+    )
     pending_user_repository = providers.Factory(
         BaseRepository,
         session=db_session,
@@ -96,7 +116,14 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
-
+    material_service = providers.Factory(
+        MaterialService,
+        material_repository=material_repository,
+        subject_repository=subject_repository,
+        user_service=user_service,
+        logger=logger,
+        helper_service=helper_service,
+    )
     request_limit_service = providers.Factory(
         RequestLimitService,
         request_limit_repository=request_limit_repository,
@@ -131,10 +158,13 @@ class Container(containers.DeclarativeContainer):
         UserController, user_service=user_service, logger=logger
     )
 
+    material_controller = providers.Factory(
+        MaterialController, material_service=material_service, logger=logger
+    )
+
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
     main_admin_routes = providers.Factory(create_main_admin_router)
-
     auth_routes = providers.Factory(
         create_auth_router,
         controller_provider=user_controller.provider,
@@ -152,6 +182,19 @@ class Container(containers.DeclarativeContainer):
     user_admin_routes = providers.Factory(
         create_user_admin_router,
         controller_provider=user_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    material_user_routes = providers.Factory(
+        create_material_user_router,
+        controller_provider=material_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+    material_admin_routes = providers.Factory(
+        create_material_admin_router,
+        controller_provider=material_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
