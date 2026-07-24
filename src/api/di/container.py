@@ -16,6 +16,13 @@ from api.routes.userRoutes import create_user_user_router, create_user_admin_rou
 from api.controllers.userController import UserController
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
+from api.routes.announcementRoutes import create_announcement_user_router, create_announcement_admin_router
+from api.controllers.announcementController import AnnouncementController
+from business.services.announcementService import AnnouncementService
+from api.routes.taskRoutes import create_task_user_router, create_task_admin_router
+from api.controllers.taskController import TaskController
+from business.services.taskService import TaskService
+from core.entities.task import Task
 from business.contextVars.sessionContext import session_context
 from business.services.userService import UserService
 from business.services.requestLimitService import RequestLimitService
@@ -28,6 +35,8 @@ from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
 from core.entities.token import Token
 from core.entities.requestLimit import RequestLimit
+from core.entities.announcement import Announcement
+from core.entities.subject import Subject
 from core.utils.databaseHandler import DatabaseHandler
 
 DB_URL = DatabaseHandler.get_db_url()
@@ -80,6 +89,15 @@ class Container(containers.DeclarativeContainer):
         model=RequestLimit,
         session_factory=session_factory,
     )
+    announcement_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Announcement, session_factory=session_factory
+    )
+    task_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Task, session_factory=session_factory
+    )
+    subject_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Subject, session_factory=session_factory
+    )
 
     # --- 4. Services ---
     helper_service = providers.Factory(HelperService)
@@ -100,6 +118,20 @@ class Container(containers.DeclarativeContainer):
     request_limit_service = providers.Factory(
         RequestLimitService,
         request_limit_repository=request_limit_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+    announcement_service = providers.Factory(
+        AnnouncementService,
+        announcement_repository=announcement_repository,
+        subject_repository=subject_repository,
+        user_service=user_service,
+        logger=logger,
+        helper_service=helper_service,
+    )
+    task_service = providers.Factory(
+        TaskService,
+        task_repository=task_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -130,6 +162,16 @@ class Container(containers.DeclarativeContainer):
     user_controller = providers.Factory(
         UserController, user_service=user_service, logger=logger
     )
+    announcement_controller = providers.Factory(
+        AnnouncementController,
+        announcement_service=announcement_service,
+        logger=logger,
+    )
+    task_controller = providers.Factory(
+        TaskController, 
+        task_service=task_service, 
+        logger=logger
+    )
 
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
@@ -152,6 +194,33 @@ class Container(containers.DeclarativeContainer):
     user_admin_routes = providers.Factory(
         create_user_admin_router,
         controller_provider=user_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+    announcement_user_routes = providers.Factory(
+        create_announcement_user_router,
+        controller_provider=announcement_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    announcement_admin_routes = providers.Factory(
+        create_announcement_admin_router,
+        controller_provider=announcement_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+    
+    task_user_routes = providers.Factory(
+        create_task_user_router,
+        controller_provider=task_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    task_admin_routes = providers.Factory(
+        create_task_admin_router,
+        controller_provider=task_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
