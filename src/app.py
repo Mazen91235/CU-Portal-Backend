@@ -39,8 +39,13 @@ def create_app() -> FastAPI:
     auth_routes = container.auth_routes()
     user_user_routes = container.user_user_routes()
     user_admin_routes = container.user_admin_routes()
+    year_admin_routes = container.year_admin_routes()
+    department_admin_routes = container.department_admin_routes()
+
     main_user_routes.include_router(user_user_routes)
     main_admin_routes.include_router(user_admin_routes)
+    main_admin_routes.include_router(year_admin_routes)
+    main_admin_routes.include_router(department_admin_routes)
     app.include_router(main_user_routes)
     app.include_router(main_admin_routes)
     app.include_router(auth_routes)
