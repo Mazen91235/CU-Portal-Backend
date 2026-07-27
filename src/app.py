@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
     auth_routes = container.auth_routes()
     user_user_routes = container.user_user_routes()
     user_admin_routes = container.user_admin_routes()
-    message_routes = container.message_routes()
+    message_public_routes = container.message_public_routes()
     message_admin_routes = container.message_admin_routes()
     main_user_routes.include_router(user_user_routes)
     main_admin_routes.include_router(user_admin_routes)
@@ -47,7 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(main_user_routes)
     app.include_router(main_admin_routes)
     app.include_router(auth_routes)
-    app.include_router(message_routes)
+    app.include_router(message_public_routes)
 
     app.add_middleware(
         CORSMiddleware,

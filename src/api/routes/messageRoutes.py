@@ -43,6 +43,9 @@ def create_message_router(controller_provider, validation_middleware_provider):
     return router
 
 
+create_message_public_router = create_message_router
+
+
 def create_message_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):

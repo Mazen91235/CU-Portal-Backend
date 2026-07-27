@@ -171,11 +171,14 @@ class MessageController(IMessageController):
                 )
 
             await self.message_service.commit_transaction()
-            messages = response.data
+            message = response.data
+            message_mapped = Mapper[Message, MessageResponseDto].map(
+                message, MessageResponseDto, True
+            )
             return ResponseHandler.generate_response(
                 success=True,
                 code=201,
-                data=messages,
+                data=message_mapped,
                 message="Message created successfully",
             )
         except Exception as ex:
@@ -194,5 +197,3 @@ class MessageController(IMessageController):
                 code=500,
                 message="An error occurred while processing the request, please try again later",
             )
-
-    

@@ -1,7 +1,6 @@
 import sys
 import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
 from dependency_injector import containers, providers
 
 # Fix for ModuleNotFoundError
@@ -21,6 +20,7 @@ from api.controllers.userController import UserController
 from api.controllers.messageController import MessageController
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
+from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
 from business.contextVars.sessionContext import session_context
 from business.services.userService import UserService
 from business.services.messageService import MessageService

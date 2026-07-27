@@ -4,7 +4,6 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.message import Message
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.messageDtos import MessageSearchDto
 from core.utils.validator import Validator
 
 
@@ -89,7 +88,7 @@ class MessageService(IMessageService):
 
     async def find(
         self,
-        data: MessageSearchDto | None = None,
+        data=None,
         includes=None,
         selects=None,
         is_and=False,
@@ -148,7 +147,7 @@ class MessageService(IMessageService):
                 message="An error occurred while finding messages",
             )
 
-    async def create(self, data: Message) -> BaseResponseDto[Message]:
+    async def create(self, data):
         try:
             validate_email_result = Validator.validate_email(data.email, True)
             if not validate_email_result.success:
@@ -200,33 +199,6 @@ class MessageService(IMessageService):
                     code=400,
                     data=None,
                     message="Invalid phone number format, please provide a valid phone number.",
-                )
-
-            message_exists_response = await self.message_repository.find_one(
-                Message.email == data.email
-            )
-            if not message_exists_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=message_exists_response.code,
-                    data=None,
-                    message=message_exists_response.message,
-                )
-            message_exists = message_exists_response.data
-            if message_exists:
-                await self.logger.log(
-                    action="Create",
-                    entity="Message",
-                    level="warning",
-                    code=400,
-                    message="A message from this email already exists",
-                    source="MessageService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="A message from this email already exists",
                 )
 
             created_message_response = await self.message_repository.create(data)
