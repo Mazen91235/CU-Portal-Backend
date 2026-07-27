@@ -2,9 +2,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
-
-if TYPE_CHECKING:
-    from .baseDtos import BaseSearchDto
+from .baseDtos import BaseSearchDto
 
 
 class FacultyCreateDto(BaseModel):
@@ -30,6 +28,10 @@ class FacultyUpdateDto(BaseModel):
     name: str = Field(..., min_length=1, max_length=40, description="Name of Faculty")
 
 
-class FacultySearchDto(BaseSearchDto, BaseModel):
+class FacultySearchDto(BaseSearchDto):
     id: int | None = Field(default=None, description="ID of Faculty to filter by")
     name: str | None = Field(default=None, description="Name of Faculty to filter by")
+
+
+class FacultyDeleteDto(BaseModel):
+    id: int = Field(..., description="ID of Faculty to delete")

@@ -5,13 +5,12 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.faculty import Faculty
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.facultyDtos import FacultySearchDto
 
 
 class FacultyService(IFacultyService):
     def __init__(
         self,
-        faculty_repository: IBaseRepository[Faculty],
+        faculty_repository: IBaseRepository,
         logger: IBaseLogger,
         helper_service: IHelperService,
     ):
@@ -148,34 +147,72 @@ class FacultyService(IFacultyService):
                 message="An error occurred while finding faculties",
             )
 
-    async def create(self, data: Faculty):
+    async def create(self, data):
         try:
-            if not data or not data.name or not data.name.strip():
-                return BaseResponseDto(
-                    success=False, code=400, message="Faculty name is required"
-                )
-
             name = data.name.strip()
+            data.name = name
+
             existing_res = await self.faculty_repository.find_one(
-                predicate=func.lower(Faculty.name) == name.lower()
+                func.lower(Faculty.name) == name.lower()
             )
-            if existing_res.success and existing_res.data:
+            if not existing_res.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_res.code,
+                    data=None,
+                    message=existing_res.message,
+                )
+            existing_faculty = existing_res.data
+            if existing_faculty:
+                await self.logger.log(
+                    action="Create",
+                    entity="Faculty",
+                    level="warning",
+                    code=400,
+                    message="Faculty already exists",
+                    source="FacultyService",
+                )
                 return BaseResponseDto(
                     success=False,
                     code=400,
+                    data=None,
                     message="Faculty already exists",
                 )
 
-            data.name = name
             create_res = await self.faculty_repository.create(data)
             if not create_res.success:
                 return BaseResponseDto(
                     success=False,
                     code=create_res.code,
+                    data=None,
                     message=create_res.message,
                 )
+            created_faculty = create_res.data
+            if not created_faculty:
+                await self.logger.log(
+                    action="Create",
+                    entity="Faculty",
+                    level="error",
+                    code=500,
+                    message="Failed to create faculty without a specific error",
+                    source="FacultyService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while creating faculty",
+                )
 
-            return BaseResponseDto(success=True, code=201, data=create_res.data)
+            await self.logger.log(
+                action="Create",
+                entity="Faculty",
+                level="info",
+                code=201,
+                message="Faculty created successfully",
+                source="FacultyService",
+            )
+            return BaseResponseDto(success=True, code=201, data=created_faculty)
         except Exception as ex:
             await self.logger.log(
                 action="Create",
@@ -193,50 +230,99 @@ class FacultyService(IFacultyService):
                 message="An error occurred while creating faculty",
             )
 
-    async def update(self, data: Faculty):
+    async def update(self, data):
         try:
-            if not data or not data.name or not data.name.strip():
-                return BaseResponseDto(
-                    success=False, code=400, message="Faculty name is required"
-                )
-
             name = data.name.strip()
-            existing_res = await self.faculty_repository.find_one(
-                predicate=func.lower(Faculty.name) == name.lower()
-            )
-            if (
-                existing_res.success
-                and existing_res.data
-                and existing_res.data.id != data.id
-            ):
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    message="Faculty with this Name already exists",
-                )
 
             target_res = await self.faculty_repository.find_one(
-                predicate=(Faculty.id == data.id)
+                Faculty.id == data.id
             )
-            if not target_res.success or not target_res.data:
+            if not target_res.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=target_res.code,
+                    data=None,
+                    message=target_res.message,
+                )
+            target_faculty = target_res.data
+            if not target_faculty:
+                await self.logger.log(
+                    action="Update",
+                    entity="Faculty",
+                    level="info",
+                    code=404,
+                    message="Faculty not found",
+                    source="FacultyService",
+                )
                 return BaseResponseDto(
                     success=False,
                     code=404,
+                    data=None,
                     message="Faculty not found",
                 )
 
-            faculty = target_res.data
-            faculty.name = name
+            existing_res = await self.faculty_repository.find_one(
+                func.lower(Faculty.name) == name.lower()
+            )
+            if not existing_res.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_res.code,
+                    data=None,
+                    message=existing_res.message,
+                )
+            existing_faculty = existing_res.data
+            if existing_faculty and existing_faculty.id != data.id:
+                await self.logger.log(
+                    action="Update",
+                    entity="Faculty",
+                    level="warning",
+                    code=400,
+                    message="Faculty with this name already exists",
+                    source="FacultyService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Faculty with this name already exists",
+                )
 
-            update_res = await self.faculty_repository.update(faculty, ["name"])
+            target_faculty.name = name
+
+            update_res = await self.faculty_repository.update(target_faculty, ["name"])
             if not update_res.success:
                 return BaseResponseDto(
                     success=False,
                     code=update_res.code,
                     message=update_res.message,
                 )
+            updated_faculty = update_res.data
+            if not updated_faculty:
+                await self.logger.log(
+                    action="Update",
+                    entity="Faculty",
+                    level="error",
+                    code=500,
+                    message="Failed to update faculty without a specific error",
+                    source="FacultyService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while updating faculty",
+                )
 
-            return BaseResponseDto(success=True, code=200, data=update_res.data)
+            await self.logger.log(
+                action="Update",
+                entity="Faculty",
+                level="info",
+                code=200,
+                message="Faculty updated successfully",
+                source="FacultyService",
+            )
+            return BaseResponseDto(success=True, code=200, data=updated_faculty)
         except Exception as ex:
             await self.logger.log(
                 action="Update",
@@ -254,13 +340,8 @@ class FacultyService(IFacultyService):
                 message="An error occurred while updating faculty",
             )
 
-    async def delete(self, data: Faculty | None):
+    async def delete(self, data):
         try:
-            if not data:
-                return BaseResponseDto(
-                    success=False, code=400, message="Faculty to delete is required"
-                )
-
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Faculty, ["users"]
             )
@@ -268,18 +349,43 @@ class FacultyService(IFacultyService):
                 predicate=(Faculty.id == data.id),
                 includes=dynamic_includes,
             )
-            if not result.success or not result.data:
+            if not result.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=result.code,
+                    data=None,
+                    message=result.message,
+                )
+            faculty = result.data
+            if not faculty:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Faculty",
+                    level="info",
+                    code=404,
+                    message="Faculty not found",
+                    source="FacultyService",
+                )
                 return BaseResponseDto(
                     success=False,
                     code=404,
+                    data=None,
                     message="Faculty not found",
                 )
 
-            faculty = result.data
             if faculty.users and len(faculty.users) > 0:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Faculty",
+                    level="warning",
+                    code=400,
+                    message="Faculty cannot be deleted because it has users associated with it",
+                    source="FacultyService",
+                )
                 return BaseResponseDto(
                     success=False,
                     code=400,
+                    data=None,
                     message="Faculty cannot be deleted because it has users associated with it",
                 )
 
@@ -288,9 +394,18 @@ class FacultyService(IFacultyService):
                 return BaseResponseDto(
                     success=False,
                     code=delete_res.code,
+                    data=None,
                     message=delete_res.message,
                 )
 
+            await self.logger.log(
+                action="Delete",
+                entity="Faculty",
+                level="info",
+                code=200,
+                message="Faculty deleted successfully",
+                source="FacultyService",
+            )
             return BaseResponseDto(success=True, code=200, data=True)
         except Exception as ex:
             await self.logger.log(

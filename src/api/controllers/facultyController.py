@@ -13,6 +13,7 @@ from core.dtos.facultyDtos import (
     FacultyResponseDto,
     FacultyUpdateDto,
     FacultySearchDto,
+    FacultyDeleteDto,
 )
 from core.models.queryModel import QueryModel
 
@@ -270,7 +271,10 @@ class FacultyController(IFacultyController):
                     message="Faculty ID is required",
                 )
 
-            entity = Faculty(id=int(faculty_id))
+            data = Generator[FacultyDeleteDto].generate(
+                FacultyDeleteDto, {"id": int(faculty_id)}
+            )
+            entity = Mapper[FacultyDeleteDto, Faculty].map(data, Faculty)
             response = await self.faculty_service.delete(entity)
             if not response.success:
                 await self.faculty_service.rollback_transaction()
