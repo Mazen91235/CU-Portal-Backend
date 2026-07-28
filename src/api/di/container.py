@@ -178,7 +178,7 @@ class Container(containers.DeclarativeContainer):
     )
 
     faculty_admin_routes = providers.Factory(
-        create_faculty_admin_router,
+        create_faculty_admin_router,s
         controller_provider=faculty_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,

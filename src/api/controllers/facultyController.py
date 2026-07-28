@@ -178,6 +178,21 @@ class FacultyController(IFacultyController):
                 )
 
             created_faculty = response.data
+            if not created_faculty:
+                await self.faculty_service.rollback_transaction()
+                await self.logger.log(
+                    action="Create",
+                    entity="Faculty",
+                    level="error",
+                    code=500,
+                    message="Failed to create faculty",
+                    source="FacultyController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="Failed to create faculty, Please try again later",
+                )
             faculty_mapped = Mapper[Faculty, FacultyResponseDto].map(
                 created_faculty, FacultyResponseDto, True
             )
@@ -218,9 +233,9 @@ class FacultyController(IFacultyController):
                 )
 
             payload = await request.json()
+            payload["id"] = int(faculty_id)
             data = Generator[FacultyUpdateDto].generate(FacultyUpdateDto, payload)
             faculty = Mapper[FacultyUpdateDto, Faculty].map(data, Faculty)
-            faculty.id = int(faculty_id)
 
             response = await self.faculty_service.update(faculty)
             if not response.success:
@@ -232,6 +247,21 @@ class FacultyController(IFacultyController):
                 )
 
             updated_faculty = response.data
+            if not updated_faculty:
+                await self.faculty_service.rollback_transaction()
+                await self.logger.log(
+                    action="Update",
+                    entity="Faculty",
+                    level="error",
+                    code=500,
+                    message="Failed to update faculty",
+                    source="FacultyController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="Failed to update faculty, Please try again later",
+                )
             faculty_mapped = Mapper[Faculty, FacultyResponseDto].map(
                 updated_faculty, FacultyResponseDto, True
             )
@@ -294,91 +324,6 @@ class FacultyController(IFacultyController):
             await self.faculty_service.rollback_transaction()
             await self.logger.log(
                 action="Delete",
-                entity="Faculty",
-                level="error",
-                code=500,
-                message="An error occurred while processing the request",
-                details={"error": str(e)},
-                source="FacultyController",
-            )
-            return ResponseHandler.generate_response(
-                success=False,
-                code=500,
-                message="An error occurred while processing the request, please try again later",
-            )
-
-    # Additional Query Functions
-    async def search(self, request):
-        try:
-            query_param = request.query_params.get("query", "")
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[FacultySearchDto],
-            )
-            entity_search_dto = Generator[FacultySearchDto].generate_from_query(
-                FacultySearchDto, query
-            )
-            if not entity_search_dto.query and query_param:
-                entity_search_dto.query = query_param
-
-            includes = query.includes
-            selects = query.selects
-            is_and = query.is_and
-            starts_with = True
-            is_exact = False
-            order_by = ["name"]
-            descending = False
-            page = query.page or 1
-            limit = query.limit or 50
-
-            response = await self.faculty_service.find(
-                entity_search_dto,
-                includes,
-                selects,
-                is_and,
-                starts_with,
-                is_exact,
-                order_by,
-                descending,
-                page,
-                limit,
-            )
-
-            if not response.success:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=response.code,
-                    message=response.message,
-                )
-
-            faculties = response.data
-            if not faculties:
-                await self.logger.log(
-                    action="Search",
-                    entity="Faculty",
-                    level="info",
-                    code=404,
-                    message="Faculties not found",
-                    source="FacultyController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Faculties not found",
-                )
-
-            faculties_mapped = Mapper[Faculty, FacultyResponseDto].map_list(
-                faculties, FacultyResponseDto, True
-            )
-
-            return ResponseHandler.generate_response(
-                success=True,
-                code=200,
-                data=faculties_mapped,
-            )
-        except Exception as e:
-            await self.logger.log(
-                action="Search",
                 entity="Faculty",
                 level="error",
                 code=500,

@@ -46,6 +46,38 @@ def create_faculty_admin_router(
 
         return validate_request
 
+    @router.get(
+        "/{faculty_id}",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Faculties")),
+        ],
+        response_model=BaseResponseDto[FacultyResponseDto],
+        status_code=200,
+        summary="Find Faculty",
+        description="Get a single faculty by its ID",
+    )
+    async def find_one(
+        request: Request, controller: IFacultyController = Depends(_get_controller)
+    ):
+        return await controller.find_one(request)
+
+    @router.get(
+        "/",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Faculties")),
+        ],
+        response_model=BaseResponseDto[list[FacultyResponseDto]],
+        status_code=200,
+        summary="Find Faculties",
+        description="Get all faculties matching optional filter criteria",
+    )
+    async def find(
+        request: Request, controller: IFacultyController = Depends(_get_controller)
+    ):
+        return await controller.find(request)
+
     @router.post(
         "/",
         dependencies=[
@@ -95,53 +127,5 @@ def create_faculty_admin_router(
         request: Request, controller: IFacultyController = Depends(_get_controller)
     ):
         return await controller.delete(request)
-
-    @router.get(
-        "/",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("View Faculties")),
-        ],
-        response_model=BaseResponseDto[list[FacultyResponseDto]],
-        status_code=200,
-        summary="Find Faculties",
-        description="Get all faculties matching optional filter criteria",
-    )
-    async def find(
-        request: Request, controller: IFacultyController = Depends(_get_controller)
-    ):
-        return await controller.find(request)
-
-    @router.get(
-        "/search",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("View Faculties")),
-        ],
-        response_model=BaseResponseDto[list[FacultyResponseDto]],
-        status_code=200,
-        summary="Search Faculties",
-        description="Search faculties by name",
-    )
-    async def search(
-        request: Request, controller: IFacultyController = Depends(_get_controller)
-    ):
-        return await controller.search(request)
-
-    @router.get(
-        "/{faculty_id}",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("View Faculties")),
-        ],
-        response_model=BaseResponseDto[FacultyResponseDto],
-        status_code=200,
-        summary="Find Faculty",
-        description="Get a single faculty by its ID",
-    )
-    async def find_one(
-        request: Request, controller: IFacultyController = Depends(_get_controller)
-    ):
-        return await controller.find_one(request)
 
     return router

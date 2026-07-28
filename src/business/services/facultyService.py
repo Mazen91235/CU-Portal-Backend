@@ -10,7 +10,7 @@ from core.dtos.baseDtos import BaseResponseDto
 class FacultyService(IFacultyService):
     def __init__(
         self,
-        faculty_repository: IBaseRepository,
+        faculty_repository: IBaseRepository[Faculty],
         logger: IBaseLogger,
         helper_service: IHelperService,
     ):
@@ -149,20 +149,18 @@ class FacultyService(IFacultyService):
 
     async def create(self, data):
         try:
-            name = data.name.strip()
-            data.name = name
-
-            existing_res = await self.faculty_repository.find_one(
-                func.lower(Faculty.name) == name.lower()
+            data.name = data.name.strip()
+            existing_faculty_response = await self.faculty_repository.find_one(
+                func.lower(Faculty.name) == data.name.lower()
             )
-            if not existing_res.success:
+            if not existing_faculty_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=existing_res.code,
+                    code=existing_faculty_response.code,
                     data=None,
-                    message=existing_res.message,
+                    message=existing_faculty_response.message,
                 )
-            existing_faculty = existing_res.data
+            existing_faculty = existing_faculty_response.data
             if existing_faculty:
                 await self.logger.log(
                     action="Create",
@@ -179,15 +177,15 @@ class FacultyService(IFacultyService):
                     message="Faculty already exists",
                 )
 
-            create_res = await self.faculty_repository.create(data)
-            if not create_res.success:
+            create_faculty_response = await self.faculty_repository.create(data)
+            if not create_faculty_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=create_res.code,
+                    code=create_faculty_response.code,
                     data=None,
-                    message=create_res.message,
+                    message=create_faculty_response.message,
                 )
-            created_faculty = create_res.data
+            created_faculty = create_faculty_response.data
             if not created_faculty:
                 await self.logger.log(
                     action="Create",
@@ -232,20 +230,19 @@ class FacultyService(IFacultyService):
 
     async def update(self, data):
         try:
-            name = data.name.strip()
-
-            target_res = await self.faculty_repository.find_one(
+            data.name = data.name.strip()
+            faculty_response = await self.faculty_repository.find_one(
                 Faculty.id == data.id
             )
-            if not target_res.success:
+            if not faculty_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=target_res.code,
+                    code=faculty_response.code,
                     data=None,
-                    message=target_res.message,
+                    message=faculty_response.message,
                 )
-            target_faculty = target_res.data
-            if not target_faculty:
+            faculty = faculty_response.data
+            if not faculty:
                 await self.logger.log(
                     action="Update",
                     entity="Faculty",
@@ -261,18 +258,18 @@ class FacultyService(IFacultyService):
                     message="Faculty not found",
                 )
 
-            existing_res = await self.faculty_repository.find_one(
-                func.lower(Faculty.name) == name.lower()
+            existing_faculty_response = await self.faculty_repository.find_one(
+                func.lower(Faculty.name) == data.name.lower()
             )
-            if not existing_res.success:
+            if not existing_faculty_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=existing_res.code,
+                    code=existing_faculty_response.code,
                     data=None,
-                    message=existing_res.message,
+                    message=existing_faculty_response.message,
                 )
-            existing_faculty = existing_res.data
-            if existing_faculty and existing_faculty.id != data.id:
+            existing_faculty = existing_faculty_response.data
+            if existing_faculty and existing_faculty.id != faculty.id:
                 await self.logger.log(
                     action="Update",
                     entity="Faculty",
@@ -288,16 +285,18 @@ class FacultyService(IFacultyService):
                     message="Faculty with this name already exists",
                 )
 
-            target_faculty.name = name
+            faculty.name = data.name
 
-            update_res = await self.faculty_repository.update(target_faculty, ["name"])
-            if not update_res.success:
+            update_faculty_response = await self.faculty_repository.update(
+                faculty, ["name"]
+            )
+            if not update_faculty_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=update_res.code,
-                    message=update_res.message,
+                    code=update_faculty_response.code,
+                    message=update_faculty_response.message,
                 )
-            updated_faculty = update_res.data
+            updated_faculty = update_faculty_response.data
             if not updated_faculty:
                 await self.logger.log(
                     action="Update",
@@ -389,13 +388,13 @@ class FacultyService(IFacultyService):
                     message="Faculty cannot be deleted because it has users associated with it",
                 )
 
-            delete_res = await self.faculty_repository.delete(faculty)
-            if not delete_res.success:
+            delete_faculty_response = await self.faculty_repository.delete(faculty)
+            if not delete_faculty_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=delete_res.code,
+                    code=delete_faculty_response.code,
                     data=None,
-                    message=delete_res.message,
+                    message=delete_faculty_response.message,
                 )
 
             await self.logger.log(

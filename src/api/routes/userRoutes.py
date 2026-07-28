@@ -190,19 +190,6 @@ def create_user_admin_router(
     ):
         return await controller.find(request)
 
-    @router.get(
-        "/search",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
-        response_model=BaseResponseDto[list[UserResponseDto]],
-        status_code=200,
-        summary="Search Users",
-        description="Search for users based on query parameters",
-    )
-    async def search(
-        request: Request, controller: IUserController = Depends(_get_controller)
-    ):
-        return await controller.search(request)
-
     @router.patch(
         "/",
         dependencies=[
