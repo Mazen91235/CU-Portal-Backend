@@ -1,0 +1,105 @@
+import asyncio
+from typing import Callable
+from fastapi import Request, Response, HTTPException
+from fastapi.routing import APIRoute
+from fastapi.params import Depends
+from core.iLoggers.iBaseLogger import IBaseLogger
+from business.contextVars.userContext import user_context
+from business.contextVars.sessionContext import session_context
+
+DEFAULT_TIMEOUT_SECONDS = 2.0
+
+
+def set_timeout(seconds: float):
+    """Route-level dependency marker: overrides the default request timeout."""
+    async def _set_timeout_dependency():
+        return None
+    _set_timeout_dependency._is_timeout_marker = True
+    _set_timeout_dependency._timeout_seconds = seconds
+    return _set_timeout_dependency
+
+
+async def allow_inactive():
+    """Route-level dependency marker: skips the active-user enforcement."""
+    return None
+allow_inactive._is_allow_inactive_marker = True
+
+
+async def _enforce_active_user(request: Request):
+    user = user_context.get(None)
+    if user is not None and not user.status:
+        try:
+            logger: IBaseLogger = request.app.state.container.logger()
+            await logger.log(
+                action="ActiveCheck",
+                entity="User",
+                level="warning",
+                code=403,
+                message="Inactive user attempted request",
+                details={"user_id": user.id},
+                source="CustomRoute",
+            )
+        except Exception:
+            pass  
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not active. Please contact an admin.",
+        )
+    return None
+
+
+class CustomRoute(APIRoute):
+    def __init__(self, *args, dependencies=None, **kwargs):
+        dependencies = list(dependencies) if dependencies else []
+
+        timeout_seconds = DEFAULT_TIMEOUT_SECONDS
+        skip_active_check = False
+
+        for dep in dependencies:
+            func = getattr(dep, "dependency", None)
+            if getattr(func, "_is_timeout_marker", False):
+                timeout_seconds = func._timeout_seconds
+            if getattr(func, "_is_allow_inactive_marker", False):
+                skip_active_check = True
+
+        if not skip_active_check:
+            dependencies.append(Depends(_enforce_active_user))
+
+        self.timeout_seconds = timeout_seconds
+
+        super().__init__(*args, dependencies=dependencies, **kwargs)
+
+    def get_route_handler(self) -> Callable:
+        original_route_handler = super().get_route_handler()
+        timeout_seconds = self.timeout_seconds
+
+        async def custom_route_handler(request: Request) -> Response:
+            try:
+                return await asyncio.wait_for(
+                    original_route_handler(request), timeout=timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                try:
+                    logger: IBaseLogger = request.app.state.container.logger()
+                    await logger.log(
+                        action="Timeout",
+                        entity="Request",
+                        level="warning",
+                        code=504,
+                        message=f"Request timed out after {timeout_seconds}s",
+                        details={"path": str(request.url.path)},
+                        source="CustomRoute",
+                    )
+                except Exception:
+                    pass
+                session = session_context.get(None)
+                if session is not None and session.in_transaction():
+                    try:
+                        await asyncio.wait_for(session.rollback(), timeout=1.0)
+                    except Exception:
+                        pass
+                raise HTTPException(
+                    status_code=504,
+                    detail="The request took too long to process. Please try again.",
+                )
+        return custom_route_handler

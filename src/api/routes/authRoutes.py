@@ -4,12 +4,12 @@ from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.userDtos import UserResponseDto, UserTokenDetailsResponseDto
-
+from customRoute import CustomRoute
 
 def create_auth_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/auth", tags=["Authentication"])
+    router = APIRouter(prefix="/auth", tags=["Authentication"],route_class=CustomRoute)
 
     def _get_controller() -> IUserController:
         return controller_provider()
