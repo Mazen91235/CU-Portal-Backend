@@ -115,7 +115,7 @@ class MessageController(IMessageController):
                     message=response.message,
                 )
 
-            messages = response.data 
+            messages = response.data
             if not messages:
                 await self.logger.log(
                     action="Find",
@@ -170,8 +170,23 @@ class MessageController(IMessageController):
                     message=response.message,
                 )
 
-            await self.message_service.commit_transaction()
             message = response.data
+            if not message:
+                await self.message_service.rollback_transaction()
+                await self.logger.log(
+                    action="Create",
+                    entity="Message",
+                    level="error",
+                    code=500,
+                    message="Failed to create message",
+                    source="MessageController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="Failed to create message, please try again later",
+                )
+            await self.message_service.commit_transaction()
             message_mapped = Mapper[Message, MessageResponseDto].map(
                 message, MessageResponseDto, True
             )

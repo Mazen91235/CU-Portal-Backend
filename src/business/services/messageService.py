@@ -11,12 +11,12 @@ class MessageService(IMessageService):
     def __init__(
         self,
         message_repository: IBaseRepository,
-        helper_service: IHelperService,
         logger: IBaseLogger,
+        helper_service: IHelperService,
     ):
         self.message_repository = message_repository
-        self.helper_service = helper_service
         self.logger = logger
+        self.helper_service = helper_service
 
     # Transaction Functions
     async def begin_transaction(self):
@@ -42,7 +42,12 @@ class MessageService(IMessageService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Message, data, ["name", "email", "phone"], is_and, starts_with, is_exact
+                Message,
+                data,
+                ["name", "email", "phone", "content"],
+                is_and,
+                starts_with,
+                is_exact,
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Message, includes
@@ -101,7 +106,12 @@ class MessageService(IMessageService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Message, data, ["name", "email", "phone"], is_and, starts_with, is_exact
+                Message,
+                data,
+                ["name", "email", "phone", "content"],
+                is_and,
+                starts_with,
+                is_exact,
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Message, includes
@@ -185,7 +195,7 @@ class MessageService(IMessageService):
                 )
             data.email = validated_email.normalized.lower()
 
-            if not Validator.is_valid_phone_number(data.phone):
+            if not Validator.is_valid_phone_number(data.phone or ""):
                 await self.logger.log(
                     action="Create",
                     entity="Message",
@@ -210,7 +220,21 @@ class MessageService(IMessageService):
                     message=created_message_response.message,
                 )
             created_message = created_message_response.data
-
+            if not created_message:
+                await self.logger.log(
+                    action="Create",
+                    entity="Message",
+                    level="error",
+                    code=500,
+                    message="Failed to create message, repository returned no data",
+                    source="MessageService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="Failed to create message, please try again later.",
+                )
             await self.logger.log(
                 action="Create",
                 entity="Message",

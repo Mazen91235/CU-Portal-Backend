@@ -7,7 +7,7 @@ from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.messageDtos import MessageResponseDto
 
 
-def create_message_router(controller_provider, validation_middleware_provider):
+def create_message_public_router(controller_provider, validation_middleware_provider):
     router = APIRouter(prefix="/messages", tags=["Messages"])
 
     def _get_controller() -> IMessageController:
@@ -41,9 +41,6 @@ def create_message_router(controller_provider, validation_middleware_provider):
         return await controller.create(request)
 
     return router
-
-
-create_message_public_router = create_message_router
 
 
 def create_message_admin_router(
