@@ -6,11 +6,6 @@ from core.iControllers.bases.iUpdatableController import IUpdatableController
 
 
 class IUserController(IQueryableController, ICreatableController, IUpdatableController):
-    # Additional Query Functions
-    @abstractmethod
-    async def search(self, request: Request) -> Response:
-        pass
-
     # Auth Functions
     @abstractmethod
     async def verify_email(self, request: Request) -> Response:
