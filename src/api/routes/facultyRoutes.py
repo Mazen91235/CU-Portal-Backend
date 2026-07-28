@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from customRoute import CustomRoute
 from core.iControllers.iFacultyController import IFacultyController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -9,7 +10,7 @@ from core.dtos.facultyDtos import FacultyResponseDto
 def create_faculty_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/faculties", tags=["Faculties"])
+    router = APIRouter(prefix="/faculties", tags=["Faculties"], route_class=CustomRoute)
 
     def _get_controller() -> IFacultyController:
         return controller_provider()

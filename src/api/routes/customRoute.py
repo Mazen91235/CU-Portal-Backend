@@ -12,22 +12,28 @@ DEFAULT_TIMEOUT_SECONDS = 2.0
 
 def set_timeout(seconds: float):
     """Route-level dependency marker: overrides the default request timeout."""
+
     async def _set_timeout_dependency():
         return None
+
     _set_timeout_dependency._is_timeout_marker = True
     _set_timeout_dependency._timeout_seconds = seconds
     return _set_timeout_dependency
 
 
-async def allow_inactive():
-    """Route-level dependency marker: skips the active-user enforcement."""
-    return None
-allow_inactive._is_allow_inactive_marker = True
+def allow_inactive():
+    """Route-level dependency marker: skips active-user enforcement."""
+
+    async def _allow_inactive_dependency():
+        return None
+
+    _allow_inactive_dependency._is_allow_inactive_marker = True
+    return _allow_inactive_dependency
 
 
 async def _enforce_active_user(request: Request):
     user = user_context.get(None)
-    if user is not None and not user.status:
+    if user and not user.status:
         try:
             logger: IBaseLogger = request.app.state.container.logger()
             await logger.log(
@@ -40,7 +46,7 @@ async def _enforce_active_user(request: Request):
                 source="CustomRoute",
             )
         except Exception:
-            pass  
+            pass
         raise HTTPException(
             status_code=403,
             detail="Your account is not active. Please contact an admin.",
@@ -102,4 +108,5 @@ class CustomRoute(APIRoute):
                     status_code=504,
                     detail="The request took too long to process. Please try again.",
                 )
+
         return custom_route_handler
