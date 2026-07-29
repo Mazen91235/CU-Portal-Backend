@@ -11,13 +11,16 @@ from business.contextVars.sessionContext import session_context
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
 from api.controllers.userController import UserController
+from api.controllers.roleController import RoleController
 from api.routes.mainRoutes import (
     create_main_user_router,
     create_main_admin_router,
 )
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
+from api.routes.roleRoutes import create_role_admin_router
 from business.services.userService import UserService
+from business.services.roleService import RoleService
 from business.services.requestLimitService import RequestLimitService
 from business.services.helperService import HelperService
 from business.loggers.baseLogger import BaseLogger
@@ -26,6 +29,7 @@ from core.entities.log import Log
 from core.entities.user import User
 from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
+from core.entities.exactRole import ExactRole
 from core.entities.token import Token
 from core.entities.requestLimit import RequestLimit
 from core.utils.databaseHandler import DatabaseHandler
@@ -74,6 +78,12 @@ class Container(containers.DeclarativeContainer):
     role_repository = providers.Factory(
         BaseRepository, session=db_session, model=Role, session_factory=session_factory
     )
+    exact_role_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=ExactRole,
+        session_factory=session_factory,
+    )
     request_limit_repository = providers.Factory(
         BaseRepository,
         session=db_session,
@@ -95,6 +105,14 @@ class Container(containers.DeclarativeContainer):
         pending_repository=pending_user_repository,
         logger=logger,
         helper_service=helper_service,
+    )
+
+    role_service = providers.Factory(
+        RoleService,
+        role_repository=role_repository,
+        logger=logger,
+        helper_service=helper_service,
+        exact_role_repository=exact_role_repository,
     )
 
     request_limit_service = providers.Factory(
@@ -131,6 +149,10 @@ class Container(containers.DeclarativeContainer):
         UserController, user_service=user_service, logger=logger
     )
 
+    role_controller = providers.Factory(
+        RoleController, role_service=role_service, logger=logger
+    )
+
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
     main_admin_routes = providers.Factory(create_main_admin_router)
@@ -152,6 +174,13 @@ class Container(containers.DeclarativeContainer):
     user_admin_routes = providers.Factory(
         create_user_admin_router,
         controller_provider=user_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    role_admin_routes = providers.Factory(
+        create_role_admin_router,
+        controller_provider=role_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
