@@ -1,67 +1,40 @@
 from abc import abstractmethod
 from core.iServices.bases.iQueryableService import IQueryableService
+from core.iServices.bases.iCreatableService import ICreatableService
 from core.iServices.bases.iUpdatableService import IUpdatableService
 from core.entities.material import Material
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.materialDtos import (
-    MaterialExtendedResponseDto,
-    MaterialResponseDto,
-    MaterialMinimalResponseDto,
-    MaterialsCopyAndMoveRequest,
-    DriveMaterialPreviewDto,
+    MaterialsDeleteDto,
+    MaterialSearchDto,
+    MaterialsCopyOrMoveDto,
+    MaterialsFetchFromDriveDto,
 )
 
 
 class IMaterialService(
-    IQueryableService[Material, None],
+    IQueryableService[Material, MaterialSearchDto],
+    ICreatableService[Material],
     IUpdatableService[Material],
 ):
     @abstractmethod
-    async def create(self, data: Material) -> BaseResponseDto[MaterialResponseDto]:
+    async def delete_many(self, data: MaterialsDeleteDto) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod
-    async def delete_many(self, ids: list[int]) -> BaseResponseDto[bool]:
+    async def get_parents(self, material_id: int) -> BaseResponseDto[list[Material]]:
         pass
 
     @abstractmethod
-    async def get_by_id(
-        self, material_id: int
-    ) -> BaseResponseDto[MaterialExtendedResponseDto]:
+    async def move_many(self, data: MaterialsCopyOrMoveDto) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod
-    async def get_detail(
-        self, material_id: int
-    ) -> BaseResponseDto[MaterialResponseDto]:
-        pass
-
-    @abstractmethod
-    async def get_parents(
-        self, material_id: int
-    ) -> BaseResponseDto[list[MaterialMinimalResponseDto]]:
-        pass
-
-    @abstractmethod
-    async def move_many(
-        self, data: MaterialsCopyAndMoveRequest
-    ) -> BaseResponseDto[bool]:
-        pass
-
-    @abstractmethod
-    async def copy_many(
-        self, data: MaterialsCopyAndMoveRequest
-    ) -> BaseResponseDto[bool]:
-        pass
-
-    @abstractmethod
-    async def fetch_one_material_from_drive(
-        self, data
-    ) -> BaseResponseDto[DriveMaterialPreviewDto]:
+    async def copy_many(self, data: MaterialsCopyOrMoveDto) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod
     async def fetch_materials_from_drive(
-        self, data: DriveMaterialPreviewDto
-    ) -> BaseResponseDto[MaterialResponseDto]:
+        self, data: MaterialsFetchFromDriveDto
+    ) -> BaseResponseDto[bool]:
         pass

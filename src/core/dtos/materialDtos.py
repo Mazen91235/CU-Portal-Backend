@@ -8,17 +8,38 @@ if TYPE_CHECKING:
     from .userDtos import UserResponseDto
 
 
-class MaterialResponseDto(BaseModel):
-    id: int = Field(..., description="ID of the material")
-
-    name: str | None = Field(None, max_length=200, description="Name of the material")
+class MaterialCreateDto(BaseModel):
+    name: str = Field(
+        ..., min_length=1, max_length=200, description="Name of the material"
+    )
     type: str = Field(
-        ..., max_length=30, description="Type of the material (file, link, video, etc.)"
+        ...,
+        min_length=1,
+        max_length=30,
+        description="Type of the material (file, folder, youtube, drive, external.)",
     )
     url: str | None = Field(
-        None, max_length=255, description="Primary URL of the material"
+        None, max_length=255, description="Drive URL of the material"
+    )
+    subject_id: int | None = Field(
+        default=None, description="ID of the associated subject"
+    )
+    parent_id: int | None = Field(
+        default=None, description="ID of the parent material (for hierarchy)"
     )
 
+
+class MaterialResponseDto(BaseModel):
+    id: int = Field(..., description="ID of the material")
+    name: str | None = Field(None, max_length=200, description="Name of the material")
+    type: str = Field(
+        ...,
+        max_length=30,
+        description="Type of the material (file, folder, youtube, drive, external.)",
+    )
+    url: str | None = Field(
+        None, max_length=255, description="Drive URL of the material"
+    )
     details: dict | None = Field(
         default=None, description="Additional metadata about the material"
     )
@@ -29,6 +50,8 @@ class MaterialResponseDto(BaseModel):
     )
 
     # Relationships
+    author: UserResponseDto | None = Field(None, description="Author of the material")
+
     subject: SubjectResponseDto | None = Field(
         None, description="Subject associated with the material"
     )
@@ -54,93 +77,54 @@ class MaterialUpdateDto(BaseModel):
     url: str | None = Field(None, max_length=255, description="Updated URL")
 
 
-class MaterialMinimalResponseDto(BaseModel):
-    id: int = Field(..., description="ID of the material")
-
-    name: str | None = Field(None, description="Name of the material")
-    type: str = Field(..., description="Type of the material")
-    url: str | None = Field(None, max_length=255, description="Material URL")
-
-    created_at: datetime | None = Field(None, description="Creation timestamp")
-    modified_at: datetime | None = Field(
-        None, description="Last modification timestamp"
+class MaterialsDeleteDto(BaseModel):
+    material_ids: list[int] = Field(
+        ..., min_length=1, description="List of material IDs to delete"
     )
 
-    details: dict | None = Field(
-        default=None, description="Additional metadata about the material"
+
+class MaterialSearchDto(BaseModel):
+    id: int | None = Field(default=None, description="ID of the material to filter by")
+    name: str | None = Field(
+        default=None, max_length=200, description="Name of the material to filter by"
     )
-
-    parent_id: int | None = Field(None, description="Parent material ID")
-
-    model_config = {
-        "from_attributes": True,
-    }
-
-
-class MaterialExtendedResponseDto(BaseModel):
-    id: int = Field(..., description="ID of the material")
-
-    name: str | None = Field(None, max_length=200, description="Name of the material")
-    type: str = Field(
-        ..., max_length=30, description="Type of the material (file, link, video, etc.)"
+    type: str | None = Field(
+        default=None,
+        max_length=30,
+        description="Type of the material to filter by (file, folder, youtube, drive, external.)",
     )
-    url: str | None = Field(
-        None, max_length=255, description="Primary URL of the material"
+    subject_id: int | None = Field(
+        default=None, description="ID of the associated subject to filter by"
     )
-
-    details: dict | None = Field(
-        default=None, description="Additional metadata about the material"
-    )
-
-    created_at: datetime | None = Field(None, description="Creation timestamp")
-    modified_at: datetime | None = Field(
-        None, description="Last modification timestamp"
-    )
-
-    # Relationships
-    subject: SubjectResponseDto | None = Field(
-        None, description="Subject associated with the material"
-    )
-
-    parent: MaterialMinimalResponseDto | None = Field(
-        None, description="Parent material (for hierarchy)"
-    )
-
-    author: UserResponseDto | None = Field(None, description="Author of the material")
-
     parent_id: int | None = Field(
-        None, description="Parent material ID (for hierarchy)"
+        default=None, description="ID of the parent material to filter by"
+    )
+    created_at_from: datetime | None = Field(
+        default=None, description="Filter materials created after this date"
+    )
+    created_at_to: datetime | None = Field(
+        default=None, description="Filter materials created before this date"
+    )
+    updated_at_from: datetime | None = Field(
+        default=None, description="Filter materials updated after this date"
+    )
+    updated_at_to: datetime | None = Field(
+        default=None, description="Filter materials updated before this date"
     )
 
-    # Pydantic Configuration
-    model_config = {
-        "from_attributes": True,
-    }
 
-
-class MaterialsCopyAndMoveRequest(BaseModel):
+class MaterialsCopyOrMoveDto(BaseModel):
     material_ids: list[int] = Field(
         ..., min_length=1, description="List of material IDs"
     )
     destination_id: int | None = Field(None, description="Destination parent ID")
 
 
-class DriveMaterialPreviewDto(BaseModel):
-    """Preview metadata returned when fetching a single file/folder from Drive
-    before it's imported as a Material."""
-
-    id: str = Field(..., description="Google Drive file ID")
-    name: str = Field(..., description="File or folder name")
-    mime_type: str = Field(..., description="MIME type as reported by Drive")
-    file_type: str | None = Field(
-        None, description="Normalized file type (image, pdf, doc, folder, etc.)"
+class MaterialsFetchFromDriveDto(BaseModel):
+    url: str = Field(..., description="Drive URL to fetch materials from")
+    subject_id: int | None = Field(
+        None, description="ID of the associated subject for the fetched materials"
     )
-    size: str | None = Field(None, description="Human-readable file size")
-    web_content_link: str | None = Field(
-        None, description="Direct download link, if any"
+    parent_id: int | None = Field(
+        None, description="ID of the parent material for the fetched materials"
     )
-    web_view_link: str | None = Field(None, description="Drive view link")
-
-    model_config = {
-        "from_attributes": True,
-    }

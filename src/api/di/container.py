@@ -13,8 +13,8 @@ from api.routes.mainRoutes import (
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
 from api.routes.materialRoutes import (
-    create_material_admin_router,
     create_material_user_router,
+    create_material_admin_router,
 )
 from api.routes.messageRoutes import (
     create_message_public_router,
@@ -143,7 +143,8 @@ class Container(containers.DeclarativeContainer):
         MaterialService,
         material_repository=material_repository,
         subject_repository=subject_repository,
-        user_service=user_service,
+        role_repository=role_repository,
+        user_repository=user_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -154,7 +155,7 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
-    
+
     faculty_service = providers.Factory(
         FacultyService,
         faculty_repository=faculty_repository,
@@ -199,11 +200,11 @@ class Container(containers.DeclarativeContainer):
     material_controller = providers.Factory(
         MaterialController, material_service=material_service, logger=logger
     )
-    
+
     message_controller = providers.Factory(
         MessageController, message_service=message_service, logger=logger
     )
-    
+
     faculty_controller = providers.Factory(
         FacultyController, faculty_service=faculty_service, logger=logger
     )
@@ -238,6 +239,7 @@ class Container(containers.DeclarativeContainer):
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
+
     material_admin_routes = providers.Factory(
         create_material_admin_router,
         controller_provider=material_controller.provider,
@@ -256,7 +258,7 @@ class Container(containers.DeclarativeContainer):
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
-    
+
     faculty_admin_routes = providers.Factory(
         create_faculty_admin_router,
         controller_provider=faculty_controller.provider,

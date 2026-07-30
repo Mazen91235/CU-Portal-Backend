@@ -372,12 +372,25 @@ class HelperService(IHelperService[U]):
             if len(parts) > 1:
                 file_id_part = parts[1].split("/")[0]
                 return file_id_part
+        if "/folders/" in url:
+            parts = url.split("/folders/")
+            if len(parts) > 1:
+                folder_id_part = parts[1].split("/")[0]
+                return folder_id_part
         elif "id=" in url:
             parts = url.split("id=")
             if len(parts) > 1:
                 file_id_part = parts[1].split("&")[0]
                 return file_id_part
         return None
+
+    def get_file_url_from_id(self, file_id):
+        if not file_id:
+            return None
+        file_id = file_id.strip()
+        if not file_id:
+            return None
+        return f"https://drive.google.com/uc?export=view&id={file_id}"
 
     def get_file_type(self, mime_type):
         mime_type = mime_type.strip().lower()

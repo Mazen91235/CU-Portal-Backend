@@ -1,27 +1,18 @@
 import os
 from sqlalchemy import and_
-from sqlalchemy.orm import selectinload
 from core.iServices.iMaterialService import IMaterialService
-from core.iServices.iUserService import IUserService
+from core.iServices.iMaterialService import IMaterialService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.material import Material
 from core.entities.subject import Subject
+from core.entities.role import Role
+from core.entities.user import User
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.userDtos import UserHasPermissionsDto
+from core.models.fileModels import FetchedModel
 from core.utils.validator import Validator
-from core.dtos.materialDtos import (
-    MaterialUpdateDto,
-    MaterialResponseDto,
-    MaterialMinimalResponseDto,
-)
-
-
-class MaterialOperationError(Exception):
-    def __init__(self, message: str, code: int = 500):
-        super().__init__(message)
-        self.code = code
+from core.utils.fernetHandler import FernetHandler
 
 
 class MaterialService(IMaterialService):
@@ -29,13 +20,15 @@ class MaterialService(IMaterialService):
         self,
         material_repository: IBaseRepository[Material],
         subject_repository: IBaseRepository[Subject],
-        user_service: IUserService,
+        role_repository: IBaseRepository[Role],
+        user_repository: IBaseRepository[User],
         logger: IBaseLogger,
         helper_service: IHelperService,
     ):
         self.material_repository = material_repository
         self.subject_repository = subject_repository
-        self.user_service = user_service
+        self.role_repository = role_repository
+        self.user_repository = user_repository
         self.logger = logger
         self.helper_service = helper_service
 
@@ -49,536 +42,59 @@ class MaterialService(IMaterialService):
     async def rollback_transaction(self):
         await self.material_repository.rollback_transaction()
 
-    # Private Helpers
-    async def _generate_unique_name(
-        self,
-        subject_id: int,
-        parent_id: int | None,
-        material_type: str,
-        base_name: str,
-        exclude_id: int | None = None,
-    ) -> str:
-        if not base_name or base_name == "":
-            base_name = "Untitled"
-        base_name = base_name.strip()
-        if (
-            base_name.endswith(")")
-            and base_name.rfind("(") != -1
-            and base_name[base_name.rfind("(") + 1 : -1].isdigit()
-        ):
-            base_name = base_name[: base_name.rfind("(")].strip()
-
-        unique_name = base_name
-        counter = 1
-        while True:
-            conditions = [
-                Material.subject_id == subject_id,
-                Material.parent_id == parent_id,
-                Material.type == material_type,
-                Material.name == unique_name,
-            ]
-            if exclude_id is not None:
-                conditions.append(Material.id != exclude_id)
-            predicate = and_(*conditions)
-            existing_response = await self.material_repository.find_one(predicate)
-            if not existing_response.success or not existing_response.data:
-                return unique_name
-            unique_name = f"{base_name} ({counter})"
-            counter += 1
-
-    async def _count_descendants(
-        self, material_id: int, count_files: bool = True
-    ) -> int:
-
-        # BaseRepository.find() enforces pagination via offset/limit with no way to disable it.
-        # The limit=10000 used here is a hard cap, not optional — folders exceeding this size
-        # will return incomplete results.
-
-        count = 0
-        material_response = await self.material_repository.find_one(
-            Material.id == material_id
-        )
-        if not material_response.success:
-            raise Exception(material_response.message)
-        material = material_response.data
-        if not material:
-            return 0
-        if material.type == "folder":
-            children_response = await self.material_repository.find(
-                Material.parent_id == material.id, limit=10000
-            )
-            if not children_response.success:
-                raise Exception(children_response.message)
-            children = children_response.data or []
-            for child in children:
-                count += (
-                    1
-                    if count_files
-                    and child.type != "folder"
-                    or not count_files
-                    and child.type == "folder"
-                    else 0
-                )
-                count += await self._count_descendants(child.id, count_files)
-        return count
-
-    async def _fetch_parents(self, material_id: int) -> list[dict]:
-        parents = []
-        current_id = material_id
-        while current_id:
-            material_response = await self.material_repository.find_one(
-                Material.id == current_id
-            )
-            if not material_response.success:
-                raise Exception(material_response.message)
-            material = material_response.data
-            if material:
-                parents.append(material.min_to_dict())
-                current_id = material.parent_id
-            else:
-                current_id = None
-        parents.reverse()
-        return parents
-
-    async def _create_from_fetched_tree(
-        self,
-        fetched,
-        subject_id: int,
-        parent_id: int | None,
-        author_id: int,
-    ) -> Material:
-
-        is_folder = self.helper_service.verify_file_type(
-            fetched.data.mime_type, "folder"
-        )
-        material_type = "folder" if is_folder else "file"
-        unique_name = await self._generate_unique_name(
-            subject_id=subject_id,
-            parent_id=parent_id,
-            material_type=material_type,
-            base_name=fetched.data.name,
-        )
-
-        material = Material(
-            name=unique_name,
-            subject_id=subject_id,
-            parent_id=parent_id,
-            author_id=author_id,
-            type=material_type,
-            url=None if is_folder else fetched.data.web_view_link,
-            details=None if is_folder else {"file_data": fetched.data, "fetched": True},
-        )
-        create_response = await self.material_repository.create(material)
-        if not create_response.success:
-            raise Exception(create_response.message)
-        created_material = create_response.data
-        if not created_material:
-            raise Exception(
-                "Failed to create material while importing from Google Drive"
-            )
-
-        if is_folder:
-            for child in fetched.children or []:
-                await self._create_from_fetched_tree(
-                    child, subject_id, created_material.id, author_id
-                )
-
-        return created_material
-
-    async def _delete_recursive(self, material_id: int) -> None:
-        material_response = await self.material_repository.find_one(
-            Material.id == material_id,
-            includes=[selectinload(Material.author)],
-        )
-        if not material_response.success:
-            raise Exception(material_response.message)
-        material = material_response.data
-        if not material:
-            return  # Already gone — matches old "consider it deleted"
-
-        if material.type == "file" and not material.details.get("fetched", False):
-            access_token_response = await self.helper_service.get_google_access_token(
-                material.author.google_refresh_token or ""
-            )
-            if not access_token_response.success or not access_token_response.data:
-                raise Exception(
-                    f"Failed to delete material {material.name}. Please try again later."
-                )
-            access_token = access_token_response.data
-            file_id = self.helper_service.get_file_id_from_url(material.url)
-            removed_response = await self.helper_service.delete_file_from_drive(
-                access_token, file_id
-            )
-            if not removed_response.success or not removed_response.data:
-                raise Exception(
-                    f"Failed to delete material {material.name}. Please try again later."
-                )
-
-        if material.type == "folder":
-            children_response = await self.material_repository.find(
-                Material.parent_id == material.id, limit=10000
-            )
-            if not children_response.success:
-                raise Exception(children_response.message)
-            for child in children_response.data or []:
-                await self._delete_recursive(child.id)
-
-        delete_response = await self.material_repository.delete(material)
-        if not delete_response.success:
-            raise Exception(
-                f"Failed to delete material {material.name}. Please try again later."
-            )
-
-    async def _copy_recursive(
-        self,
-        material_id: int,
-        subject_id: int,
-        parent_id: int | None,
-        author_id: int,
-    ) -> Material:
-        material_response = await self.material_repository.find_one(
-            Material.id == material_id,
-            includes=[selectinload(Material.author)],
-        )
-        if not material_response.success:
-            raise Exception(material_response.message)
-        material = material_response.data
-        if not material:
-            raise Exception("Material not found")
-
-        new_name = await self._generate_unique_name(
-            subject_id=subject_id,
-            parent_id=parent_id,
-            material_type=material.type,
-            base_name=material.name,
-        )
-
-        new_url = material.url
-        details = dict(material.details) if material.details else {}
-
-        if material.type == "file":
-            file_id = self.helper_service.get_file_id_from_url(material.url)
-            if not file_id:
-                raise MaterialOperationError("Invalid Request.", code=400)
-            access_token_response = await self.helper_service.get_google_access_token(
-                material.author.google_refresh_token or ""
-            )
-            if not access_token_response.success or not access_token_response.data:
-                raise Exception("Failed to copy material(s).")
-            access_token = access_token_response.data
-            copied_file_response = await self.helper_service.copy_file_on_drive(
-                access_token, file_id
-            )
-            if not copied_file_response.success or not copied_file_response.data:
-                raise Exception("Failed to copy material(s).")
-            copied_file = copied_file_response.data
-            new_url = copied_file.web_view_link
-            details["file_data"] = copied_file
-
-        children = []
-        if material.type == "folder":
-            children_response = await self.material_repository.find(
-                Material.parent_id == material.id, limit=10000
-            )
-            if not children_response.success:
-                raise Exception(children_response.message)
-            children = children_response.data or []
-
-        new_material = Material(
-            name=new_name,
-            type=material.type,
-            subject_id=subject_id,
-            parent_id=parent_id,
-            author_id=author_id,
-            url=new_url,
-            details=details,
-        )
-        create_response = await self.material_repository.create(new_material)
-        if not create_response.success:
-            raise Exception(create_response.message)
-        created_material = create_response.data
-        if not created_material:
-            raise Exception("Failed to copy material(s).")
-
-        for child in children:
-            await self._copy_recursive(
-                child.id, subject_id, created_material.id, author_id
-            )
-
-        return created_material
-
     # CRUD Functions
-    async def update(self, data: MaterialUpdateDto):
+    async def find_one(
+        self,
+        data=None,
+        includes=None,
+        selects=None,
+        is_and=False,
+        starts_with=True,
+        is_exact=True,
+        order_by=None,
+        descending=False,
+    ):
         try:
-            current_user_id_response = await self.user_service.get_current_user_id()
-            if not current_user_id_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=current_user_id_response.code,
-                    data=None,
-                    message=current_user_id_response.message,
-                )
-            current_user_id = current_user_id_response.data
-
-            material_response = await self.material_repository.find_one(
-                Material.id == data.id,
-                includes=[
-                    selectinload(Material.subject),
-                    selectinload(Material.author),
-                ],
+            predicate = self.helper_service.generate_dynamic_predicate(
+                Material,
+                data,
+                ["name", "email", "phone"],
+                is_and,
+                starts_with,
+                is_exact,
             )
-            if not material_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=material_response.code,
-                    data=None,
-                    message=material_response.message,
-                )
-            material = material_response.data
-            if not material:
-                await self.logger.log(
-                    action="Update",
-                    entity="Material",
-                    level="warning",
-                    code=404,
-                    message="Material not found with this ID",
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False, code=404, data=None, message="Material not found"
-                )
-
-            if material.author_id != current_user_id:
-                has_permission_response = await self.user_service.has_permissions(
-                    UserHasPermissionsDto(required_permissions=["Manage All Materials"])
-                )
-                if (
-                    not has_permission_response.success
-                    or not has_permission_response.data
-                ):
-                    await self.logger.log(
-                        action="Update",
-                        entity="Material",
-                        level="warning",
-                        code=403,
-                        message="Unauthorized material update attempt by non-author user",
-                        details={
-                            "material_id": material.id,
-                            "author_id": material.author_id,
-                        },
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=403,
-                        data=None,
-                        message="You are not authorized to update this material",
-                    )
-
-            name = data.name
-            description = data.description
-            url = data.url
-            file = None
-            to_be_removed = False
-
-            if name and name != "":
-                material.name = await self._generate_unique_name(
-                    subject_id=material.subject_id,
-                    parent_id=material.parent_id,
-                    material_type=material.type,
-                    base_name=name,
-                    exclude_id=material.id,
-                )
-
-            if description and description != "":
-                material.details["description"] = description
-
-            if material.type == "file" and url and url != material.url:
-                file_id = self.helper_service.get_file_id_from_url(url)
-                if not file_id:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Invalid file URL provided for material update",
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid file provided",
-                    )
-                file_response = await self.helper_service.fetch_from_drive(file_id)
-                if not file_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=file_response.code,
-                        data=None,
-                        message=file_response.message,
-                    )
-                file = file_response.data
-                if not file:
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="File not found",
-                    )
-                to_be_removed = not material.details.get("fetched", False)
-                material.url = (
-                    url if material.details.get("fetched", False) else material.url
-                )
-                material.details["file_data"] = file
-                material.details["fetched"] = False
-
-            if (
-                material.type in ["youtube", "drive", "external"]
-                and url
-                and url != ""
-                and url != material.url
-            ):
-                if material.type == "youtube" and not Validator.is_youtube_url(url):
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid YouTube URL provided",
-                    )
-                if material.type == "drive" and not Validator.is_drive_url(url):
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid Google Drive URL provided",
-                    )
-                if material.type == "external" and not Validator.is_valid_url(url):
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid external URL provided",
-                    )
-                material.url = url
-
-            if to_be_removed:
-                access_token_response = (
-                    await self.helper_service.get_google_access_token(
-                        material.author.google_refresh_token or ""
-                    )
-                )
-                if not access_token_response.success or not access_token_response.data:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Material",
-                        level="error",
-                        code=500,
-                        message="Failed to get Google access token for removing old file",
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=500,
-                        data=None,
-                        message="Failed to update material. Please try again later.",
-                    )
-                access_token = access_token_response.data
-                old_file_id = self.helper_service.get_file_id_from_url(material.url)
-                removed_response = await self.helper_service.delete_file_from_drive(
-                    access_token, old_file_id
-                )
-                if not removed_response.success or not removed_response.data:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Material",
-                        level="error",
-                        code=500,
-                        message="Failed to remove old file from Drive during material update",
-                        details={
-                            "material_id": material.id,
-                            "old_url": material.url,
-                        },
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=500,
-                        data=None,
-                        message="Failed to update material. Please try again later.",
-                    )
-                material.url = url
-                material.details["file_data"] = file
-                material.details["fetched"] = False
-
-            material.author_id = current_user_id
-
-            update_response = await self.material_repository.update(
-                material, ["name", "details", "url", "author_id"]
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Material, includes
             )
-            if not update_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=update_response.code,
-                    data=None,
-                    message=update_response.message,
-                )
-            updated_material = update_response.data
-            if not updated_material:
-                await self.logger.log(
-                    action="Update",
-                    entity="Material",
-                    level="error",
-                    code=500,
-                    message="Failed to update material, no material returned after update",
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=500,
-                    data=None,
-                    message="An error occurred while updating material, please try again.",
-                )
-            is_file = updated_material.type != "folder"
-
-            await self.logger.log(
-                action="Update",
-                entity="Material",
-                level="info",
-                code=200,
-                message="Material updated successfully",
-                source="MaterialService",
+            dynamic_selects = self.helper_service.generate_dynamic_selects(
+                "Material", selects
             )
-
-            if is_file:
-                subject_name = (
-                    updated_material.subject.name if updated_material.subject else "N/A"
+            dynamic_order_by = self.helper_service.generate_dynamic_order_by(
+                "Material", order_by
+            )
+            result = await self.material_repository.find_one(
+                predicate,
+                dynamic_includes,
+                dynamic_selects,
+                dynamic_order_by,
+                descending,
+            )
+            if not result.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=result.code,
+                    data=None,
+                    message=result.message,
                 )
-                if updated_material.type == "file":
-                    share_link = (
-                        f"{os.environ.get('FRONTEND_URL')}/user/materials"
-                        f"?subject_id={updated_material.subject_id}"
-                        f"&parent_id={updated_material.parent_id if updated_material.parent_id else ''}"
-                        f"&material_id={updated_material.id}"
-                    )
-                else:
-                    share_link = updated_material.url
-                await self.helper_service.send_notification(
-                    "material",
-                    updated_material.id,
-                    f'Material "{updated_material.name}" has been updated for subject "{subject_name}".',
-                    share_link,
-                )
-
-            return BaseResponseDto(success=True, data=updated_material)
-
+            material = result.data
+            return BaseResponseDto(success=True, data=material)
         except Exception as ex:
             await self.logger.log(
-                action="Update",
+                action="FindOne",
                 entity="Material",
                 level="error",
                 code=500,
-                message=f"An error occurred while updating material",
+                message=f"An error occurred while finding material",
                 details={"error": str(ex)},
                 source="MaterialService",
             )
@@ -586,67 +102,65 @@ class MaterialService(IMaterialService):
                 success=False,
                 code=500,
                 data=None,
-                message="An error occurred while updating material",
+                message="An error occurred while finding material",
             )
 
-    async def get_by_id(self, material_id: int):
+    async def find(
+        self,
+        data=None,
+        includes=None,
+        selects=None,
+        is_and=False,
+        starts_with=True,
+        is_exact=True,
+        order_by=None,
+        descending=False,
+        page=1,
+        limit=50,
+    ):
         try:
-            material_response = await self.material_repository.find_one(
-                Material.id == material_id,
-                includes=[
-                    selectinload(Material.author),
-                    selectinload(Material.subject),
-                    selectinload(Material.parent),
-                ],
+            predicate = self.helper_service.generate_dynamic_predicate(
+                Material,
+                data,
+                ["name", "email", "phone"],
+                is_and,
+                starts_with,
+                is_exact,
             )
-            if not material_response.success:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Material, includes
+            )
+            dynamic_selects = self.helper_service.generate_dynamic_selects(
+                "Material", selects
+            )
+            dynamic_order_by = self.helper_service.generate_dynamic_order_by(
+                "Material", order_by
+            )
+            result = await self.material_repository.find(
+                predicate,
+                dynamic_includes,
+                dynamic_selects,
+                dynamic_order_by,
+                descending,
+                page,
+                limit,
+            )
+            if not result.success:
                 return BaseResponseDto(
                     success=False,
-                    code=material_response.code,
+                    code=result.code,
                     data=None,
-                    message=material_response.message,
+                    message=result.message,
                 )
-            material = material_response.data
-            if not material:
-                await self.logger.log(
-                    action="Get",
-                    entity="Material",
-                    level="warning",
-                    code=404,
-                    message="Material not found with this ID",
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False, code=404, data=None, message="Material not found"
-                )
-
-            material_dict = material.to_dict()
-            material_dict["details"]["files_count"] = await self._count_descendants(
-                material.id
-            )
-            material_dict["details"]["folders_count"] = await self._count_descendants(
-                material.id, False
-            )
-
-            await self.logger.log(
-                action="Get",
-                entity="Material",
-                level="info",
-                code=200,
-                message="Material retrieved successfully",
-                details={"material": material_dict},
-                source="MaterialService",
-            )
-
-            response_data = MaterialResponseDto(**material_dict)
-            return BaseResponseDto(success=True, code=200, data=response_data)
+            materials = result.data
+            return BaseResponseDto(success=True, data=materials)
         except Exception as ex:
             await self.logger.log(
-                action="Get",
+                action="Find",
                 entity="Material",
                 level="error",
                 code=500,
-                message="An error occurred while getting material by ID",
+                message=f"An error occurred while finding materials",
                 details={"error": str(ex)},
                 source="MaterialService",
             )
@@ -654,546 +168,254 @@ class MaterialService(IMaterialService):
                 success=False,
                 code=500,
                 data=None,
-                message="An error occurred while getting material by ID",
-            )
-
-    async def get_detail(self, material_id: int):
-        try:
-            current_user_id_response = await self.user_service.get_current_user_id()
-            if not current_user_id_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=current_user_id_response.code,
-                    data=None,
-                    message=current_user_id_response.message,
-                )
-            current_user_id = current_user_id_response.data
-
-            material_response = await self.material_repository.find_one(
-                Material.id == material_id,
-                includes=[selectinload(Material.subject).selectinload(Subject.users)],
-            )
-            if not material_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=material_response.code,
-                    data=None,
-                    message=material_response.message,
-                )
-            material = material_response.data
-            if not material:
-                await self.logger.log(
-                    action="Get",
-                    entity="Material",
-                    level="warning",
-                    code=404,
-                    message="Material not found with this ID",
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False, code=404, data=None, message="Material not found"
-                )
-
-            if not any(user.id == current_user_id for user in material.subject.users):
-                await self.logger.log(
-                    action="Get",
-                    entity="Material",
-                    level="warning",
-                    code=403,
-                    message="User tried to get material of a subject they are not enrolled in",
-                    details={
-                        "material_id": material_id,
-                        "subject_id": material.subject.id,
-                    },
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    data=None,
-                    message="You are not enrolled in this subject",
-                )
-
-            await self.logger.log(
-                action="Get",
-                entity="Material",
-                level="info",
-                code=200,
-                message="Material detail retrieved successfully",
-                details={"material_id": material_id},
-                source="MaterialService",
-            )
-
-            response_data = MaterialResponseDto(**material.user_to_dict())
-            return BaseResponseDto(success=True, code=200, data=response_data)
-        except Exception as ex:
-            await self.logger.log(
-                action="Get",
-                entity="Material",
-                level="error",
-                code=500,
-                message="An error occurred while getting material detail",
-                details={"error": str(ex)},
-                source="MaterialService",
-            )
-            return BaseResponseDto(
-                success=False,
-                code=500,
-                data=None,
-                message="An error occurred while retrieving material detail",
-            )
-
-    async def get_parents(self, material_id: int):
-        try:
-            material_response = await self.material_repository.find_one(
-                Material.id == material_id
-            )
-            if not material_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=material_response.code,
-                    data=None,
-                    message=material_response.message,
-                )
-            material = material_response.data
-            if not material:
-                await self.logger.log(
-                    action="Get",
-                    entity="Material Parents",
-                    level="warning",
-                    code=404,
-                    message="Material not found for fetching parents",
-                    details={"material_id": material_id},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False, code=404, data=None, message="Material not found"
-                )
-
-            parents = await self._fetch_parents(material.id)
-            response_data = [MaterialMinimalResponseDto(**p) for p in parents]
-
-            await self.logger.log(
-                action="Get",
-                entity="Material Parents",
-                level="info",
-                code=200,
-                message="Material parents retrieved successfully",
-                details={
-                    "material_id": material_id,
-                    "parents": [p["id"] for p in parents],
-                },
-                source="MaterialService",
-            )
-            return BaseResponseDto(success=True, code=200, data=response_data)
-        except Exception as ex:
-            await self.logger.log(
-                action="Get",
-                entity="Material Parents",
-                level="error",
-                code=500,
-                message="An error occurred while getting material parents",
-                details={"error": str(ex)},
-                source="MaterialService",
-            )
-            return BaseResponseDto(
-                success=False,
-                code=500,
-                data=None,
-                message="An error occurred while getting material parents",
+                message="An error occurred while finding materials",
             )
 
     async def create(self, data):
         try:
-            current_user_id_response = await self.user_service.get_current_user_id()
-            if not current_user_id_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=current_user_id_response.code,
-                    data=None,
-                    message=current_user_id_response.message,
-                )
-            current_user_id = current_user_id_response.data
-
-            name = data.get("name", "").strip()
-            description = data.get("description", "").strip()
-            url = data.get("url", "").strip()
-            type = (
-                data.get("type", "").strip().lower()
-            )  # File or Folder or YouTube or Drive or External
-            parent_id = data.get("parent_id", None)  # Parent Folder ID
-            subject_id = data.get("subject_id", None)  # Subject ID
-
-            if not type or type not in [
-                "file",
-                "folder",
-                "youtube",
-                "drive",
-                "external",
-            ]:
+            if not Validator.is_allowed_type(data.type):
                 await self.logger.log(
                     action="Create",
                     entity="Material",
                     level="error",
                     code=400,
-                    message="Invalid or Missing Material Type Provided for Material Creation",
-                    details=None,
+                    message=f"Invalid material type: {data.type}",
+                    details={"error": "Invalid material type"},
                     source="MaterialService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=400,
                     data=None,
-                    message="Material type must be one of the available types",
+                    message=f"Invalid material type: {data.type}",
                 )
-            if parent_id and int(parent_id) < 1:
+            if data.type != "folder" and not data.url:
                 await self.logger.log(
                     action="Create",
                     entity="Material",
                     level="error",
-                    code=404,
-                    message="Invalid Parent ID Provided for Material Creation",
-                    details=None,
+                    code=400,
+                    message=f"URL is required for material type: {data.type}",
+                    details={"error": "URL is required for non-folder materials"},
                     source="MaterialService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=404,
+                    code=400,
                     data=None,
-                    message="Invalid parent ID provided",
+                    message=f"URL is required for material type: {data.type}",
                 )
-            if not subject_id or int(subject_id) < 1:
+            if data.type != "folder" and not Validator.is_valid_url_based_on_type(
+                data.url or "", data.type
+            ):
                 await self.logger.log(
                     action="Create",
                     entity="Material",
                     level="error",
-                    code=404,
-                    message="Invalid Subject ID Provided for Material Creation",
-                    details=None,
+                    code=400,
+                    message=f"Invalid URL for material type: {data.type}",
+                    details={"error": "Invalid URL for the specified material type"},
                     source="MaterialService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=404,
+                    code=400,
                     data=None,
-                    message="Invalid subject ID provided",
+                    message=f"Invalid URL for material type: {data.type}",
                 )
-
-            file = None
-            if type == "folder":
-                if not name or name == "":
+            parent_id = None
+            if data.parent_id:
+                parent_material_response = await self.material_repository.find_one(
+                    Material.id == data.parent_id
+                )
+                if not parent_material_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=parent_material_response.code,
+                        data=None,
+                        message=parent_material_response.message,
+                    )
+                parent_material = parent_material_response.data
+                if not parent_material:
                     await self.logger.log(
                         action="Create",
                         entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Missing Required Fields for Folder Material Creation",
-                        details={"data": data},
+                        level="error",
+                        code=404,
+                        message=f"Parent material with ID {data.parent_id} not found",
+                        details={"error": "Parent material not found"},
                         source="MaterialService",
                     )
                     return BaseResponseDto(
                         success=False,
-                        code=400,
+                        code=404,
                         data=None,
-                        message="Folder Name is required",
+                        message=f"Parent material with ID {data.parent_id} not found",
                     )
-            elif type in ["youtube", "drive", "external"]:
-                if not name or name == "" or not url or url == "":
+                parent_id = parent_material.id
+            subject_id = None
+            if data.subject_id:
+                subject_response = await self.subject_repository.find_one(
+                    Subject.id == data.subject_id
+                )
+                if not subject_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=subject_response.code,
+                        data=None,
+                        message=subject_response.message,
+                    )
+                subject = subject_response.data
+                if not subject:
                     await self.logger.log(
                         action="Create",
                         entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Missing Required Fields for Link Material Creation",
-                        details={"data": data},
+                        level="error",
+                        code=404,
+                        message=f"Subject with ID {data.subject_id} not found",
+                        details={"error": "Subject not found"},
                         source="MaterialService",
                     )
                     return BaseResponseDto(
                         success=False,
-                        code=400,
+                        code=404,
                         data=None,
-                        message="Name and URL are required",
+                        message=f"Subject with ID {data.subject_id} not found",
                     )
-                if type == "youtube" and not Validator.is_youtube_url(url):
-                    await self.logger.log(
-                        action="Create",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Invalid YouTube URL Provided for Material Creation",
-                        details={"data": data},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid YouTube URL provided",
-                    )
-                if type == "drive" and not Validator.is_drive_url(url):
-                    await self.logger.log(
-                        action="Create",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Invalid Google Drive URL Provided for Material Creation",
-                        details={"data": data},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid Google Drive URL provided",
-                    )
-                if type == "external" and not Validator.is_valid_url(url):
-                    await self.logger.log(
-                        action="Create",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Invalid External URL Provided for Material Creation",
-                        details={"data": data},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid External URL provided",
-                    )
-            else:  # "file"
-                if not url or url == "":
-                    await self.logger.log(
-                        action="Create",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Missing Required Fields for File Material Creation",
-                        details={"data": data},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="File is required",
-                    )
-                file_id = self.helper_service.get_file_id_from_url(url)
+                subject_id = subject.id
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="Create",
+                    entity="Material",
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message=f"Failed to get logged in user",
+                    details={"error": logged_in_user_response.message},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_response.code,
+                    data=None,
+                    message=logged_in_user_response.message,
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="Create",
+                    entity="Material",
+                    level="error",
+                    code=401,
+                    message=f"Logged in user not found",
+                    details={"error": "Logged in user not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message=f"Logged in user not found",
+                )
+            data.author_id = logged_in_user.id
+            data.details = data.details or {}
+            data.details["fetched"] = False
+            if data.type == "file":
+                file_id = self.helper_service.get_file_id_from_url(data.url or "")
                 if not file_id:
                     await self.logger.log(
                         action="Create",
                         entity="Material",
-                        level="warning",
+                        level="error",
                         code=400,
-                        message="Invalid File URL Provided for Material Creation",
-                        details={"data": data},
+                        message=f"Invalid URL format: {data.url}",
+                        details={"error": "Could not extract file ID from URL"},
                         source="MaterialService",
                     )
                     return BaseResponseDto(
                         success=False,
                         code=400,
                         data=None,
-                        message="Invalid File Provided.",
+                        message=f"Invalid URL format: {data.url}",
                     )
                 file_response = await self.helper_service.fetch_from_drive(file_id)
                 if not file_response.success:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Material",
+                        level="error",
+                        code=file_response.code or 500,
+                        message=file_response.message or "",
+                        details={"error": file_response.error},
+                        source="MaterialService",
+                    )
                     return BaseResponseDto(
                         success=False,
                         code=file_response.code,
                         data=None,
                         message=file_response.message,
                     )
-                file = file_response.data
-                if not file or not file.data:
+                file_data = file_response.data
+                if not file_data:
                     await self.logger.log(
                         action="Create",
                         entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Invalid File URL Provided for Material Creation",
-                        details={"data": data},
+                        level="error",
+                        code=500,
+                        message=f"Failed to fetch file data from Google Drive for file ID: {file_id}",
+                        details={"error": "No data returned from Google Drive"},
                         source="MaterialService",
                     )
                     return BaseResponseDto(
                         success=False,
-                        code=400,
+                        code=500,
                         data=None,
-                        message="Invalid File Provided.",
+                        message=f"Failed to fetch file data from Google Drive, please try again later.",
                     )
-
-            if name and name != "" and len(name) > 200:
-                await self.logger.log(
-                    action="Create",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Material Name Exceeds Maximum Length for Material Creation",
-                    details={"data": data},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Material name exceeds maximum length of 200 characters",
-                )
-            if url and url != "" and len(url) > 200:
-                await self.logger.log(
-                    action="Create",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Material URL Exceeds Maximum Length for Material Creation",
-                    details={"data": data},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Material URL exceeds maximum length of 200 characters",
-                )
-
-            parent = None
-            if parent_id:
-                parent_response = await self.material_repository.find_one(
-                    Material.id == int(parent_id)
-                )
-                if not parent_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=parent_response.code,
-                        data=None,
-                        message=parent_response.message,
-                    )
-                parent = parent_response.data
-                if not parent or parent.type != "folder":
-                    await self.logger.log(
-                        action="Create",
-                        entity="Material",
-                        level="warning",
-                        code=404,
-                        message="Parent Folder Not Found for Material Creation",
-                        details={"parent_id": parent_id},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message="Parent folder not found",
-                    )
-
-            subject_response = await self.subject_repository.find_one(
-                Subject.id == int(subject_id)
+                file = file_data.data
+                data.details["file_data"] = file.model_dump()
+            unique_name_response = await self._generate_unique_name(
+                data.name, subject_id, parent_id
             )
-            if not subject_response.success:
+            if not unique_name_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=subject_response.code,
+                    code=unique_name_response.code,
                     data=None,
-                    message=subject_response.message,
+                    message=unique_name_response.message,
                 )
-            subject = subject_response.data
-            if not subject:
-                await self.logger.log(
-                    action="Create",
-                    entity="Material",
-                    level="warning",
-                    code=404,
-                    message="Subject Not Found for Material Creation",
-                    details={"subject_id": subject_id},
-                    source="MaterialService",
-                )
+            data.name = unique_name_response.data
+            created_material_response = await self.material_repository.create(data)
+            if not created_material_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=404,
+                    code=created_material_response.code,
                     data=None,
-                    message="Subject not found",
+                    message=created_material_response.message,
                 )
-
-            material_name_input = name if name and name != "" else file.data.name
-            unique_name = await self._generate_unique_name(
-                subject_id=subject.id,
-                parent_id=parent.id if parent_id else None,
-                material_type=type,
-                base_name=material_name_input,
-            )
-
-            material = Material(
-                name=unique_name,
-                type=type,
-                url=url if url and url != "" else None,
-                subject_id=subject.id,
-                author_id=current_user_id,
-                parent_id=parent.id if parent_id else None,
-                details={
-                    "description": (
-                        description if description and description != "" else None
-                    ),
-                    "file_data": file.data if file else None,
-                    "fetched": False,
-                },
-            )
-
-            create_response = await self.material_repository.create(material)
-            if not create_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=create_response.code,
-                    data=None,
-                    message=create_response.message,
-                )
-            created_material = create_response.data
+            created_material = created_material_response.data
             if not created_material:
                 await self.logger.log(
                     action="Create",
                     entity="Material",
                     level="error",
                     code=500,
-                    message="Failed to create material, no material returned after creation",
+                    message=f"Failed to create material, no data returned from repository",
+                    details={"error": "No data returned from repository"},
                     source="MaterialService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=500,
                     data=None,
-                    message="An error occurred while creating material, please try again.",
+                    message=f"Failed to create material, please try again later.",
                 )
-
-            is_file = created_material.type != "folder"
-
-            await self.logger.log(
-                action="Create",
-                entity="Material",
-                level="info",
+            return BaseResponseDto(
+                success=True,
                 code=201,
-                message="Material Created Successfully",
-                details={"material": created_material.min_to_dict()},
-                source="MaterialService",
+                data=created_material,
+                message="Material created successfully",
             )
-
-            if is_file:
-                if created_material.type == "file":
-                    share_link = (
-                        f"{os.environ.get('FRONTEND_URL')}/user/materials"
-                        f"?subject_id={subject.id}"
-                        f"&parent_id={parent.id if parent_id else ''}"
-                        f"&material_id={created_material.id}"
-                    )
-                else:
-                    share_link = created_material.url
-                await self.helper_service.send_notification(
-                    "material",
-                    created_material.id,
-                    f'New material "{created_material.name}" has been '
-                    f'uploaded for subject "{subject.name}".',
-                    share_link,
-                )
-
-            return BaseResponseDto(success=True, code=201, data=created_material)
-
         except Exception as ex:
             await self.logger.log(
                 action="Create",
@@ -1211,77 +433,783 @@ class MaterialService(IMaterialService):
                 message="An error occurred while creating material",
             )
 
-    async def fetch_materials_from_drive(self, data):
+    async def update(self, data):
         try:
-            current_user_id_response = await self.user_service.get_current_user_id()
-            if not current_user_id_response.success:
+            if not Validator.is_allowed_type(data.type):
+                await self.logger.log(
+                    action="Update",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message=f"Invalid material type: {data.type}",
+                    details={"error": "Invalid material type"},
+                    source="MaterialService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=current_user_id_response.code,
+                    code=400,
                     data=None,
-                    message=current_user_id_response.message,
+                    message=f"Invalid material type: {data.type}",
                 )
-            current_user_id = current_user_id_response.data
-
-            drive_url = data.get("drive_url", "").strip()
-            subject_id = data.get("subject_id", None)
-            parent_id = data.get("parent_id", None)
-
-            if (
-                not drive_url
-                or drive_url == ""
-                or not Validator.is_drive_url(drive_url)
+            if data.type != "folder" and not data.url:
+                await self.logger.log(
+                    action="Update",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message=f"URL is required for material type: {data.type}",
+                    details={"error": "URL is required for non-folder materials"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"URL is required for material type: {data.type}",
+                )
+            if data.type != "folder" and not Validator.is_valid_url_based_on_type(
+                data.url or "", data.type
             ):
                 await self.logger.log(
-                    action="Import",
+                    action="Update",
                     entity="Material",
-                    level="warning",
+                    level="error",
                     code=400,
-                    message="Invalid or Missing Google Drive URL Provided for Fetching Materials",
-                    details={"data": data},
+                    message=f"Invalid URL for material type: {data.type}",
+                    details={"error": "Invalid URL for the specified material type"},
                     source="MaterialService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=400,
                     data=None,
-                    message="Invalid Google Drive URL provided",
+                    message=f"Invalid URL for material type: {data.type}",
                 )
-            if not subject_id or int(subject_id) < 1:
+            existing_material_response = await self.material_repository.find_one(
+                Material.id == data.id
+            )
+            if not existing_material_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_material_response.code,
+                    data=None,
+                    message=existing_material_response.message,
+                )
+            existing_material = existing_material_response.data
+            if not existing_material:
                 await self.logger.log(
-                    action="Import",
+                    action="Update",
                     entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Invalid or Missing Subject ID Provided for Fetching Materials",
-                    details={"data": data},
+                    level="error",
+                    code=404,
+                    message=f"Material with ID {data.id} not found",
+                    details={"error": "Material not found"},
                     source="MaterialService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=400,
+                    code=404,
                     data=None,
-                    message="Invalid subject was provided.",
+                    message=f"Material with ID {data.id} not found",
                 )
-            if parent_id and int(parent_id) < 1:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
                 await self.logger.log(
-                    action="Import",
+                    action="Update",
                     entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Invalid Parent ID Provided for Fetching Materials",
-                    details={"data": data},
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message=f"Failed to get logged in user",
+                    details={"error": logged_in_user_response.message},
                     source="MaterialService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=400,
+                    code=logged_in_user_response.code,
                     data=None,
-                    message="Invalid parent ID provided",
+                    message=logged_in_user_response.message,
                 )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="Update",
+                    entity="Material",
+                    level="error",
+                    code=401,
+                    message=f"Logged in user not found",
+                    details={"error": "Logged in user not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message=f"Logged in user not found",
+                )
+            if existing_material.author_id != logged_in_user.id:
+                dynamic_includes = self.helper_service.generate_dynamic_includes(
+                    Role, ["exact_roles"]
+                )
+                logged_in_user_role_response = await self.role_repository.find_one(
+                    Role.id == logged_in_user.role_id, dynamic_includes
+                )
+                if not logged_in_user_role_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=logged_in_user_role_response.code,
+                        data=None,
+                        message=logged_in_user_role_response.message,
+                    )
+                logged_in_user_role = logged_in_user_role_response.data
+                if not logged_in_user_role:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Material",
+                        level="error",
+                        code=401,
+                        message=f"Logged in user's role not found",
+                        details={"error": "Logged in user's role not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=401,
+                        data=None,
+                        message=f"Logged in user's role not found",
+                    )
+                logged_in_user_permissions = [
+                    perm.name for perm in logged_in_user_role.exact_roles
+                ]
+                if "Manage All Materials" not in logged_in_user_permissions:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Material",
+                        level="error",
+                        code=403,
+                        message=f"User {logged_in_user.id} is not authorized to update material {existing_material.id}",
+                        details={
+                            "error": "User not authorized to update this material"
+                        },
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=403,
+                        data=None,
+                        message=f"You are not authorized to update this material.",
+                    )
+            if data.name and data.name != existing_material.name:
+                unique_name_response = await self._generate_unique_name(
+                    data.name, existing_material.subject_id, existing_material.parent_id
+                )
+                if not unique_name_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=unique_name_response.code,
+                        data=None,
+                        message=unique_name_response.message,
+                    )
+                data.name = unique_name_response.data
+            to_be_removed = ""
+            to_be_removed_data = {
+                "user_id": 0,
+                "file_id": "",
+            }
+            data.details = data.details or {}
+            data.details["fetched"] = False
+            if (
+                data.type == "file"
+                and existing_material.type == "file"
+                and data.url != existing_material.url
+            ):
+                file_id = self.helper_service.get_file_id_from_url(data.url or "")
+                if not file_id:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Invalid URL format: {data.url}",
+                        details={"error": "Could not extract file ID from URL"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Invalid URL format: {data.url}",
+                    )
+                file_response = await self.helper_service.fetch_from_drive(file_id)
+                if not file_response.success:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Material",
+                        level="error",
+                        code=file_response.code or 500,
+                        message=file_response.message or "",
+                        details={"error": file_response.error},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=file_response.code,
+                        data=None,
+                        message=file_response.message,
+                    )
+                file_data = file_response.data
+                if not file_data:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Material",
+                        level="error",
+                        code=500,
+                        message=f"Failed to fetch file data from Google Drive for file ID: {file_id}",
+                        details={"error": "No data returned from Google Drive"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message=f"Failed to fetch file data from Google Drive, please try again later.",
+                    )
+                file = file_data.data
+                data.details["file_data"] = file.model_dump()
+                to_be_removed = (
+                    existing_material.url
+                    if not existing_material.details.get("fetched")
+                    else ""
+                )
+                if to_be_removed:
+                    to_be_removed_data = {
+                        "user_id": existing_material.author_id,
+                        "file_id": self.helper_service.get_file_id_from_url(
+                            existing_material.url or ""
+                        ),
+                    }
+            data.author_id = logged_in_user.id
+            updated_material_response = await self.material_repository.update(
+                data, ["name", "type", "url", "details", "author_id"]
+            )
+            if not updated_material_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=updated_material_response.code,
+                    data=None,
+                    message=updated_material_response.message,
+                )
+            updated_material = updated_material_response.data
+            if not updated_material:
+                await self.logger.log(
+                    action="Update",
+                    entity="Material",
+                    level="error",
+                    code=500,
+                    message=f"Failed to update material, no data returned from repository",
+                    details={"error": "No data returned from repository"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message=f"Failed to update material, please try again later.",
+                )
+            if to_be_removed:
+                await self._remove_files([to_be_removed_data])
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=updated_material,
+                message="Material updated successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="Update",
+                entity="Material",
+                level="error",
+                code=500,
+                message=f"An error occurred while updating material",
+                details={"error": str(ex)},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while updating material",
+            )
 
+    async def delete_many(self, data):
+        try:
+            material_ids = data.material_ids
+            files = []
+            for material_id in material_ids:
+                existing_material_response = await self.material_repository.find_one(
+                    Material.id == material_id
+                )
+                if not existing_material_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=existing_material_response.code,
+                        data=None,
+                        message=existing_material_response.message,
+                    )
+                existing_material = existing_material_response.data
+                if not existing_material:
+                    await self.logger.log(
+                        action="DeleteMany",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Material with ID {material_id} not found",
+                        details={"error": "Material not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Material with ID {material_id} not found",
+                    )
+                logged_in_user_response = await self.helper_service.get_logged_in_user()
+                if not logged_in_user_response.success:
+                    await self.logger.log(
+                        action="DeleteMany",
+                        entity="Material",
+                        level="error",
+                        code=logged_in_user_response.code or 500,
+                        message=f"Failed to get logged in user",
+                        details={"error": logged_in_user_response.message},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=logged_in_user_response.code,
+                        data=None,
+                        message=logged_in_user_response.message,
+                    )
+                logged_in_user = logged_in_user_response.data
+                if not logged_in_user:
+                    await self.logger.log(
+                        action="DeleteMany",
+                        entity="Material",
+                        level="error",
+                        code=401,
+                        message=f"Logged in user not found",
+                        details={"error": "Logged in user not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=401,
+                        data=None,
+                        message=f"Logged in user not found",
+                    )
+                if existing_material.author_id != logged_in_user.id:
+                    dynamic_includes = self.helper_service.generate_dynamic_includes(
+                        Role, ["exact_roles"]
+                    )
+                    logged_in_user_role_response = await self.role_repository.find_one(
+                        Role.id == logged_in_user.role_id, dynamic_includes
+                    )
+                    if not logged_in_user_role_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=logged_in_user_role_response.code,
+                            data=None,
+                            message=logged_in_user_role_response.message,
+                        )
+                    logged_in_user_role = logged_in_user_role_response.data
+                    if not logged_in_user_role:
+                        await self.logger.log(
+                            action="DeleteMany",
+                            entity="Material",
+                            level="error",
+                            code=401,
+                            message=f"Logged in user's role not found",
+                            details={"error": "Logged in user's role not found"},
+                            source="MaterialService",
+                        )
+                        return BaseResponseDto(
+                            success=False,
+                            code=401,
+                            data=None,
+                            message=f"Logged in user's role not found",
+                        )
+                    logged_in_user_permissions = [
+                        perm.name for perm in logged_in_user_role.exact_roles
+                    ]
+                    if "Manage All Materials" not in logged_in_user_permissions:
+                        await self.logger.log(
+                            action="DeleteMany",
+                            entity="Material",
+                            level="error",
+                            code=403,
+                            message=f"User {logged_in_user.id} is not authorized to delete material {existing_material.id}",
+                            details={
+                                "error": "User not authorized to delete this material"
+                            },
+                            source="MaterialService",
+                        )
+                        return BaseResponseDto(
+                            success=False,
+                            code=403,
+                            data=None,
+                            message=f"You are not authorized to delete this material.",
+                        )
+                delete_response = await self._recursive_delete(material_id, files)
+                if not delete_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=delete_response.code,
+                        data=None,
+                        message=delete_response.message,
+                    )
+            await self._remove_files(files)
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Materials deleted successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="DeleteMany",
+                entity="Material",
+                level="error",
+                code=500,
+                message=f"An error occurred while deleting materials",
+                details={"error": str(ex)},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while deleting materials",
+            )
+
+    async def get_parents(self, material_id):
+        try:
+            parents = []
+            parents_response = await self._recursive_get_parents(material_id, parents)
+            if not parents_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=parents_response.code,
+                    data=None,
+                    message=parents_response.message,
+                )
+            parents = parents_response.data
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=parents,
+                message="Parent materials fetched successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="GetParents",
+                entity="Material",
+                level="error",
+                code=500,
+                message=f"An error occurred while fetching parent materials",
+                details={"error": str(ex)},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while fetching parent materials",
+            )
+
+    async def move_many(self, data):
+        try:
+            material_ids = data.material_ids
+            destination_id = data.destination_id
+            for material_id in material_ids:
+                existing_material_response = await self.material_repository.find_one(
+                    Material.id == material_id
+                )
+                if not existing_material_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=existing_material_response.code,
+                        data=None,
+                        message=existing_material_response.message,
+                    )
+                existing_material = existing_material_response.data
+                if not existing_material:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Material with ID {material_id} not found",
+                        details={"error": "Material not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Material with ID {material_id} not found",
+                    )
+                destination_material_response = await self.material_repository.find_one(
+                    Material.id == destination_id
+                )
+                if not destination_material_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=destination_material_response.code,
+                        data=None,
+                        message=destination_material_response.message,
+                    )
+                destination_material = destination_material_response.data
+                if not destination_material:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Destination material with ID {destination_id} not found",
+                        details={"error": "Destination material not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Destination material with ID {destination_id} not found",
+                    )
+                if destination_material.type != "folder":
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Destination material with ID {destination_id} is not a folder",
+                        details={"error": "Destination material is not a folder"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Destination must be a folder. Material with ID {destination_id} is not a folder.",
+                    )
+                existing_material.parent_id = destination_id
+                update_response = await self.material_repository.update(
+                    existing_material, ["parent_id"]
+                )
+                if not update_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=update_response.code,
+                        data=None,
+                        message=update_response.message,
+                    )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Materials moved successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="MoveMany",
+                entity="Material",
+                level="error",
+                code=500,
+                message=f"An error occurred while moving materials",
+                details={"error": str(ex)},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while moving materials",
+            )
+
+    async def copy_many(self, data):
+        try:
+            material_ids = data.material_ids
+            destination_id = data.destination_id
+            destination_material_response = await self.material_repository.find_one(
+                Material.id == destination_id
+            )
+            if not destination_material_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=destination_material_response.code,
+                    data=None,
+                    message=destination_material_response.message,
+                )
+            destination_material = destination_material_response.data
+            if not destination_material:
+                await self.logger.log(
+                    action="CopyMany",
+                    entity="Material",
+                    level="error",
+                    code=404,
+                    message=f"Destination material with ID {destination_id} not found",
+                    details={"error": "Destination material not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"Destination material with ID {destination_id} not found",
+                )
+            if destination_material.type != "folder":
+                await self.logger.log(
+                    action="CopyMany",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message=f"Destination material with ID {destination_id} is not a folder",
+                    details={"error": "Destination material is not a folder"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"Destination material with ID {destination_id} is not a folder",
+                )
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="CopyMany",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message="Failed to retrieve logged-in user",
+                    details={"error": "Failed to retrieve logged-in user"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Failed to retrieve logged-in user",
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="CopyMany",
+                    entity="Material",
+                    level="error",
+                    code=401,
+                    message="Logged-in user not found",
+                    details={"error": "Logged-in user not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message="Logged-in user not found",
+                )
+            author_id = logged_in_user.id
+            access_token_response = await self.helper_service.get_google_access_token(
+                FernetHandler.decrypt(logged_in_user.google_refresh_token or "")
+            )
+            if not access_token_response.success:
+                await self.logger.log(
+                    action="CopyMany",
+                    entity="Material",
+                    level="error",
+                    code=access_token_response.code or 500,
+                    message="Failed to retrieve Google access token",
+                    details={"error": access_token_response.message},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=access_token_response.code,
+                    data=None,
+                    message=access_token_response.message,
+                )
+            access_token = access_token_response.data
+            if not access_token:
+                await self.logger.log(
+                    action="CopyMany",
+                    entity="Material",
+                    level="error",
+                    code=500,
+                    message="Google access token is None",
+                    details={"error": "Google access token is None"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="Failed to retrieve Google access token",
+                )
+            for material_id in material_ids:
+                copy_response = await self._recursive_copy(
+                    material_id, destination_material.id, author_id, access_token
+                )
+                if not copy_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=copy_response.code,
+                        data=None,
+                        message=copy_response.message,
+                    )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=None,
+                message="Files copied successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="CopyMany",
+                entity="Material",
+                level="error",
+                code=500,
+                message=f"An error occurred while copying materials",
+                details={"error": str(ex)},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while copying materials",
+            )
+
+    async def fetch_materials_from_drive(self, data):
+        try:
+            url = data.url
+            subject_id = data.subject_id
+            parent_id = data.parent_id
+            file_id = self.helper_service.get_file_id_from_url(url)
+            if not file_id:
+                await self.logger.log(
+                    action="FetchMaterialsFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message=f"Invalid URL format: {url}",
+                    details={"error": "Could not extract file ID from URL"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"Invalid URL format: {url}",
+                )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == int(subject_id)
+                Subject.id == subject_id
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -1293,22 +1221,24 @@ class MaterialService(IMaterialService):
             subject = subject_response.data
             if not subject:
                 await self.logger.log(
-                    action="Import",
+                    action="FetchMaterialsFromDrive",
                     entity="Material",
-                    level="warning",
+                    level="error",
                     code=404,
-                    message="Subject Not Found for Fetching Materials",
-                    details={"subject_id": subject_id},
+                    message=f"Subject with ID {subject_id} not found",
+                    details={"error": "Subject not found"},
                     source="MaterialService",
                 )
                 return BaseResponseDto(
-                    success=False, code=404, data=None, message="Subject not found"
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"Subject with ID {subject_id} not found",
                 )
-
             parent = None
             if parent_id:
                 parent_response = await self.material_repository.find_one(
-                    Material.id == int(parent_id)
+                    Material.id == parent_id
                 )
                 if not parent_response.success:
                     return BaseResponseDto(
@@ -1318,108 +1248,114 @@ class MaterialService(IMaterialService):
                         message=parent_response.message,
                     )
                 parent = parent_response.data
-                if not parent or parent.type != "folder":
+                if not parent:
                     await self.logger.log(
-                        action="Import",
+                        action="FetchMaterialsFromDrive",
                         entity="Material",
-                        level="warning",
+                        level="error",
                         code=404,
-                        message="Parent Folder Not Found for Fetching Materials",
-                        details={"parent_id": parent_id},
+                        message=f"Parent material with ID {parent_id} not found",
+                        details={"error": "Parent material not found"},
                         source="MaterialService",
                     )
                     return BaseResponseDto(
                         success=False,
                         code=404,
                         data=None,
-                        message="Parent folder not found",
+                        message=f"Parent material with ID {parent_id} not found",
                     )
-
-            file_id = Validator.get_drive_file_id(drive_url)
-            if not file_id:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
                 await self.logger.log(
-                    action="Import",
+                    action="FetchMaterialsFromDrive",
                     entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Invalid Google Drive URL Provided for Fetching Materials",
-                    details={"data": data},
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message=f"Failed to get logged in user",
+                    details={"error": logged_in_user_response.message},
                     source="MaterialService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=400,
+                    code=logged_in_user_response.code,
                     data=None,
-                    message="Invalid Google Drive URL provided",
+                    message=logged_in_user_response.message,
                 )
-
-            fetched_response = await self.helper_service.fetch_from_drive(file_id)
-            if not fetched_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=fetched_response.code,
-                    data=None,
-                    message=fetched_response.message,
-                )
-            fetched = fetched_response.data
-            if not fetched or not fetched.data:
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
                 await self.logger.log(
-                    action="Import",
+                    action="FetchMaterialsFromDrive",
                     entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Invalid Fetched Data From Google Drive",
-                    details={"data": data},
+                    level="error",
+                    code=401,
+                    message=f"Logged in user not found",
+                    details={"error": "Logged in user not found"},
                     source="MaterialService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=400,
+                    code=401,
                     data=None,
-                    message="Invalid Fetched Data From Google Drive.",
+                    message=f"Logged in user not found",
                 )
-
-            root_material = await self._create_from_fetched_tree(
-                fetched,
-                subject.id,
-                parent.id if parent_id else None,
-                current_user_id,
+            author_id = logged_in_user.id
+            fetched_data_response = await self.helper_service.fetch_from_drive(file_id)
+            if not fetched_data_response.success:
+                await self.logger.log(
+                    action="FetchMaterialsFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=fetched_data_response.code or 500,
+                    message=f"Failed to fetch data from Google Drive for file ID {file_id}",
+                    details={"error": fetched_data_response.message},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=fetched_data_response.code,
+                    data=None,
+                    message=fetched_data_response.message,
+                )
+            fetched_data = fetched_data_response.data
+            if not fetched_data:
+                await self.logger.log(
+                    action="FetchMaterialsFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=500,
+                    message=f"Failed to fetch data from Google Drive for file ID {file_id}",
+                    details={"error": "No data returned from Google Drive"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message=f"Failed to fetch data from Google Drive, please try again later.",
+                )
+            create_response = await self._recursive_create_from_drive(
+                fetched_data, subject_id, parent_id, author_id
             )
-
-            await self.logger.log(
-                action="Import",
-                entity="Material",
-                level="info",
-                code=201,
-                message="Materials Fetched from Google Drive and Created Successfully",
-                details={
-                    "subject_id": subject.id,
-                    "parent_id": parent.id if parent_id else None,
-                },
-                source="MaterialService",
+            if not create_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_response.code,
+                    data=None,
+                    message=create_response.message,
+                )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Materials fetched and created successfully from Google Drive",
             )
-
-            share_link = (
-                f"{os.environ.get('FRONTEND_URL')}/user/materials"
-                f"?subject_id={subject.id}"
-                f"&parent_id={parent.id if parent_id else ''}"
-            )
-            await self.helper_service.send_notification(
-                "material",
-                parent.id if parent_id else None,
-                f'New materials have been fetched from Google Drive for subject "{subject.name}".',
-                share_link,
-            )
-
-            return BaseResponseDto(success=True, code=201, data=root_material)
-
         except Exception as ex:
             await self.logger.log(
-                action="Import",
+                action="FetchMaterialsFromDrive",
                 entity="Material",
                 level="error",
                 code=500,
-                message="An error occurred while fetching materials from google drive",
+                message=f"An error occurred while fetching materials from Google Drive",
                 details={"error": str(ex)},
                 source="MaterialService",
             )
@@ -1427,106 +1363,64 @@ class MaterialService(IMaterialService):
                 success=False,
                 code=500,
                 data=None,
-                message="An error occurred while fetching materials from google drive",
+                message="An error occurred while fetching materials from Google Drive",
             )
 
-    async def fetch_one_material_from_drive(self, data):
+    # Material Specific Functions
+    async def _generate_unique_name(
+        self, name: str | None, subject_id: int | None, parent_id: int | None
+    ) -> BaseResponseDto[str]:
         try:
-            drive_url = data.get("drive_url", "").strip()
+            if not name:
+                name = "Untitled"
+            name = name.strip()
             if (
-                not drive_url
-                or drive_url == ""
-                or not Validator.is_drive_url(drive_url)
+                name.endswith(")")
+                or name.rfind("(") != -1
+                and Validator.is_int(name[name.rfind("(") + 1 : -1])
             ):
-                await self.logger.log(
-                    action="Preview",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Invalid or Missing Google Drive URL Provided for Fetching Material",
-                    details={"data": data},
-                    source="MaterialService",
+                name = name[: name.rfind("(")].strip()
+            while True:
+                existing_material_response = await self.material_repository.find_one(
+                    and_(
+                        Material.name == name,
+                        Material.subject_id == subject_id,
+                        Material.parent_id == parent_id,
+                    )
                 )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Invalid Google Drive URL provided",
-                )
-
-            file_id = Validator.get_drive_file_id(drive_url)
-            if not file_id:
-                await self.logger.log(
-                    action="Preview",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Failed to Extract File ID from Google Drive URL",
-                    details={"data": data},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Invalid Google Drive URL provided",
-                )
-
-            fetched_response = await self.helper_service.fetch_from_drive(file_id)
-            if not fetched_response.success:
-                await self.logger.log(
-                    action="Preview",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Failed to Fetch Material from Google Drive",
-                    details={"data": data},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Failed to fetch material from Google Drive",
-                )
-
-            fetched = fetched_response.data
-            if not fetched or not fetched.data:
-                await self.logger.log(
-                    action="Preview",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Invalid Fetched Data From Google Drive",
-                    details={"data": data},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Invalid Fetched Data From Google Drive.",
-                )
-
-            await self.logger.log(
-                action="Preview",
-                entity="Material",
-                level="info",
-                code=200,
-                message="Material Fetched from Google Drive Successfully",
-                details={"file_data": fetched.model_dump()},
-                source="MaterialService",
-            )
-
-            return BaseResponseDto(success=True, code=200, data=fetched)
-
+                if not existing_material_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=existing_material_response.code,
+                        data=None,
+                        message=existing_material_response.message,
+                    )
+                existing_material = existing_material_response.data
+                if not existing_material:
+                    return BaseResponseDto(
+                        success=True,
+                        code=200,
+                        data=name,
+                        message="Unique name generated successfully",
+                    )
+                if name.endswith(")"):
+                    base_name = name[: name.rfind("(")].strip()
+                    count_str = name[name.rfind("(") + 1 : -1]
+                    if Validator.is_int(count_str):
+                        count = int(count_str) + 1
+                    else:
+                        count = 1
+                else:
+                    base_name = name
+                    count = 1
+                name = f"{base_name} ({count})"
         except Exception as ex:
             await self.logger.log(
-                action="Preview",
+                action="GenerateUniqueName",
                 entity="Material",
                 level="error",
                 code=500,
-                message="An error occurred while fetching material from Google Drive",
+                message=f"An error occurred while generating unique name for material",
                 details={"error": str(ex)},
                 source="MaterialService",
             )
@@ -1534,99 +1428,168 @@ class MaterialService(IMaterialService):
                 success=False,
                 code=500,
                 data=None,
-                message="An error occurred while fetching material from Google Drive",
+                message="An error occurred while generating unique name for material",
             )
 
-    async def delete_many(self, ids: list[int]):
+    async def _remove_files(self, files: list) -> None:
         try:
-            current_user_id_response = await self.user_service.get_current_user_id()
-            if not current_user_id_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=current_user_id_response.code,
-                    data=None,
-                    message=current_user_id_response.message,
-                )
-            current_user_id = current_user_id_response.data
-
-            for material_id in ids:
-                material_response = await self.material_repository.find_one(
-                    Material.id == material_id,
-                    includes=[selectinload(Material.author)],
-                )
-                if not material_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=material_response.code,
-                        data=None,
-                        message=material_response.message,
-                    )
-                material = material_response.data
-                if not material:
+            for file in files:
+                user_id = file.get("user_id")
+                file_id = file.get("file_id")
+                if not user_id or not file_id:
                     await self.logger.log(
-                        action="Delete",
+                        action="RemoveFiles",
                         entity="Material",
-                        level="warning",
-                        code=404,
-                        message="Material not found for deletion",
-                        details={"material_id": material_id},
+                        level="error",
+                        code=400,
+                        message=f"Invalid file data: {file}",
+                        details={"error": "Invalid file data"},
                         source="MaterialService",
                     )
-                    return BaseResponseDto(
-                        success=False,
+                    return
+                user_response = await self.user_repository.find_one(User.id == user_id)
+                if not user_response.success:
+                    return
+                user = user_response.data
+                if not user:
+                    await self.logger.log(
+                        action="RemoveFiles",
+                        entity="Material",
+                        level="error",
                         code=404,
-                        data=None,
-                        message="Material(s) not found",
+                        message=f"User with ID {user_id} not found",
+                        details={"error": "User not found"},
+                        source="MaterialService",
                     )
-
-                if material.author_id != current_user_id:
-                    has_permission_response = await self.user_service.has_permissions(
-                        UserHasPermissionsDto(
-                            required_permissions=["Manage All Materials"]
-                        )
+                    return
+                access_token_response = (
+                    await self.helper_service.get_google_access_token(
+                        FernetHandler.decrypt(user.google_refresh_token or "")
                     )
-                    if (
-                        not has_permission_response.success
-                        or not has_permission_response.data
-                    ):
-                        await self.logger.log(
-                            action="Delete",
-                            entity="Material",
-                            level="warning",
-                            code=403,
-                            message="Unauthorized material deletion attempt by non-author user",
-                            details={
-                                "material_id": material_id,
-                                "author_id": material.author_id,
-                            },
-                            source="MaterialService",
-                        )
-                        return BaseResponseDto(
-                            success=False,
-                            code=403,
-                            data=None,
-                            message=f"You are not authorized to delete this material {material.name}",
-                        )
-
-                await self._delete_recursive(material_id)
-
-            await self.logger.log(
-                action="Delete",
-                entity="Material",
-                level="info",
-                code=200,
-                message="Material(s) deleted successfully",
-                details={"material_ids": ids},
-                source="MaterialService",
-            )
-            return BaseResponseDto(success=True, code=200, data=True)
+                )
+                if not access_token_response.success:
+                    return
+                access_token = access_token_response.data
+                if not access_token:
+                    await self.logger.log(
+                        action="RemoveFiles",
+                        entity="Material",
+                        level="error",
+                        code=500,
+                        message=f"Failed to retrieve Google access token for user with ID {user_id}",
+                        details={"error": "Failed to retrieve Google access token"},
+                        source="MaterialService",
+                    )
+                    return
+                delete_file_response = await self.helper_service.delete_file_from_drive(
+                    access_token, file_id
+                )
+                if not delete_file_response.success:
+                    await self.logger.log(
+                        action="RemoveFiles",
+                        entity="Material",
+                        level="error",
+                        code=delete_file_response.code or 500,
+                        message=delete_file_response.message or "",
+                        details={"error": delete_file_response.error},
+                        source="MaterialService",
+                    )
         except Exception as ex:
             await self.logger.log(
-                action="Delete",
+                action="RemoveFiles",
                 entity="Material",
                 level="error",
                 code=500,
-                message="An error occurred while deleting material(s)",
+                message=f"An error occurred while removing files",
+                details={"error": str(ex)},
+                source="MaterialService",
+            )
+
+    async def _recursive_delete(
+        self, material_id: int, files: list
+    ) -> BaseResponseDto[bool]:
+        try:
+            existing_material_response = await self.material_repository.find_one(
+                Material.id == material_id
+            )
+            if not existing_material_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_material_response.code,
+                    data=None,
+                    message=existing_material_response.message,
+                )
+            existing_material = existing_material_response.data
+            if not existing_material:
+                await self.logger.log(
+                    action="RecursiveDelete",
+                    entity="Material",
+                    level="error",
+                    code=404,
+                    message=f"Material with ID {material_id} not found",
+                    details={"error": "Material not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"Material with ID {material_id} not found",
+                )
+            if existing_material.type == "file" and not existing_material.details.get(
+                "fetched"
+            ):
+                files.append(
+                    {
+                        "user_id": existing_material.author_id,
+                        "file_id": self.helper_service.get_file_id_from_url(
+                            existing_material.url or ""
+                        ),
+                    }
+                )
+            child_materials_response = await self.material_repository.find(
+                Material.parent_id == material_id
+            )
+            if not child_materials_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=child_materials_response.code,
+                    data=None,
+                    message=child_materials_response.message,
+                )
+            child_materials = child_materials_response.data
+            for child in child_materials or []:
+                recursive_delete_response = await self._recursive_delete(
+                    child.id, files
+                )
+                if not recursive_delete_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=recursive_delete_response.code,
+                        data=None,
+                        message=recursive_delete_response.message,
+                    )
+            delete_response = await self.material_repository.delete(existing_material)
+            if not delete_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=delete_response.code,
+                    data=None,
+                    message=delete_response.message,
+                )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Material deleted successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="RecursiveDelete",
+                entity="Material",
+                level="error",
+                code=500,
+                message=f"An error occurred while recursively deleting material with ID {material_id}",
                 details={"error": str(ex)},
                 source="MaterialService",
             )
@@ -1634,256 +1597,330 @@ class MaterialService(IMaterialService):
                 success=False,
                 code=500,
                 data=None,
-                message="An error occurred while deleting material(s)",
+                message=f"An error occurred while trying to delete material with ID {material_id}",
             )
 
-    async def copy_many(self, data):
+    async def _recursive_get_parents(
+        self, material_id: int, parents: list[Material]
+    ) -> BaseResponseDto[list[Material]]:
         try:
-            current_user_id_response = await self.user_service.get_current_user_id()
-            if not current_user_id_response.success:
+            existing_material_response = await self.material_repository.find_one(
+                Material.id == material_id
+            )
+            if not existing_material_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=current_user_id_response.code,
+                    code=existing_material_response.code,
                     data=None,
-                    message=current_user_id_response.message,
+                    message=existing_material_response.message,
                 )
-            current_user_id = current_user_id_response.data
-
-            material_ids = data.get("material_ids", [])
-            destination_id = data.get("destination_id", None)
-
-            if not material_ids:
+            existing_material = existing_material_response.data
+            if not existing_material:
                 await self.logger.log(
-                    action="Copy",
+                    action="RecursiveGetParents",
                     entity="Material",
-                    level="warning",
-                    code=400,
-                    message="No Material IDs Provided for Copying",
-                    details=None,
+                    level="error",
+                    code=404,
+                    message=f"Material with ID {material_id} not found",
+                    details={"error": "Material not found"},
                     source="MaterialService",
                 )
                 return BaseResponseDto(
-                    success=False, code=400, data=None, message="Invalid Request."
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"Material with ID {material_id} not found",
                 )
-            if destination_id and int(destination_id) < 1:
-                await self.logger.log(
-                    action="Copy",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Invalid Destination ID Provided for Copying Materials",
-                    details={"destination_id": destination_id},
-                    source="MaterialService",
+            parents.append(existing_material)
+            if existing_material.parent_id:
+                return await self._recursive_get_parents(
+                    existing_material.parent_id, parents
                 )
-                return BaseResponseDto(
-                    success=False, code=400, data=None, message="Invalid Request."
-                )
-            if not isinstance(material_ids, list) or any(
-                int(id) < 1 for id in material_ids
-            ):
-                await self.logger.log(
-                    action="Copy",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Invalid Material IDs Provided for Copying",
-                    details={"material_ids": material_ids},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False, code=400, data=None, message="Invalid Request."
-                )
-            if any(material_ids.count(id) > 1 for id in material_ids):
-                await self.logger.log(
-                    action="Copy",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Duplicate Material IDs Provided for Copying",
-                    details={"material_ids": material_ids},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False, code=400, data=None, message="Invalid Request."
-                )
-
-            material_ids = [int(id) for id in material_ids]
-            destination_id = int(destination_id) if destination_id else None
-
-            if destination_id:
-                destination_response = await self.material_repository.find_one(
-                    Material.id == destination_id
-                )
-                if not destination_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=destination_response.code,
-                        data=None,
-                        message=destination_response.message,
-                    )
-                destination = destination_response.data
-                if not destination or destination.type != "folder":
-                    await self.logger.log(
-                        action="Copy",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Invalid Destination ID Provided for Copying Materials",
-                        details={"destination_id": destination_id},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid destination provided",
-                    )
-
-            subject_id = None
-            parent_id = None
-            for material_id in material_ids:
-                material_response = await self.material_repository.find_one(
-                    Material.id == material_id,
-                    includes=[selectinload(Material.author)],
-                )
-                if not material_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=material_response.code,
-                        data=None,
-                        message=material_response.message,
-                    )
-                material = material_response.data
-                if not material:
-                    await self.logger.log(
-                        action="Copy",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Invalid Material ID Provided for Copying",
-                        details={"material_id": material_id},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Material(s) not found",
-                    )
-
-                if material.author_id != current_user_id:
-                    has_permission_response = await self.user_service.has_permissions(
-                        UserHasPermissionsDto(
-                            required_permissions=["Manage All Materials"]
-                        )
-                    )
-                    if (
-                        not has_permission_response.success
-                        or not has_permission_response.data
-                    ):
-                        await self.logger.log(
-                            action="Copy",
-                            entity="Material",
-                            level="warning",
-                            code=403,
-                            message="Unauthorized material copy attempt by non-author user",
-                            details={
-                                "material_id": material_id,
-                                "author_id": material.author_id,
-                            },
-                            source="MaterialService",
-                        )
-                        return BaseResponseDto(
-                            success=False,
-                            code=403,
-                            data=None,
-                            message="You are not authorized to copy this/these material(s).",
-                        )
-
-                if not subject_id:
-                    subject_id = material.subject_id
-                elif subject_id != material.subject_id:
-                    await self.logger.log(
-                        action="Copy",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Materials from Different Subjects Provided for Copying",
-                        details={
-                            "material_id": material_id,
-                            "subject_id": material.subject_id,
-                            "expected_subject_id": subject_id,
-                        },
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Materials from different subjects cannot be copied together",
-                    )
-
-                if not parent_id:
-                    parent_id = material.parent_id
-                elif parent_id != material.parent_id:
-                    await self.logger.log(
-                        action="Copy",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Materials from Different Parent Folders Provided for Copying",
-                        details={
-                            "material_id": material_id,
-                            "parent_id": material.parent_id,
-                            "expected_parent_id": parent_id,
-                        },
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Materials from different parent folders cannot be copied together",
-                    )
-
-                await self._copy_recursive(
-                    material.id, subject_id, destination_id, current_user_id
-                )
-
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=parents[::-1],
+                message="Parent materials fetched successfully",
+            )
+        except Exception as ex:
             await self.logger.log(
-                action="Copy",
+                action="RecursiveGetParents",
                 entity="Material",
-                level="info",
+                level="error",
+                code=500,
+                message=f"An error occurred while recursively fetching parent materials for material with ID {material_id}",
+                details={"error": str(ex)},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message=f"An error occurred while trying to fetch parent materials for material with ID {material_id}",
+            )
+
+    async def _recursive_copy(
+        self, material_id: int, destination_id: int, author_id: int, access_token: str
+    ) -> BaseResponseDto[bool]:
+        try:
+            existing_material_response = await self.material_repository.find_one(
+                Material.id == material_id
+            )
+            if not existing_material_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_material_response.code,
+                    data=None,
+                    message=existing_material_response.message,
+                )
+            existing_material = existing_material_response.data
+            if not existing_material:
+                await self.logger.log(
+                    action="RecursiveCopy",
+                    entity="Material",
+                    level="error",
+                    code=404,
+                    message=f"Material with ID {material_id} not found",
+                    details={"error": "Material not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"Material with ID {material_id} not found",
+                )
+            new_material = Material(
+                name=existing_material.name,
+                type=existing_material.type,
+                url=existing_material.url,
+                details=existing_material.details,
+                subject_id=existing_material.subject_id,
+                parent_id=destination_id,
+                author_id=author_id,
+            )
+            unique_name_response = await self._generate_unique_name(
+                new_material.name, new_material.subject_id, new_material.parent_id
+            )
+            if not unique_name_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=unique_name_response.code,
+                    data=None,
+                    message=unique_name_response.message,
+                )
+            new_material.name = unique_name_response.data
+            if existing_material.type == "file":
+                file_id = self.helper_service.get_file_id_from_url(
+                    existing_material.url or ""
+                )
+                if not file_id:
+                    await self.logger.log(
+                        action="RecursiveCopy",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Invalid file URL for material with ID {material_id}",
+                        details={"error": "Invalid file URL"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Invalid file URL for material with ID {material_id}",
+                    )
+                copy_file_response = await self.helper_service.copy_file_on_drive(
+                    access_token, file_id
+                )
+                if not copy_file_response.success:
+                    await self.logger.log(
+                        action="RecursiveCopy",
+                        entity="Material",
+                        level="error",
+                        code=copy_file_response.code or 500,
+                        message=copy_file_response.message or "",
+                        details={"error": copy_file_response.error},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=copy_file_response.code,
+                        data=None,
+                        message=copy_file_response.message,
+                    )
+                copied_file = copy_file_response.data
+                if not copied_file:
+                    await self.logger.log(
+                        action="RecursiveCopy",
+                        entity="Material",
+                        level="error",
+                        code=500,
+                        message=f"Failed to copy file for material with ID {material_id}",
+                        details={"error": "No data returned from copy_file_on_drive"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message=f"Failed to copy file for material with ID {material_id}",
+                    )
+                new_material.url = self.helper_service.get_file_url_from_id(
+                    copied_file.id
+                )
+                new_material.details["fetched"] = False
+                new_material.details["file_data"] = copied_file.model_dump()
+            create_response = await self.material_repository.create(new_material)
+            if not create_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_response.code,
+                    data=None,
+                    message=create_response.message,
+                )
+            created_material = create_response.data
+            if not created_material:
+                await self.logger.log(
+                    action="RecursiveCopy",
+                    entity="Material",
+                    level="error",
+                    code=500,
+                    message=f"Failed to create new material during recursive copy",
+                    details={"error": "No data returned from repository"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message=f"Failed to create new material during recursive copy",
+                )
+            child_materials_response = await self.material_repository.find(
+                Material.parent_id == material_id
+            )
+            if not child_materials_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=child_materials_response.code,
+                    data=None,
+                    message=child_materials_response.message,
+                )
+            child_materials = child_materials_response.data
+            for child in child_materials or []:
+                recursive_copy_response = await self._recursive_copy(
+                    child.id, created_material.id, author_id, access_token
+                )
+                if not recursive_copy_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=recursive_copy_response.code,
+                        data=None,
+                        message=recursive_copy_response.message,
+                    )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Material copied successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="RecursiveCopy",
+                entity="Material",
+                level="error",
+                code=500,
+                message=f"An error occurred while recursively copying material with ID {material_id}",
+                details={"error": str(ex)},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message=f"An error occurred while trying to copy material with ID {material_id}",
+            )
+
+    async def _recursive_create_from_drive(
+        self,
+        fetched_data: FetchedModel,
+        subject_id: int | None,
+        parent_id: int | None,
+        author_id: int,
+    ) -> BaseResponseDto[Material]:
+        try:
+            fetched_file = fetched_data.data
+            fetched_file_type = "file" if len(fetched_data.children) < 1 else "folder"
+            new_material = Material(
+                name=fetched_file.name,
+                type=fetched_file_type,
+                subject_id=subject_id,
+                parent_id=parent_id,
+                author_id=author_id,
+            )
+            if fetched_file_type == "file":
+                neurl=self.helper_service.get_file_url_from_id(fetched_file.id),
+                details={"fetched": True, "file_data": fetched_file.model_dump()},
+            unique_name_response = await self._generate_unique_name(
+                new_material.name, new_material.subject_id, new_material.parent_id
+            )
+            if not unique_name_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=unique_name_response.code,
+                    data=None,
+                    message=unique_name_response.message,
+                )
+            new_material.name = unique_name_response.data
+            create_response = await self.material_repository.create(new_material)
+            if not create_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_response.code,
+                    data=None,
+                    message=create_response.message,
+                )
+            created_material = create_response.data
+            if not created_material:
+                await self.logger.log(
+                    action="RecursiveCreateFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=500,
+                    message=f"Failed to create new material from Drive for file ID {fetched_file.id}",
+                    details={"error": "No data returned from repository"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message=f"Failed to create new material from Drive",
+                )
+            for child in fetched_data.children or []:
+                recursive_create_response = await self._recursive_create_from_drive(
+                    child, subject_id, created_material.id, author_id
+                )
+                if not recursive_create_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=recursive_create_response.code,
+                        data=None,
+                        message=recursive_create_response.message,
+                    )
+            return BaseResponseDto(
+                success=True,
                 code=201,
-                message="Material(s) Copied Successfully",
-                details={
-                    "material_ids": material_ids,
-                    "destination_id": destination_id,
-                },
-                source="MaterialService",
-            )
-            return BaseResponseDto(success=True, code=201, data=True)
-
-        except MaterialOperationError as ex:
-            await self.logger.log(
-                action="Copy",
-                entity="Material",
-                level="warning" if ex.code < 500 else "error",
-                code=ex.code,
-                message=str(ex),
-                details={"error": str(ex)},
-                source="MaterialService",
-            )
-            return BaseResponseDto(
-                success=False, code=ex.code, data=None, message=str(ex)
+                data=created_material,
+                message=f"Successfully created material from Drive",
             )
         except Exception as ex:
             await self.logger.log(
-                action="Copy",
+                action="RecursiveCreateFromDrive",
                 entity="Material",
                 level="error",
                 code=500,
-                message="An error occurred while copying material(s)",
+                message=f"An error occurred while recursively creating material from Drive with file ID {fetched_data.data.id}",
                 details={"error": str(ex)},
                 source="MaterialService",
             )
@@ -1891,310 +1928,5 @@ class MaterialService(IMaterialService):
                 success=False,
                 code=500,
                 data=None,
-                message="An error occurred while copying material(s)",
-            )
-
-    async def move_many(self, data):
-        try:
-            current_user_id_response = await self.user_service.get_current_user_id()
-            if not current_user_id_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=current_user_id_response.code,
-                    data=None,
-                    message=current_user_id_response.message,
-                )
-            current_user_id = current_user_id_response.data
-
-            material_ids = data.get("material_ids", [])
-            destination_id = data.get("destination_id", None)
-
-            if not material_ids:
-                await self.logger.log(
-                    action="Move",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Invalid Data Provided in The Request Body for Moving Materials",
-                    details={"data": data},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False, code=400, data=None, message="Invalid Request."
-                )
-            if not isinstance(material_ids, list) or any(
-                int(id) < 1 for id in material_ids
-            ):
-                await self.logger.log(
-                    action="Move",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Invalid Material IDs Provided for Moving Materials",
-                    details={"material_ids": material_ids},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False, code=400, data=None, message="Invalid Request."
-                )
-            if any(material_ids.count(id) > 1 for id in material_ids):
-                await self.logger.log(
-                    action="Move",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Duplicate Material IDs Provided for Moving Materials",
-                    details={"material_ids": material_ids},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False, code=400, data=None, message="Invalid Request."
-                )
-            material_ids = [int(id) for id in material_ids]
-            if destination_id and int(destination_id) < 1:
-                await self.logger.log(
-                    action="Move",
-                    entity="Material",
-                    level="warning",
-                    code=400,
-                    message="Invalid Destination ID Provided for Moving Materials",
-                    details={"destination_id": destination_id},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False, code=400, data=None, message="Invalid Request."
-                )
-            destination_id = int(destination_id) if destination_id else None
-
-            if destination_id:
-                destination_response = await self.material_repository.find_one(
-                    Material.id == destination_id
-                )
-                if not destination_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=destination_response.code,
-                        data=None,
-                        message=destination_response.message,
-                    )
-                destination = destination_response.data
-                if not destination or destination.type != "folder":
-                    await self.logger.log(
-                        action="Move",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Invalid Destination ID Provided for Moving Materials",
-                        details={"destination_id": destination_id},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False, code=400, data=None, message="Invalid Request."
-                    )
-
-            subject_id = None
-            parent_id = None
-            for material_id in material_ids:
-                material_response = await self.material_repository.find_one(
-                    Material.id == material_id
-                )
-                if not material_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=material_response.code,
-                        data=None,
-                        message=material_response.message,
-                    )
-                material = material_response.data
-                if not material:
-                    await self.logger.log(
-                        action="Move",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Invalid Material ID Provided for Moving Materials",
-                        details={"material_id": material_id},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False, code=400, data=None, message="Invalid Request."
-                    )
-
-                if material.author_id != current_user_id:
-                    has_permission_response = await self.user_service.has_permissions(
-                        UserHasPermissionsDto(
-                            required_permissions=["Manage All Materials"]
-                        )
-                    )
-                    if (
-                        not has_permission_response.success
-                        or not has_permission_response.data
-                    ):
-                        await self.logger.log(
-                            action="Move",
-                            entity="Material",
-                            level="warning",
-                            code=403,
-                            message="Unauthorized material move attempt by non-author user",
-                            details={
-                                "material_id": material_id,
-                                "author_id": material.author_id,
-                            },
-                            source="MaterialService",
-                        )
-                        return BaseResponseDto(
-                            success=False,
-                            code=403,
-                            data=None,
-                            message="You are not authorized to move this/these material(s).",
-                        )
-
-                if not subject_id:
-                    subject_id = material.subject_id
-                elif subject_id != material.subject_id:
-                    await self.logger.log(
-                        action="Move",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Materials from Different Subjects Provided for Moving",
-                        details={
-                            "material_id": material_id,
-                            "subject_id": material.subject_id,
-                            "expected_subject_id": subject_id,
-                        },
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Materials from different subjects cannot be moved together",
-                    )
-
-                if not parent_id:
-                    parent_id = material.parent_id
-                elif parent_id != material.parent_id:
-                    await self.logger.log(
-                        action="Move",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Materials from Different Parent Folders Provided for Moving",
-                        details={
-                            "material_id": material_id,
-                            "parent_id": material.parent_id,
-                            "expected_parent_id": parent_id,
-                        },
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Materials from different folders cannot be moved together",
-                    )
-
-                if (
-                    destination_id
-                    and parent_id
-                    and parent_id == destination_id
-                    or not destination_id
-                    and not parent_id
-                ):
-                    await self.logger.log(
-                        action="Move",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Destination Folder is Same as Source Parent Folder for Moving Materials",
-                        details={
-                            "material_id": material_id,
-                            "parent_id": parent_id,
-                            "destination_id": destination_id,
-                        },
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Materials can't be moved to the same folder they are in",
-                    )
-
-                material.name = await self._generate_unique_name(
-                    subject_id=subject_id,
-                    parent_id=destination_id,
-                    material_type=material.type,
-                    base_name=material.name,
-                )
-
-                parent_chain = (
-                    await self._fetch_parents(destination_id) if destination_id else []
-                )
-                parent_ids = [p["id"] for p in parent_chain]
-                if material.id in parent_ids:
-                    await self.logger.log(
-                        action="Move",
-                        entity="Material",
-                        level="warning",
-                        code=400,
-                        message="Cannot Move Material Inside Its Own Subfolder",
-                        details={
-                            "material_id": material_id,
-                            "destination_id": destination_id,
-                            "parent_ids": parent_ids,
-                        },
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Materials can't be moved to a subfolder of themselves",
-                    )
-
-                material.parent_id = destination_id
-                material.author_id = current_user_id
-
-                update_response = await self.material_repository.update(
-                    material, ["name", "parent_id", "author_id"]
-                )
-                if not update_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=update_response.code,
-                        data=None,
-                        message=update_response.message,
-                    )
-
-            await self.logger.log(
-                action="Move",
-                entity="Material",
-                level="info",
-                code=200,
-                message="Material(s) Moved Successfully",
-                details={
-                    "material_ids": material_ids,
-                    "destination_id": destination_id,
-                },
-                source="MaterialService",
-            )
-            return BaseResponseDto(success=True, code=200, data=True)
-
-        except Exception as ex:
-            await self.logger.log(
-                action="Move",
-                entity="Material",
-                level="error",
-                code=500,
-                message="An error occurred while moving material(s)",
-                details={"error": str(ex)},
-                source="MaterialService",
-            )
-            return BaseResponseDto(
-                success=False,
-                code=500,
-                data=None,
-                message="An error occurred while moving material(s)",
+                message=f"An error occurred while trying to create material from Drive",
             )

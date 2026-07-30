@@ -1,30 +1,19 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from fastapi import Request, Response
+from core.iControllers.bases.iQueryableController import IQueryableController
+from core.iControllers.bases.iCreatableController import ICreatableController
+from core.iControllers.bases.iUpdatableController import IUpdatableController
 
 
-class IMaterialController(ABC):
+class IMaterialController(
+    IQueryableController, ICreatableController, IUpdatableController
+):
     @abstractmethod
-    async def create(self, request: Request) -> Response:
-        pass
-
-    @abstractmethod
-    async def update(self, request: Request) -> Response:
-        pass
-
-    @abstractmethod
-    async def get_by_id(self, request: Request) -> Response:
-        pass
-
-    @abstractmethod
-    async def get_detail(self, request: Request) -> Response:
+    async def delete_many(self, request: Request) -> Response:
         pass
 
     @abstractmethod
     async def get_parents(self, request: Request) -> Response:
-        pass
-
-    @abstractmethod
-    async def delete_many(self, request: Request) -> Response:
         pass
 
     @abstractmethod
@@ -33,10 +22,6 @@ class IMaterialController(ABC):
 
     @abstractmethod
     async def move_many(self, request: Request) -> Response:
-        pass
-
-    @abstractmethod
-    async def fetch_one_material_from_drive(self, request: Request) -> Response:
         pass
 
     @abstractmethod

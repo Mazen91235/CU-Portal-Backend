@@ -3,11 +3,7 @@ from core.iControllers.iMaterialController import IMaterialController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.materialDtos import (
-    MaterialResponseDto,
-    MaterialMinimalResponseDto,
-    DriveMaterialPreviewDto,
-)
+from core.dtos.materialDtos import MaterialResponseDto
 
 
 def create_material_user_router(
@@ -32,18 +28,31 @@ def create_material_user_router(
         dependencies=[Depends(_is_logged_in)],
         response_model=BaseResponseDto[MaterialResponseDto],
         status_code=200,
-        summary="Get Material Detail",
-        description="Get the detail of a material for the currently logged in user",
+        summary="Get Material",
+        description="Get a specific material by its ID",
     )
-    async def get_detail(
+    async def find_one(
         request: Request, controller: IMaterialController = Depends(_get_controller)
     ):
-        return await controller.get_detail(request)
+        return await controller.find_one(request)
+
+    @router.get(
+        "/",
+        dependencies=[Depends(_is_logged_in)],
+        response_model=BaseResponseDto[MaterialResponseDto],
+        status_code=200,
+        summary="Get Materials",
+        description="Get a list of all materials",
+    )
+    async def find(
+        request: Request, controller: IMaterialController = Depends(_get_controller)
+    ):
+        return await controller.find(request)
 
     @router.get(
         "/{material_id}/parents",
         dependencies=[Depends(_is_logged_in)],
-        response_model=BaseResponseDto[list[MaterialMinimalResponseDto]],
+        response_model=BaseResponseDto[list[MaterialResponseDto]],
         status_code=200,
         summary="Get Material Parents",
         description="Get the parent chain of a specific material by its ID",
@@ -96,12 +105,44 @@ def create_material_admin_router(
 
         return validate_request
 
+    @router.get(
+        "/{material_id}",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Materials")),
+        ],
+        response_model=BaseResponseDto[MaterialResponseDto],
+        status_code=200,
+        summary="Get Material",
+        description="Get a specific material by its ID",
+    )
+    async def find_one(
+        request: Request, controller: IMaterialController = Depends(_get_controller)
+    ):
+        return await controller.find_one(request)
+
+    @router.get(
+        "/",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Materials")),
+        ],
+        response_model=BaseResponseDto[MaterialResponseDto],
+        status_code=200,
+        summary="Get Materials",
+        description="Get a list of all materials",
+    )
+    async def find(
+        request: Request, controller: IMaterialController = Depends(_get_controller)
+    ):
+        return await controller.find(request)
+
     @router.post(
         "/",
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Add Materials")),
-            Depends(_validate("name", "type", "url", "parent_id", "subject_id")),
+            Depends(_validate("name", "type", "subject_id")),
         ],
         response_model=BaseResponseDto[MaterialResponseDto],
         status_code=201,
@@ -114,11 +155,11 @@ def create_material_admin_router(
         return await controller.create(request)
 
     @router.patch(
-        "/update/{material_id}",
+        "/{material_id}",
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Edit Materials")),
-            Depends(_validate("name", "description", "url")),
+            Depends(_validate("name", "type")),
         ],
         response_model=BaseResponseDto[MaterialResponseDto],
         status_code=200,
@@ -129,54 +170,6 @@ def create_material_admin_router(
         request: Request, controller: IMaterialController = Depends(_get_controller)
     ):
         return await controller.update(request)
-
-    @router.get(
-        "/fetch-one-from-drive",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("Add Materials")),
-        ],
-        response_model=BaseResponseDto[DriveMaterialPreviewDto],
-        status_code=200,
-        summary="Fetch One Material From Drive",
-        description="Fetch a single material's metadata from Google Drive",
-    )
-    async def fetch_one_material_from_drive(
-        request: Request, controller: IMaterialController = Depends(_get_controller)
-    ):
-        return await controller.fetch_one_material_from_drive(request)
-
-    @router.get(
-        "/fetch-from-drive",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("Add Materials")),
-        ],
-        response_model=BaseResponseDto[MaterialResponseDto],
-        status_code=201,
-        summary="Fetch Materials From Drive",
-        description="Fetch materials from a Google Drive URL and create them",
-    )
-    async def fetch_materials_from_drive(
-        request: Request, controller: IMaterialController = Depends(_get_controller)
-    ):
-        return await controller.fetch_materials_from_drive(request)
-
-    @router.get(
-        "/{material_id}",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("View Materials")),
-        ],
-        response_model=BaseResponseDto[MaterialResponseDto],
-        status_code=200,
-        summary="Get Material",
-        description="Get a specific material by its ID",
-    )
-    async def get_by_id(
-        request: Request, controller: IMaterialController = Depends(_get_controller)
-    ):
-        return await controller.get_by_id(request)
 
     @router.delete(
         "/{material_ids}",
@@ -227,5 +220,22 @@ def create_material_admin_router(
         request: Request, controller: IMaterialController = Depends(_get_controller)
     ):
         return await controller.move_many(request)
+
+    @router.get(
+        "/fetch-from-drive",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Add Materials")),
+            Depends(_validate("url", "subject_id")),
+        ],
+        response_model=BaseResponseDto[bool],
+        status_code=201,
+        summary="Fetch Materials From Drive",
+        description="Fetch materials from a Google Drive URL and create them",
+    )
+    async def fetch_materials_from_drive(
+        request: Request, controller: IMaterialController = Depends(_get_controller)
+    ):
+        return await controller.fetch_materials_from_drive(request)
 
     return router
