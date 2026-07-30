@@ -12,22 +12,17 @@ if TYPE_CHECKING:
     from .yearDtos import YearResponseDto
 
 
-class TaskLinkDto(BaseModel):
-    url: str = Field(..., description="The URL of the external link")
-
-
 class TaskCreateDto(BaseModel):
-    name: str = Field(..., min_length=1, max_length=60, description="Title or name of the task")
-    type: str | None = Field(
-        default=None, max_length=10, description="Type of the entry (e.g., 'Exam', 'Assignment', 'Task')"
-    )
+    name: str = Field(
+        ..., min_length=1, max_length=60, description="Title or name of the task"
+        )
     url: str | None = Field(
         default=None, max_length=100, description="URL where the task should be submitted"
     )
     urls: list[str] = Field(
         default_factory=list, description="List of Google Drive file URLs"
     )
-    links: list[TaskLinkDto] = Field(
+    links: list[str] = Field(
         default_factory=list, description="List of external links objects"
     )
     details: dict | None = Field(
@@ -43,9 +38,6 @@ class TaskCreateDto(BaseModel):
         ..., gt=0, description="ID of the subject this task belongs to"
     )
     
-    author_id: int | None = Field(
-        default=None, gt=0, description="ID of the author"
-    )
     department_id: int | None = Field(
         default=None, gt=0, description="ID of the department this task belongs to"
     )
@@ -74,14 +66,9 @@ class TaskResponseDto(BaseModel):
     deadline: datetime | None = Field(None, description="Deadline datetime of the task")
     due_date: datetime | None = Field(None, description="Due date of the task")
     
-    # Foreign Keys
-    subject_id: int | None = Field(None, description="Subject ID associated with the task")
-    author_id: int | None = Field(None, description="Author User ID who created the task")
-    faculty_id: int | None = Field(None, description="Faculty ID associated with the task")
-    department_id: int | None = Field(None, description="Department ID associated with the task")
-    year_id: int | None = Field(None, description="Year ID associated with the task")
-    
-    modified_at: datetime | None = Field(None, description="Last Update Date of the task")
+    updated_at: datetime | None = Field(None, description="Last Update Date of the task")
+
+    created_at: datetime | None = Field(None, description="Creation Date of the task")
 
     # Relationships
     author: UserResponseDto | None = Field(
@@ -110,16 +97,13 @@ class TaskUpdateDto(BaseModel):
     name: str | None = Field(
         default=None, min_length=1, max_length=60, description="Title or name of the task"
     )
-    type: str | None = Field(
-        default=None, max_length=10, description="Type of the entry (e.g., 'Exam', 'Assignment', 'Task')"
-    )
     url: str | None = Field(
         default=None, max_length=100, description="URL where the task should be submitted"
     )
     urls: list[str] | None = Field(
         default=None, description="List of Google Drive file URLs"
     )
-    links: list[TaskLinkDto] | None = Field(
+    links: list[str] | None = Field(
         default=None, description="List of external links objects"
     )
     details: dict | None = Field(
@@ -130,9 +114,6 @@ class TaskUpdateDto(BaseModel):
     )
     due_date: datetime | None = Field(
         default=None, description="Datetime for the task due date"
-    )
-    author_id: int | None = Field(
-        default=None, gt=0, description="ID of the author"
     )
     subject_id: int | None = Field(
         default=None, gt=0, description="ID of the subject this task belongs to"
@@ -147,13 +128,13 @@ class TaskUpdateDto(BaseModel):
         default=None, description="ID of the year this task belongs to"
     )
 
+class TaskDeleteDto(BaseModel):
+    id: int = Field(..., description="ID of the task to delete")
+
 
 class TaskSearchDto(BaseSearchDto, BaseModel):
     name: str | None = Field(
         default=None, description="Name/Title to search by"
-    )
-    type: str | None = Field(
-        default=None, description="Type to filter by (e.g., 'Task', 'Exam')"
     )
     faculty_id: int | None = Field(
         default=None, description="ID of Faculty to filter by"
@@ -170,9 +151,9 @@ class TaskSearchDto(BaseSearchDto, BaseModel):
     author_id: int | None = Field(
         default=None, description="ID of Author to filter by"
     )
-    start_date: str | None = Field(
+    deadline_from: str | None = Field(
         default=None, description="Start date to filter by (>=)"
     )
-    end_date: str | None = Field(
+    deadline_to: str | None = Field(
         default=None, description="End date to filter by (<=)"
     )

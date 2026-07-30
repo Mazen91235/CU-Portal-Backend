@@ -18,7 +18,8 @@ def create_task_user_router(
         return auth_middleware_provider()
 
     def _get_validation_middleware() -> IValidationMiddleware:
-        return validation_middleware_provider()
+        return validation_middleware_provider()  
+    
 
     async def _is_logged_in(
         request: Request,
@@ -37,7 +38,23 @@ def create_task_user_router(
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
     ):
         return await auth_middleware.has_registered_subjects(request)
-
+    
+    @router.get(
+        "/{task_id}",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects)
+        ],
+        response_model=BaseResponseDto[TaskResponseDto],
+        status_code=200,
+        summary="Find Task",
+        description="Find a specific task by its ID if enrolled in the subject",
+    )
+    async def find_one(  # type: ignore
+        request: Request, controller: ITaskController = Depends(_get_controller)
+    ):
+        return await controller.find_one(request)
     @router.get(
         "/",
         dependencies=[
@@ -55,39 +72,6 @@ def create_task_user_router(
     ):
         return await controller.find(request)
 
-    @router.get(
-        "/search",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects)
-        ],
-        response_model=BaseResponseDto[list[TaskResponseDto]],
-        status_code=200,
-        summary="Search Tasks",
-        description="Search for tasks in enrolled subjects based on query parameters",
-    )
-    async def search(  # type: ignore
-        request: Request, controller: ITaskController = Depends(_get_controller)
-    ):
-        return await controller.search(request)
-
-    @router.get(
-        "/{task_id}",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects)
-        ],
-        response_model=BaseResponseDto[TaskResponseDto],
-        status_code=200,
-        summary="Find Task",
-        description="Find a specific task by its ID if enrolled in the subject",
-    )
-    async def find_one(  # type: ignore
-        request: Request, controller: ITaskController = Depends(_get_controller)
-    ):
-        return await controller.find_one(request)
 
     return router
 
@@ -132,6 +116,34 @@ def create_task_admin_router(
             return await auth_middleware.is_authorized(request, *permissions)
 
         return authorize
+    def _validate(*keys):
+            async def validate_request(
+                request: Request,
+                validation_middleware: IValidationMiddleware = Depends(
+                    _get_validation_middleware
+                ),
+            ):
+                return await validation_middleware.validate(request, *keys)
+            
+            return validate_request
+    
+    @router.get(
+        "/{task_id}",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Tasks")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects)
+        ],
+        response_model=BaseResponseDto[TaskResponseDto],
+        status_code=200,
+        summary="Find Task",
+        description="Find a task by its ID (Admin View)",
+    )
+    async def find_one(  # type: ignore
+        request: Request, controller: ITaskController = Depends(_get_controller)
+    ):
+        return await controller.find_one(request)
 
     @router.get(
         "/",
@@ -151,31 +163,14 @@ def create_task_admin_router(
     ):
         return await controller.find(request)
 
-    @router.get(
-        "/search",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("View Tasks")),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects)
-        ],
-        response_model=BaseResponseDto[list[TaskResponseDto]],
-        status_code=200,
-        summary="Search Tasks",
-        description="Search for tasks based on query parameters (Admin View)",
-    )
-    async def search(  # type: ignore
-        request: Request, controller: ITaskController = Depends(_get_controller)
-    ):
-        return await controller.search(request)
-
     @router.post(
         "/",
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Manage Tasks")),
             Depends(_is_ready),
-            Depends(_has_registered_subjects)
+            Depends(_has_registered_subjects),
+            Depends(_validate("name", "url", "urls", "links", "details", "deadline", "due_date", "subject_id", "department_id", "faculty_id", "year_id"))
         ],
         response_model=BaseResponseDto[TaskResponseDto],
         status_code=201,
@@ -187,31 +182,14 @@ def create_task_admin_router(
     ):
         return await controller.create(request)
 
-    @router.get(
-        "/{task_id}",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("View Tasks")),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects)
-        ],
-        response_model=BaseResponseDto[TaskResponseDto],
-        status_code=200,
-        summary="Find Task",
-        description="Find a task by its ID (Admin View)",
-    )
-    async def find_one(  # type: ignore
-        request: Request, controller: ITaskController = Depends(_get_controller)
-    ):
-        return await controller.find_one(request)
-
     @router.patch(
         "/{task_id}",
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Manage Tasks")),
             Depends(_is_ready),
-            Depends(_has_registered_subjects)
+            Depends(_has_registered_subjects),
+            Depends(_validate("name", "url", "urls", "links", "details", "deadline", "due_date", "subject_id", "department_id", "faculty_id", "year_id"))
         ],
         response_model=BaseResponseDto[TaskResponseDto],
         status_code=200,

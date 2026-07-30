@@ -13,18 +13,17 @@ from api.routes.mainRoutes import (
 )
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
+from api.routes.taskRoutes import create_task_user_router, create_task_admin_router
+from api.routes.announcementRoutes import create_announcement_user_router, create_announcement_admin_router
 from api.controllers.userController import UserController
+from api.controllers.announcementController import AnnouncementController
+from api.controllers.taskController import TaskController
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
-from api.routes.announcementRoutes import create_announcement_user_router, create_announcement_admin_router
-from api.controllers.announcementController import AnnouncementController
-from business.services.announcementService import AnnouncementService
-from api.routes.taskRoutes import create_task_user_router, create_task_admin_router
-from api.controllers.taskController import TaskController
-from business.services.taskService import TaskService
-from core.entities.task import Task
 from business.contextVars.sessionContext import session_context
 from business.services.userService import UserService
+from business.services.taskService import TaskService
+from business.services.announcementService import AnnouncementService
 from business.services.requestLimitService import RequestLimitService
 from business.services.helperService import HelperService
 from business.loggers.baseLogger import BaseLogger
@@ -36,6 +35,7 @@ from core.entities.role import Role
 from core.entities.token import Token
 from core.entities.requestLimit import RequestLimit
 from core.entities.announcement import Announcement
+from core.entities.task import Task
 from core.entities.subject import Subject
 from core.utils.databaseHandler import DatabaseHandler
 
@@ -125,7 +125,6 @@ class Container(containers.DeclarativeContainer):
         AnnouncementService,
         announcement_repository=announcement_repository,
         subject_repository=subject_repository,
-        user_service=user_service,
         logger=logger,
         helper_service=helper_service,
     )

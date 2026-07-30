@@ -1,14 +1,5 @@
-from abc import abstractmethod
-from fastapi import Request, Response
-from core.iControllers.bases.iQueryableController import IQueryableController
-from core.iControllers.bases.iCreatableController import ICreatableController
-from core.iControllers.bases.iUpdatableController import IUpdatableController
-from core.iControllers.bases.iDeletableController import IDeletableController
+from core.iControllers.bases.iCrudController import ICrudController
 
 
-class ITaskController(IQueryableController, ICreatableController, IUpdatableController, IDeletableController):
-    # Additional Query Functions
-    @abstractmethod
-    async def search(self, request: Request) -> Response:
-        
-        pass
+class ITaskController(ICrudController):
+    pass
