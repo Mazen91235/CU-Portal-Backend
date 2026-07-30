@@ -10,6 +10,7 @@ if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
 from api.di.container import Container
+from api.routes.customRoute import CustomRoute
 from business.contextVars.sessionContext import session_context
 
 
@@ -17,6 +18,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="CU - Portal", version="1.0.0")
     container = Container()
     app.state.container = container
+    app.router.route_class = CustomRoute
 
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
@@ -41,13 +43,19 @@ def create_app() -> FastAPI:
     user_admin_routes = container.user_admin_routes()
     material_user_routes = container.material_user_routes()
     material_admin_routes = container.material_admin_routes()
+    message_public_routes = container.message_public_routes()
+    message_admin_routes = container.message_admin_routes()
+    faculty_admin_routes = container.faculty_admin_routes()
     main_user_routes.include_router(user_user_routes)
     main_user_routes.include_router(material_user_routes)
     main_admin_routes.include_router(user_admin_routes)
     main_admin_routes.include_router(material_admin_routes)
+    main_admin_routes.include_router(message_admin_routes)
+    main_admin_routes.include_router(faculty_admin_routes)
     app.include_router(main_user_routes)
     app.include_router(main_admin_routes)
     app.include_router(auth_routes)
+    app.include_router(message_public_routes)
 
     app.add_middleware(
         CORSMiddleware,

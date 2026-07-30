@@ -1,7 +1,6 @@
 import sys
 import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
 from dependency_injector import containers, providers
 
 # Fix for ModuleNotFoundError
@@ -17,13 +16,23 @@ from api.routes.materialRoutes import (
     create_material_admin_router,
     create_material_user_router,
 )
+from api.routes.messageRoutes import (
+    create_message_public_router,
+    create_message_admin_router,
+)
+from api.routes.facultyRoutes import create_faculty_admin_router
 from api.controllers.userController import UserController
+from api.controllers.facultyController import FacultyController
+from api.controllers.messageController import MessageController
 from api.controllers.materialController import MaterialController
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
+from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
 from business.contextVars.sessionContext import session_context
 from business.services.userService import UserService
 from business.services.materialService import MaterialService
+from business.services.messageService import MessageService
+from business.services.facultyService import FacultyService
 from business.services.requestLimitService import RequestLimitService
 from business.services.helperService import HelperService
 from business.loggers.baseLogger import BaseLogger
@@ -36,6 +45,8 @@ from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
 from core.entities.token import Token
 from core.entities.requestLimit import RequestLimit
+from core.entities.message import Message
+from core.entities.faculty import Faculty
 from core.utils.databaseHandler import DatabaseHandler
 
 DB_URL = DatabaseHandler.get_db_url()
@@ -100,6 +111,18 @@ class Container(containers.DeclarativeContainer):
         model=RequestLimit,
         session_factory=session_factory,
     )
+    message_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Message,
+        session_factory=session_factory,
+    )
+    faculty_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Faculty,
+        session_factory=session_factory,
+    )
 
     # --- 4. Services ---
     helper_service = providers.Factory(HelperService)
@@ -124,6 +147,21 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
+
+    message_service = providers.Factory(
+        MessageService,
+        message_repository=message_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+    
+    faculty_service = providers.Factory(
+        FacultyService,
+        faculty_repository=faculty_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+
     request_limit_service = providers.Factory(
         RequestLimitService,
         request_limit_repository=request_limit_repository,
@@ -161,6 +199,14 @@ class Container(containers.DeclarativeContainer):
     material_controller = providers.Factory(
         MaterialController, material_service=material_service, logger=logger
     )
+    
+    message_controller = providers.Factory(
+        MessageController, message_service=message_service, logger=logger
+    )
+    
+    faculty_controller = providers.Factory(
+        FacultyController, faculty_service=faculty_service, logger=logger
+    )
 
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
@@ -195,6 +241,25 @@ class Container(containers.DeclarativeContainer):
     material_admin_routes = providers.Factory(
         create_material_admin_router,
         controller_provider=material_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+    message_public_routes = providers.Factory(
+        create_message_public_router,
+        controller_provider=message_controller.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    message_admin_routes = providers.Factory(
+        create_message_admin_router,
+        controller_provider=message_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+    
+    faculty_admin_routes = providers.Factory(
+        create_faculty_admin_router,
+        controller_provider=faculty_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
