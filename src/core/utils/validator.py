@@ -1,3 +1,4 @@
+import re
 from email_validator import validate_email, EmailNotValidError
 from core.dtos.baseDtos import BaseResponseDto
 
@@ -20,6 +21,8 @@ class Validator:
         "archive",
         "gdrive",
     ]
+
+    ALLOWED_TYPES = ["file", "folder", "youtube", "drive", "external"]
 
     @staticmethod
     def validate_email(email: str, return_validated: bool = False) -> BaseResponseDto:
@@ -82,3 +85,55 @@ class Validator:
             for allowed in Validator.ALLOWED_FILE_TYPES
             if not excluded_types or allowed not in excluded_types
         )
+
+    @staticmethod
+    def is_allowed_type(type: str) -> bool:
+        return type in Validator.ALLOWED_TYPES
+
+    @staticmethod
+    def is_valid_youtube_url(url: str) -> bool:
+        youtube_regex = (
+            r"^(https?://)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)/.*$"
+        )
+        return re.match(youtube_regex, url) is not None
+
+    @staticmethod
+    def is_valid_drive_url(url: str) -> bool:
+        drive_regex = r"^(https?://)?(www\.)?(drive\.google\.com|docs\.google\.com|forms\.google\.com|slides\.google\.com|sheets\.google\.com|sites\.google\.com)/.*$"
+        return re.match(drive_regex, url) is not None
+
+    @staticmethod
+    def is_valid_external_url(url: str) -> bool:
+        external_regex = re.compile(
+            r"^(https?://)"  # http:// or https://
+            r"(([A-Za-z0-9-]+\.)+[A-Za-z]{2,6})"  # Domain name only
+            r"(/[A-Za-z0-9\-._~:/?#[\]@!$&\'()*+,;=]*)?$"  # Path and query string
+        )
+        return re.match(external_regex, url) is not None
+
+    @staticmethod
+    def is_valid_url_based_on_type(url: str, type: str) -> bool:
+        if type == "youtube":
+            return Validator.is_valid_youtube_url(url)
+        elif type == "drive":
+            return Validator.is_valid_drive_url(url)
+        elif type == "external":
+            return Validator.is_valid_external_url(url)
+        else:
+            return False
+
+    @staticmethod
+    def is_int(value: str) -> bool:
+        try:
+            int(value)
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def is_number(value: str) -> bool:
+        try:
+            float(value)
+            return True
+        except ValueError:
+            return False

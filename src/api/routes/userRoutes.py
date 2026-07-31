@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from customRoute import CustomRoute
 from core.iControllers.iUserController import IUserController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -9,7 +10,7 @@ from core.dtos.userDtos import UserResponseDto, UserStatisticsResponseDto
 def create_user_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="", tags=[])
+    router = APIRouter(prefix="", tags=[], route_class=CustomRoute)
 
     def _get_controller() -> IUserController:
         return controller_provider()
@@ -114,7 +115,7 @@ def create_user_user_router(
 def create_user_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/users", tags=["Users"])
+    router = APIRouter(prefix="/users", tags=["Users"], route_class=CustomRoute)
 
     def _get_controller() -> IUserController:
         return controller_provider()
@@ -189,19 +190,6 @@ def create_user_admin_router(
         request: Request, controller: IUserController = Depends(_get_controller)
     ):
         return await controller.find(request)
-
-    @router.get(
-        "/search",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
-        response_model=BaseResponseDto[list[UserResponseDto]],
-        status_code=200,
-        summary="Search Users",
-        description="Search for users based on query parameters",
-    )
-    async def search(
-        request: Request, controller: IUserController = Depends(_get_controller)
-    ):
-        return await controller.search(request)
 
     @router.patch(
         "/",
