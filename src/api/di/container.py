@@ -6,6 +6,8 @@ from dependency_injector import containers, providers
 # Fix for ModuleNotFoundError
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
+
+
 from api.routes.mainRoutes import (
     create_main_user_router,
     create_main_admin_router,
@@ -21,12 +23,16 @@ from api.routes.messageRoutes import (
     create_message_public_router,
     create_message_admin_router,
 )
+from api.routes.yearRoutes import create_year_admin_router
+from api.routes.departmentRoutes import create_department_admin_router
 from api.routes.facultyRoutes import create_faculty_admin_router
 from api.controllers.userController import UserController
 from api.controllers.facultyController import FacultyController
 from api.controllers.messageController import MessageController
 from api.controllers.materialController import MaterialController
 from api.controllers.notificationController import NotificationController
+from api.controllers.yearController import YearController
+from api.controllers.departmentController import DepartmentController
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
 from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
@@ -36,6 +42,8 @@ from business.services.notificationService import NotificationService
 from business.services.materialService import MaterialService
 from business.services.messageService import MessageService
 from business.services.facultyService import FacultyService
+from business.services.yearService import YearService
+from business.services.departmentService import DepartmentService
 from business.services.requestLimitService import RequestLimitService
 from business.services.helperService import HelperService
 from business.loggers.baseLogger import BaseLogger
@@ -48,6 +56,8 @@ from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
 from core.entities.token import Token
 from core.entities.requestLimit import RequestLimit
+from core.entities.year import Year
+from core.entities.department import Department
 from core.entities.userNotification import UserNotification
 from core.entities.notification import Notification
 from core.entities.message import Message
@@ -116,6 +126,12 @@ class Container(containers.DeclarativeContainer):
         model=RequestLimit,
         session_factory=session_factory,
     )
+    year_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Year, session_factory=session_factory
+    )
+    department_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Department, session_factory=session_factory
+    )
     user_notification_repository = providers.Factory(
         BaseRepository,
         session=db_session,
@@ -180,6 +196,22 @@ class Container(containers.DeclarativeContainer):
         helper_service=helper_service,
     )
 
+    year_service = providers.Factory(
+        YearService,
+        year_repository=year_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+
+    department_service = providers.Factory(
+        DepartmentService,
+        department_repository=department_repository,
+        faculty_repository=faculty_repository,
+        user_service=user_service,
+        logger=logger,
+        helper_service=helper_service,
+    )
+
     request_limit_service = providers.Factory(
         RequestLimitService,
         request_limit_repository=request_limit_repository,
@@ -236,6 +268,14 @@ class Container(containers.DeclarativeContainer):
         FacultyController, faculty_service=faculty_service, logger=logger
     )
 
+    year_controller = providers.Factory(
+        YearController, year_service=year_service, logger=logger
+    )
+
+    department_controller = providers.Factory(
+        DepartmentController, department_service=department_service, logger=logger
+    )
+
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
     main_admin_routes = providers.Factory(create_main_admin_router)
@@ -260,6 +300,12 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    year_admin_routes = providers.Factory(
+        create_year_admin_router,
+        controller_provider=year_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
     notification_user_routes = providers.Factory(
         create_notification_user_router,
         controller_provider=notification_controller.provider,
@@ -267,6 +313,12 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    department_admin_routes = providers.Factory(
+        create_department_admin_router,
+        controller_provider=department_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
     material_user_routes = providers.Factory(
         create_material_user_router,
         controller_provider=material_controller.provider,
