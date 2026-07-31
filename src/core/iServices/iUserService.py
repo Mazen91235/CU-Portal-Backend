@@ -87,6 +87,10 @@ class IUserService(
         pass
 
     @abstractmethod
+    async def suspend_user(self,data: int) -> BaseResponseDto[bool]:
+        pass
+
+    @abstractmethod
     async def get_current_user_id(self) -> BaseResponseDto[int]:
         pass
 

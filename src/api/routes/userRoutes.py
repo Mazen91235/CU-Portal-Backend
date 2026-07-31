@@ -163,6 +163,20 @@ def create_user_admin_router(
         request: Request, controller: IUserController = Depends(_get_controller)
     ):
         return await controller.get_statistics(request)
+    
+    @router.post(
+            "/suspend/{user_id}",
+            dependencies=[Depends(_is_logged_in), Depends(_is_authorized("Manage Users"))],
+            response_model=BaseResponseDto,
+            status_code=200,
+            summary="Suspends User",
+            description="Suspends user if its status is True the user cannot be suspended if it ist statues is pending",
+        )
+    async def Suspend_user(
+            request: Request, controller: IUserController = Depends(_get_controller)
+        ):
+            return await controller.suspend_user(request)
+    
 
     @router.get(
         "/{user_id}",
@@ -221,3 +235,4 @@ def create_user_admin_router(
         return await controller.update_many(request)
 
     return router
+    

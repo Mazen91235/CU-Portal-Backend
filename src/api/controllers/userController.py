@@ -1151,3 +1151,55 @@ class UserController(IUserController):
                 code=500,
                 message="An error occurred while processing the request, please try again later",
             )
+    async def suspend_user(self, request):
+        try:
+            user_id = request.path_params.get("user_id")
+            if not user_id:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=400,
+                    message="User ID is required",
+                )
+            
+            response = await self.user_service.suspend_user(user_id)
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            status = response.data
+            if not status:
+                await self.logger.log(
+                    action="suspend_user",
+                    entity="User",
+                    level="info",
+                    code=404,
+                    message="User is not suspended",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=404,
+                    message="User is not suspended",
+                )
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=status,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="SuspendUser",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": str(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )    

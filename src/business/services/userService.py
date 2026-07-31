@@ -2228,6 +2228,117 @@ class UserService(IUserService):
                 data=None,
                 message="An error occurred while getting user statistics, please try again.",
             )
+    async def suspend_user(self, data):
+        try:
+            user_response = await self.user_repository.find_one(User.id == data)
+            if not user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=user_response.code,
+                    data=False,
+                    message=user_response.message,
+                )
+            user = user_response.data
+            if not user:
+                await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message=f"User with ID {data} not found for updating",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=False,
+                    message=f"User with ID {data} not found.",
+                )
+            pending_user_response = await self.pending_user_repository.find_one(
+                PendingUser.user_id == user.id
+            )
+            if pending_user_response.data:
+                await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="warning",
+                    code=400,
+                    message=f"User with ID {data} is pending user",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=False,
+                    message=f"User with ID {data} is pending user.",
+                )
+            if not user.status:
+                await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="warning",
+                    code=400,
+                    message=f"User status with ID {data} is already false",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=False,
+                    message=f"User status with ID {data} is already false",
+                )
+
+            user.status = False
+            update_user_response = await self.user_repository.update(
+                            user, ['status']
+                        )
+            if not update_user_response.success:
+                await self.logger.log(
+                        action="SuspendUser",
+                        entity="User",
+                        level="warning",
+                        code=update_user_response.code,
+                        message=update_user_response.message,
+                        source="UserService",
+                    )
+                return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=update_user_response.message,
+                    )
+            await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="info",
+                    code=update_user_response.code,
+                    message=update_user_response.message,
+                    source="UserService",
+                )
+            return BaseResponseDto(
+                    success=True,
+                    code=200,
+                    data=True,
+                    message="User is suspended successfully",
+                )
+
+        except Exception as ex:
+            await self.logger.log(
+                action="SuspendUser",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while suspending user",
+                details={"error": str(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="An error occurred while suspending, please try again.",
+            )
+
 
     async def update_many(self, data):
         try:
