@@ -55,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(main_user_routes)
     app.include_router(main_admin_routes)
     app.include_router(auth_routes)
+    app.include_router(container.notification_routes())
     app.include_router(message_public_routes)
 
     app.add_middleware(
