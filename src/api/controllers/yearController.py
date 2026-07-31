@@ -30,7 +30,7 @@ class YearController(IYearController):
                     message="Year ID is required",
                 )
             entity_search_dto = Generator[YearSearchDto].generate(
-                YearSearchDto, {"id": year_id}
+                YearSearchDto, {"id": int(year_id)}
             )
             response = await self.year_service.find_one(
                 entity_search_dto,
@@ -158,62 +158,6 @@ class YearController(IYearController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def search(self, request):
-        try:
-            query_val = request.query_params.get("query", "").strip()
-            # If query is passed, search specifically
-            payload = {}
-            if query_val:
-                payload["year"] = int(query_val) if query_val.isdigit() else 0
-
-            entity_search_dto = Generator[YearSearchDto].generate(
-                YearSearchDto, payload
-            )
-            response = await self.year_service.find(
-                entity_search_dto,
-                None,
-                None,
-                False,
-                True,
-                True,
-                ["year"],
-                False,
-                1,
-                50,
-            )
-            if not response.success:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=response.code,
-                    message=response.message,
-                )
-            years = response.data
-            # For year search in old project, it used min_to_dict which had just id and year.
-            # In Mapper, mapping list to response dto works perfectly.
-            years_mapped = Mapper[Year, YearResponseDto].map_list(
-                years, YearResponseDto, True
-            )
-            return ResponseHandler.generate_response(
-                success=True,
-                code=200,
-                data=years_mapped,
-            )
-        except Exception as e:
-            await self.logger.log(
-                action="Search",
-                entity="Year",
-                level="error",
-                code=500,
-                message="An error occurred while processing the search",
-                details={"error": str(e)},
-                source="YearController",
-            )
-            return ResponseHandler.generate_response(
-                success=False,
-                code=500,
-                message="An error occurred while processing the request, please try again later",
-            )
-
     async def create(self, request):
         try:
             await self.year_service.begin_transaction()
@@ -228,8 +172,10 @@ class YearController(IYearController):
                     code=response.code,
                     message=response.message,
                 )
+            year_mapped = Mapper[Year, YearResponseDto].map(
+                response.data, YearResponseDto, True
+            )
             await self.year_service.commit_transaction()
-            year_mapped = Mapper[Year, YearResponseDto].map(response.data, YearResponseDto, True)
             return ResponseHandler.generate_response(
                 success=True,
                 code=201,
@@ -264,9 +210,9 @@ class YearController(IYearController):
                     message="Year ID is required",
                 )
             payload = await request.json()
+            payload["id"] = int(year_id)
             data = Generator[YearUpdateDto].generate(YearUpdateDto, payload)
             year = Mapper[YearUpdateDto, Year].map(data, Year)
-            year.id = int(year_id)
             response = await self.year_service.update(year)
             if not response.success:
                 await self.year_service.rollback_transaction()
@@ -275,8 +221,10 @@ class YearController(IYearController):
                     code=response.code,
                     message=response.message,
                 )
+            year_mapped = Mapper[Year, YearResponseDto].map(
+                response.data, YearResponseDto, True
+            )
             await self.year_service.commit_transaction()
-            year_mapped = Mapper[Year, YearResponseDto].map(response.data, YearResponseDto, True)
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
@@ -310,8 +258,7 @@ class YearController(IYearController):
                     code=400,
                     message="Year ID is required",
                 )
-            year = Year()
-            year.id = int(year_id)
+            year = Generator[Year].generate(Year, {"id": int(year_id)})
             response = await self.year_service.delete(year)
             if not response.success:
                 await self.year_service.rollback_transaction()

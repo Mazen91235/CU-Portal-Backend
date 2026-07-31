@@ -1,15 +1,14 @@
 from typing import cast
-from sqlalchemy import func
+from sqlalchemy import func, and_, or_
 
 from core.iServices.iDepartmentService import IDepartmentService
-from core.iServices.iUserService import IUserService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.department import Department
 from core.entities.faculty import Faculty
+from core.entities.role import Role
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.departmentDtos import DepartmentSearchDto
 
 
 class DepartmentService(IDepartmentService):
@@ -17,13 +16,13 @@ class DepartmentService(IDepartmentService):
         self,
         department_repository: IBaseRepository[Department],
         faculty_repository: IBaseRepository[Faculty],
-        user_service: IUserService,
+        role_repository: IBaseRepository[Role],
         logger: IBaseLogger,
         helper_service: IHelperService,
     ):
         self.department_repository = department_repository
         self.faculty_repository = faculty_repository
-        self.user_service = user_service
+        self.role_repository = role_repository
         self.logger = logger
         self.helper_service = helper_service
 
@@ -154,55 +153,110 @@ class DepartmentService(IDepartmentService):
                 message="An error occurred while finding departments",
             )
 
-    async def create(self, data: Department):
+    async def create(self, data):
         try:
-            # 1. Permission checks
-            permissions_response = await self.user_service.get_user_permissions()
-            if not permissions_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=permissions_response.code or 403,
-                    message=permissions_response.message or "Unauthorized to create department",
-                )
-            permissions = permissions_response.data or []
-            can_access_all_faculties = "Access All Faculties" in permissions
-
-            # 2. Check current user and constraints
             logged_in_user_response = await self.helper_service.get_logged_in_user()
-            if not logged_in_user_response.success or not logged_in_user_response.data:
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="Create",
+                    entity="Department",
+                    level="warning",
+                    code=401,
+                    message="User not logged in for department creation",
+                    details={},
+                    source="DepartmentService",
+                )
                 return BaseResponseDto(
                     success=False,
                     code=401,
                     message="User not logged in",
                 )
-            current_user = logged_in_user_response.data
-
-            if data.faculty_id != current_user.faculty_id and not can_access_all_faculties:
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
                 await self.logger.log(
-                    action="Add",
+                    action="Create",
+                    entity="Department",
+                    level="warning",
+                    code=401,
+                    message="User not logged in for department creation",
+                    details={},
+                    source="DepartmentService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    message="User not logged in",
+                )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Role, ["exact_roles"]
+            )
+            logged_in_user_role_response = await self.role_repository.find_one(
+                Role.id == logged_in_user.role_id, dynamic_includes
+            )
+            if not logged_in_user_role_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="User role not found",
+                )
+            logged_in_user_role = logged_in_user_role_response.data
+            if not logged_in_user_role:
+                await self.logger.log(
+                    action="Create",
                     entity="Department",
                     level="warning",
                     code=403,
-                    message="User does not have access to change the faculty for department creation.",
+                    message="User role not found for department creation",
+                    details={"user_id": logged_in_user.id},
+                    source="DepartmentService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="User role not found",
+                )
+            logged_in_user_permissions = [
+                perm.name for perm in logged_in_user_role.exact_roles
+            ]
+
+            if (
+                data.faculty_id != logged_in_user.faculty_id
+                and "Access All Faculties" not in logged_in_user_permissions
+            ):
+                await self.logger.log(
+                    action="Create",
+                    entity="Department",
+                    level="warning",
+                    code=403,
+                    message="User does not have access to create department for this faculty.",
                     details={"faculty_id": data.faculty_id},
                     source="DepartmentService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=403,
-                    message="You do not have access to select faculty rather than your own",
+                    message="You do not have access to create department for this faculty",
                 )
 
-            # 3. Check faculty existence
-            faculty_response = await self.faculty_repository.find_one(Faculty.id == data.faculty_id)
-            if not faculty_response.success or not faculty_response.data:
+            faculty_response = await self.faculty_repository.find_one(
+                Faculty.id == data.faculty_id
+            )
+            if not faculty_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=faculty_response.code,
+                    message=faculty_response.message,
+                )
+
+            faculty = faculty_response.data
+            if not faculty:
                 await self.logger.log(
-                    action="Add",
+                    action="Create",
                     entity="Department",
                     level="warning",
                     code=404,
                     message="Faculty not found for department creation",
-                    details={"faculty_id": data.faculty_id},
+                    details={},
                     source="DepartmentService",
                 )
                 return BaseResponseDto(
@@ -211,122 +265,157 @@ class DepartmentService(IDepartmentService):
                     message="Faculty not found",
                 )
 
-            # 4. Check duplicates
-            if data.study_type != "Both":
-                existing_name_res = await self.department_repository.find_one(
-                    (Department.faculty_id == data.faculty_id)
-                    & (func.lower(Department.study_type) == data.study_type.lower())
-                    & (func.lower(Department.name) == data.name.lower())
-                )
-                existing_code_res = await self.department_repository.find_one(
-                    (Department.faculty_id == data.faculty_id)
-                    & (func.lower(Department.study_type) == data.study_type.lower())
-                    & (func.lower(Department.code) == data.code.lower())
+            existing_department_response = None
+
+            if data.study_type != Department.StudyType.BOTH:
+                existing_department_response = (
+                    await self.department_repository.find_one(
+                        and_(
+                            (Department.faculty_id == data.faculty_id),
+                            (
+                                func.lower(Department.study_type)
+                                == data.study_type.lower()
+                            ),
+                            or_(
+                                (func.lower(Department.name) == data.name.lower()),
+                                (func.lower(Department.code) == data.code.lower()),
+                            ),
+                        )
+                    )
                 )
             else:
-                existing_name_res = await self.department_repository.find_one(
-                    (Department.faculty_id == data.faculty_id)
-                    & (func.lower(Department.name) == data.name.lower())
-                )
-                existing_code_res = await self.department_repository.find_one(
-                    (Department.faculty_id == data.faculty_id)
-                    & (func.lower(Department.code) == data.code.lower())
+                existing_department_response = (
+                    await self.department_repository.find_one(
+                        and_(
+                            (Department.faculty_id == data.faculty_id),
+                            or_(
+                                (func.lower(Department.name) == data.name.lower()),
+                                (func.lower(Department.code) == data.code.lower()),
+                            ),
+                        )
+                    )
                 )
 
-            if existing_name_res.success and existing_name_res.data:
+            if not existing_department_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_department_response.code,
+                    data=None,
+                    message=existing_department_response.message,
+                )
+
+            existing_department = existing_department_response.data
+            if existing_department:
                 await self.logger.log(
-                    action="Add",
+                    action="Create",
                     entity="Department",
                     level="warning",
                     code=400,
-                    message="Department Name Already Exists with this Type for this Faculty.",
-                    details={"name": data.name, "faculty_id": data.faculty_id},
+                    message="Department with this Name or Code already exists for this Faculty.",
+                    details={},
                     source="DepartmentService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=400,
-                    message="Department with this Name already exists with this type for this faculty",
+                    message="Department with this Name or Code already exists for this Faculty",
                 )
 
-            if existing_code_res.success and existing_code_res.data:
-                await self.logger.log(
-                    action="Add",
-                    entity="Department",
-                    level="warning",
-                    code=400,
-                    message="Department Code Already Exists with this Type for this Faculty.",
-                    details={"code": data.code, "faculty_id": data.faculty_id},
-                    source="DepartmentService",
+            if data.study_type != Department.StudyType.BOTH:
+                create_department_response = await self.department_repository.create(
+                    data
                 )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    message="Department with this Code already exists with this type for this faculty",
-                )
-
-            # 5. Save department record(s)
-            created_dept = None
-            if data.study_type != "Both":
-                dept = Department(
-                    name=data.name,
-                    faculty_id=data.faculty_id,
-                    study_type=data.study_type,
-                    code=data.code.upper(),
-                )
-                result = await self.department_repository.create(dept)
-                if not result.success:
+                if not create_department_response.success:
                     return BaseResponseDto(
                         success=False,
-                        code=result.code,
+                        code=create_department_response.code,
                         data=None,
-                        message=result.message,
+                        message=create_department_response.message,
                     )
-                created_dept = result.data
+                created_department = create_department_response.data
+                if not created_department:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Department",
+                        level="error",
+                        code=500,
+                        message="Failed to create department.",
+                        details={},
+                        source="DepartmentService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        message="Failed to create department",
+                    )
             else:
-                dept_mainstream = Department(
-                    name=data.name,
-                    faculty_id=data.faculty_id,
-                    study_type="Mainstream",
-                    code=data.code.upper(),
+                data.study_type = Department.StudyType.MAINSTREAM
+                create_mainstream_response = await self.department_repository.create(
+                    data
                 )
-                result_mainstream = await self.department_repository.create(dept_mainstream)
-                if not result_mainstream.success:
+                if not create_mainstream_response.success:
                     return BaseResponseDto(
                         success=False,
-                        code=result_mainstream.code,
+                        code=create_mainstream_response.code,
                         data=None,
-                        message=result_mainstream.message,
+                        message=create_mainstream_response.message,
                     )
-                dept_credit = Department(
-                    name=data.name,
-                    faculty_id=data.faculty_id,
-                    study_type="Credit",
-                    code=data.code.upper(),
-                )
-                result_credit = await self.department_repository.create(dept_credit)
-                if not result_credit.success:
+                created_mainstream_department = create_mainstream_response.data
+                if not created_mainstream_department:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Department",
+                        level="error",
+                        code=500,
+                        message="Failed to create mainstream department.",
+                        details={},
+                        source="DepartmentService",
+                    )
                     return BaseResponseDto(
                         success=False,
-                        code=result_credit.code,
-                        data=None,
-                        message=result_credit.message,
+                        code=500,
+                        message="Failed to create mainstream department",
                     )
-                created_dept = result_mainstream.data
+                data.study_type = Department.StudyType.CREDIT
+                create_credit_response = await self.department_repository.create(data)
+                if not create_credit_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=create_credit_response.code,
+                        data=None,
+                        message=create_credit_response.message,
+                    )
+                created_credit_department = create_credit_response.data
+                if not created_credit_department:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Department",
+                        level="error",
+                        code=500,
+                        message="Failed to create credit department.",
+                        details={},
+                        source="DepartmentService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        message="Failed to create credit department",
+                    )
+                created_department = created_mainstream_department
 
             await self.logger.log(
-                action="Add",
+                action="Create",
                 entity="Department",
                 level="info",
                 code=201,
                 message="Department Created Successfully.",
-                details={"name": data.name, "faculty_id": data.faculty_id},
+                details={},
                 source="DepartmentService",
             )
-            return BaseResponseDto(success=True, code=201, data=created_dept)
+            return BaseResponseDto(success=True, code=201, data=created_department)
         except Exception as ex:
             await self.logger.log(
-                action="Add",
+                action="Create",
                 entity="Department",
                 level="error",
                 code=500,
@@ -341,74 +430,134 @@ class DepartmentService(IDepartmentService):
                 message="An error occurred while creating department",
             )
 
-    async def update(self, data: Department):
+    async def update(self, data):
         try:
-            # 1. Check if exists
-            dept_res = await self.department_repository.find_one(Department.id == data.id)
-            if not dept_res.success or not dept_res.data:
+            department_response = await self.department_repository.find_one(
+                Department.id == data.id
+            )
+            if not department_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=department_response.code,
+                    data=None,
+                    message=department_response.message,
+                )
+            department = department_response.data
+            if not department:
                 await self.logger.log(
-                    action="Edit",
+                    action="Update",
                     entity="Department",
                     level="warning",
                     code=404,
-                    message="Department Not Found for Update.",
+                    message="Department not found for update.",
                     details={"department_id": data.id},
                     source="DepartmentService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=404,
-                    message="Department not found",
+                    message="Department not found for update",
                 )
-            department = dept_res.data
-
-            # 2. Permissions check
-            permissions_response = await self.user_service.get_user_permissions()
-            if not permissions_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=permissions_response.code or 403,
-                    message=permissions_response.message or "Unauthorized to update department",
-                )
-            permissions = permissions_response.data or []
-            can_access_all_faculties = "Access All Faculties" in permissions
-
-            # 3. Faculty constraints
             logged_in_user_response = await self.helper_service.get_logged_in_user()
-            if not logged_in_user_response.success or not logged_in_user_response.data:
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Department",
+                    level="warning",
+                    code=401,
+                    message="User not logged in for department update",
+                    details={},
+                    source="DepartmentService",
+                )
                 return BaseResponseDto(
                     success=False,
                     code=401,
                     message="User not logged in",
                 )
-            current_user = logged_in_user_response.data
-
-            if data.faculty_id != current_user.faculty_id and not can_access_all_faculties:
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
                 await self.logger.log(
-                    action="Edit",
+                    action="Update",
+                    entity="Department",
+                    level="warning",
+                    code=401,
+                    message="User not logged in for department update",
+                    details={},
+                    source="DepartmentService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    message="User not logged in",
+                )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Role, ["exact_roles"]
+            )
+            logged_in_user_role_response = await self.role_repository.find_one(
+                Role.id == logged_in_user.role_id, dynamic_includes
+            )
+            if not logged_in_user_role_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="User role not found",
+                )
+            logged_in_user_role = logged_in_user_role_response.data
+            if not logged_in_user_role:
+                await self.logger.log(
+                    action="Update",
                     entity="Department",
                     level="warning",
                     code=403,
-                    message="User does not have access to change the faculty for department update.",
-                    details={"faculty_id": data.faculty_id},
+                    message="User role not found for department update",
+                    details={"user_id": logged_in_user.id},
                     source="DepartmentService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=403,
-                    message="You do not have access to select faculty rather than your own",
+                    message="User role not found",
                 )
-
-            # 4. Check faculty existence
-            faculty_response = await self.faculty_repository.find_one(Faculty.id == data.faculty_id)
-            if not faculty_response.success or not faculty_response.data:
+            logged_in_user_permissions = [
+                perm.name for perm in logged_in_user_role.exact_roles
+            ]
+            if (
+                department.faculty_id != logged_in_user.faculty_id
+                or data.faculty_id != logged_in_user.faculty_id
+            ) and "Access All Faculties" not in logged_in_user_permissions:
                 await self.logger.log(
-                    action="Edit",
+                    action="Update",
+                    entity="Department",
+                    level="warning",
+                    code=403,
+                    message="User does not have access to update department for this faculty.",
+                    details={"faculty_id": department.faculty_id},
+                    source="DepartmentService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="You do not have access to update department for this faculty",
+                )
+            faculty_response = await self.faculty_repository.find_one(
+                Faculty.id == data.faculty_id
+            )
+            if not faculty_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=faculty_response.code,
+                    data=None,
+                    message=faculty_response.message,
+                )
+            faculty = faculty_response.data
+            if not faculty:
+                await self.logger.log(
+                    action="Update",
                     entity="Department",
                     level="warning",
                     code=404,
                     message="Faculty not found for department update",
-                    details={"faculty_id": data.faculty_id},
+                    details={},
                     source="DepartmentService",
                 )
                 return BaseResponseDto(
@@ -416,81 +565,101 @@ class DepartmentService(IDepartmentService):
                     code=404,
                     message="Faculty not found",
                 )
-
-            # 5. Check duplicate name / code
-            existing_name_res = await self.department_repository.find_one(
-                (Department.faculty_id == department.faculty_id)
-                & (func.lower(Department.study_type) == data.study_type.lower())
-                & (func.lower(Department.name) == data.name.lower())
-            )
-            if existing_name_res.success and existing_name_res.data:
-                existing_dept = existing_name_res.data
-                if existing_dept.id != data.id:
-                    await self.logger.log(
-                        action="Edit",
-                        entity="Department",
-                        level="warning",
-                        code=400,
-                        message="Department Name Already Exists with this Type for this Faculty.",
-                        details={"name": data.name, "faculty_id": data.faculty_id},
-                        source="DepartmentService",
+            existing_department_response = None
+            if data.study_type != Department.StudyType.BOTH:
+                existing_department_response = (
+                    await self.department_repository.find_one(
+                        and_(
+                            (Department.faculty_id == data.faculty_id),
+                            (
+                                func.lower(Department.study_type)
+                                == data.study_type.lower()
+                            ),
+                            or_(
+                                (func.lower(Department.name) == data.name.lower()),
+                                (func.lower(Department.code) == data.code.lower()),
+                            ),
+                        )
                     )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        message="Department with this Name already exists with this type for this faculty",
+                )
+            else:
+                existing_department_response = (
+                    await self.department_repository.find_one(
+                        and_(
+                            (Department.faculty_id == data.faculty_id),
+                            or_(
+                                (func.lower(Department.name) == data.name.lower()),
+                                (func.lower(Department.code) == data.code.lower()),
+                            ),
+                        )
                     )
-
-            existing_code_res = await self.department_repository.find_one(
-                (Department.faculty_id == department.faculty_id)
-                & (func.lower(Department.study_type) == data.study_type.lower())
-                & (func.lower(Department.code) == data.code.lower())
-            )
-            if existing_code_res.success and existing_code_res.data:
-                existing_dept = existing_code_res.data
-                if existing_dept.id != data.id:
-                    await self.logger.log(
-                        action="Edit",
-                        entity="Department",
-                        level="warning",
-                        code=400,
-                        message="Department Code Already Exists with this Type for this Faculty.",
-                        details={"code": data.code, "faculty_id": data.faculty_id},
-                        source="DepartmentService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        message="Department with this Code already exists with this type for this faculty",
-                    )
-
-            # 6. Apply updates
-            department.name = data.name
-            department.faculty_id = data.faculty_id
-            department.study_type = data.study_type
-            department.code = data.code.upper()
-
-            result = await self.department_repository.update(department)
-            if not result.success:
+                )
+            if not existing_department_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=result.code,
+                    code=existing_department_response.code,
                     data=None,
-                    message=result.message,
+                    message=existing_department_response.message,
+                )
+            existing_department = existing_department_response.data
+            if existing_department and existing_department.id != data.id:
+                await self.logger.log(
+                    action="Update",
+                    entity="Department",
+                    level="warning",
+                    code=400,
+                    message="Another department with this Name or Code already exists for this Faculty.",
+                    details={},
+                    source="DepartmentService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    message="Another department with this Name or Code already exists for this Faculty",
+                )
+            department.name = data.name
+            department.code = data.code
+            department.faculty_id = data.faculty_id
+            department.study_type = data.study_type
+            update_response = await self.department_repository.update(
+                department, ["name", "code", "faculty_id", "study_type"]
+            )
+            if not update_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_response.code,
+                    data=None,
+                    message=update_response.message,
+                )
+            updated_department = update_response.data
+            if not updated_department:
+                await self.logger.log(
+                    action="Update",
+                    entity="Department",
+                    level="error",
+                    code=500,
+                    message="Failed to update department.",
+                    details={},
+                    source="DepartmentService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    message="Failed to update department",
                 )
             await self.logger.log(
-                action="Edit",
+                action="Update",
                 entity="Department",
                 level="info",
                 code=200,
-                message="Department Updated Successfully.",
-                details={"department_id": data.id, "name": data.name},
+                message="Department updated successfully.",
+                details={},
                 source="DepartmentService",
             )
-            return BaseResponseDto(success=True, code=200, data=result.data)
+            return BaseResponseDto(success=True, code=200, data=updated_department)
         except Exception as ex:
             await self.logger.log(
-                action="Edit",
+                action="Update",
                 entity="Department",
                 level="error",
                 code=500,
@@ -505,34 +674,54 @@ class DepartmentService(IDepartmentService):
                 message="An error occurred while updating department",
             )
 
-    async def delete(self, data: Department | None):
+    async def delete(self, data):
         try:
-            if not data or not data.id:
+            if not data:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Department",
+                    level="warning",
+                    code=400,
+                    message="No data provided for department deletion.",
+                    details={},
+                    source="DepartmentService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=404,
-                    message="Department not found",
+                    code=400,
+                    message="No data provided for deletion",
+                )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Department, ["users"]
+            )
+            department_response = await self.department_repository.find_one(
+                Department.id == data.id, dynamic_includes
+            )
+            if not department_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=department_response.code,
+                    data=None,
+                    message=department_response.message,
                 )
 
-            dynamic_includes = self.helper_service.generate_dynamic_includes(Department, ["users"])
-            dept_res = await self.department_repository.find_one(Department.id == data.id, dynamic_includes)
-            if not dept_res.success or not dept_res.data:
+            department = department_response.data
+            if not department:
                 await self.logger.log(
                     action="Delete",
                     entity="Department",
                     level="warning",
                     code=404,
-                    message="Department Not Found for Deletion.",
+                    message="Department not found for deletion.",
                     details={"department_id": data.id},
                     source="DepartmentService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=404,
-                    message="Department not found",
+                    message="Department not found for deletion",
                 )
 
-            department = dept_res.data
             if department.users and len(department.users) > 0:
                 await self.logger.log(
                     action="Delete",
@@ -540,7 +729,10 @@ class DepartmentService(IDepartmentService):
                     level="warning",
                     code=400,
                     message="Department Cannot Be Deleted Because It Has Users Associated with It.",
-                    details={"department_id": data.id, "users_count": len(department.users)},
+                    details={
+                        "department_id": data.id,
+                        "users_count": len(department.users),
+                    },
                     source="DepartmentService",
                 )
                 return BaseResponseDto(

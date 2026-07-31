@@ -11,7 +11,10 @@ from sqlalchemy.orm import selectinload
 from business.contextVars.requestContext import request_context
 from business.contextVars.userContext import user_context
 from core.iServices.iHelperService import IHelperService
+from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.user import User
+from core.entities.notification import Notification
+from core.entities.userNotification import UserNotification
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import FetchedModel, DownloadedFileModel, FileModel
 from core.utils.entitiesHandler import EntitiesHandler
@@ -21,6 +24,14 @@ U = TypeVar("U")  # EntitySearchDto Type
 
 
 class HelperService(IHelperService[U]):
+    def __init__(
+        self,
+        notification_repository: IBaseRepository[Notification],
+        user_notification_repository: IBaseRepository[UserNotification],
+    ):
+        self.notification_repository = notification_repository
+        self.user_notification_repository = user_notification_repository
+
     def _get_column_type(self, column):
         column_property = getattr(column, "property", None)
         columns = getattr(column_property, "columns", None)
@@ -259,10 +270,70 @@ class HelperService(IHelperService[U]):
         return and_(*conditions) if is_and else or_(*conditions)
 
     # Notification Functions
-    async def send_notification(self, type, parent_id, content, url=None):
-        return BaseResponseDto(
-            success=True, data=True, message="Notification sent successfully"
-        )
+    async def send_notification(
+        self, notification_type, parent_id, user_ids, content, url=None
+    ):
+        try:
+            notification = Notification(
+                content=content,
+                type=notification_type,
+                parent_id=parent_id,
+                url=url,
+            )
+            create_notification_response = await self.notification_repository.create(
+                notification
+            )
+            if not create_notification_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_notification_response.code,
+                    data=False,
+                    message=create_notification_response.message,
+                )
+            created_notification = create_notification_response.data
+            if not created_notification:
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="Failed to create notification",
+                )
+            for user_id in user_ids or []:
+                user_notification = UserNotification(
+                    user_id=user_id, notification_id=created_notification.id
+                )
+                create_user_notification_response = (
+                    await self.user_notification_repository.create(user_notification)
+                )
+                if not create_user_notification_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=create_user_notification_response.code,
+                        data=False,
+                        message=create_user_notification_response.message,
+                    )
+                created_user_notification = create_user_notification_response.data
+                if not created_user_notification:
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=False,
+                        message="Failed to create user notification",
+                    )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Notification sent successfully",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="An error occurred while sending the notification",
+                error=str(ex),
+            )
 
     # File Functions
     async def _request_with_retries(

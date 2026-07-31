@@ -5,6 +5,4 @@ from core.iControllers.bases.iCrudController import ICrudController
 
 
 class IYearController(ICrudController):
-    @abstractmethod
-    async def search(self, request: Request) -> Response:
-        pass
+    pass

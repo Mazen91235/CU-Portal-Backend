@@ -60,6 +60,10 @@ class MaterialResponseDto(BaseModel):
         None, description="Parent material ID (for hierarchy)"
     )
 
+    children: list[MaterialResponseDto] | None = Field(
+        None, description="List of child materials (for hierarchy)"
+    )
+
     # Pydantic Configuration
     model_config = {
         "from_attributes": True,

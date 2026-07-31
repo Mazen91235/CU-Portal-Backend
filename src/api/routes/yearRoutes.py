@@ -48,32 +48,6 @@ def create_year_admin_router(
         return validate_request
 
     @router.get(
-        "/",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Years"))],
-        response_model=BaseResponseDto[list[YearResponseDto]],
-        status_code=200,
-        summary="Find Years",
-        description="Find academic years based on query parameters",
-    )
-    async def find(
-        request: Request, controller: IYearController = Depends(_get_controller)
-    ):
-        return await controller.find(request)
-
-    @router.get(
-        "/search",
-        dependencies=[Depends(_is_logged_in)],
-        response_model=BaseResponseDto[list[YearResponseDto]],
-        status_code=200,
-        summary="Search Years",
-        description="Search for academic years matching query",
-    )
-    async def search(
-        request: Request, controller: IYearController = Depends(_get_controller)
-    ):
-        return await controller.search(request)
-
-    @router.get(
         "/{year_id}",
         dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Years"))],
         response_model=BaseResponseDto[YearResponseDto],
@@ -85,6 +59,19 @@ def create_year_admin_router(
         request: Request, controller: IYearController = Depends(_get_controller)
     ):
         return await controller.find_one(request)
+
+    @router.get(
+        "/",
+        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Years"))],
+        response_model=BaseResponseDto[list[YearResponseDto]],
+        status_code=200,
+        summary="Find Years",
+        description="Find academic years based on query parameters",
+    )
+    async def find(
+        request: Request, controller: IYearController = Depends(_get_controller)
+    ):
+        return await controller.find(request)
 
     @router.post(
         "/",

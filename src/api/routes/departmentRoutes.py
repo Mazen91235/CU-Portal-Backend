@@ -48,8 +48,26 @@ def create_department_admin_router(
         return validate_request
 
     @router.get(
+        "/{department_id}",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Departments")),
+        ],
+        status_code=200,
+        summary="Find Department",
+        description="Find a department by its ID, returning details and summary metrics",
+    )
+    async def find_one(
+        request: Request, controller: IDepartmentController = Depends(_get_controller)
+    ):
+        return await controller.find_one(request)
+
+    @router.get(
         "/",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Departments"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Departments")),
+        ],
         response_model=BaseResponseDto[list[DepartmentResponseDto]],
         status_code=200,
         summary="Find Departments",
@@ -59,31 +77,6 @@ def create_department_admin_router(
         request: Request, controller: IDepartmentController = Depends(_get_controller)
     ):
         return await controller.find(request)
-
-    @router.get(
-        "/search",
-        dependencies=[Depends(_is_logged_in)],
-        response_model=BaseResponseDto[list[DepartmentResponseDto]],
-        status_code=200,
-        summary="Search Departments",
-        description="Search for departments matching query parameters",
-    )
-    async def search(
-        request: Request, controller: IDepartmentController = Depends(_get_controller)
-    ):
-        return await controller.search(request)
-
-    @router.get(
-        "/{department_id}",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Departments"))],
-        status_code=200,
-        summary="Find Department",
-        description="Find a department by its ID, returning details and summary metrics",
-    )
-    async def find_one(
-        request: Request, controller: IDepartmentController = Depends(_get_controller)
-    ):
-        return await controller.find_one(request)
 
     @router.post(
         "/",
@@ -121,7 +114,10 @@ def create_department_admin_router(
 
     @router.delete(
         "/{department_id}",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("Delete Departments"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Delete Departments")),
+        ],
         response_model=BaseResponseDto[bool],
         status_code=200,
         summary="Delete Department",

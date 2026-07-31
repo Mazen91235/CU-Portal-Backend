@@ -6,8 +6,6 @@ from dependency_injector import containers, providers
 # Fix for ModuleNotFoundError
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
-
-
 from api.routes.mainRoutes import (
     create_main_user_router,
     create_main_admin_router,
@@ -130,7 +128,10 @@ class Container(containers.DeclarativeContainer):
         BaseRepository, session=db_session, model=Year, session_factory=session_factory
     )
     department_repository = providers.Factory(
-        BaseRepository, session=db_session, model=Department, session_factory=session_factory
+        BaseRepository,
+        session=db_session,
+        model=Department,
+        session_factory=session_factory,
     )
     user_notification_repository = providers.Factory(
         BaseRepository,
@@ -158,7 +159,11 @@ class Container(containers.DeclarativeContainer):
     )
 
     # --- 4. Services ---
-    helper_service = providers.Factory(HelperService)
+    helper_service = providers.Factory(
+        HelperService,
+        notification_repository=notification_repository,
+        user_notification_repository=user_notification_repository,
+    )
     logger = providers.Factory(
         BaseLogger, repository=log_repository, helper_service=helper_service
     )
@@ -207,7 +212,7 @@ class Container(containers.DeclarativeContainer):
         DepartmentService,
         department_repository=department_repository,
         faculty_repository=faculty_repository,
-        user_service=user_service,
+        role_repository=role_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -306,12 +311,6 @@ class Container(containers.DeclarativeContainer):
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
-    notification_user_routes = providers.Factory(
-        create_notification_user_router,
-        controller_provider=notification_controller.provider,
-        auth_middleware_provider=auth_middleware.provider,
-        validation_middleware_provider=validation_middleware.provider,
-    )
 
     department_admin_routes = providers.Factory(
         create_department_admin_router,
@@ -319,6 +318,14 @@ class Container(containers.DeclarativeContainer):
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
+
+    notification_user_routes = providers.Factory(
+        create_notification_user_router,
+        controller_provider=notification_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
     material_user_routes = providers.Factory(
         create_material_user_router,
         controller_provider=material_controller.provider,

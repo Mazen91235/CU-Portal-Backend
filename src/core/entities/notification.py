@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from enum import Enum
 from .base import (
     Base,
     Integer,
@@ -53,4 +53,8 @@ class Notification(Base):
     )
 
     # Attributes
-    NOTIFICATION_TYPES = Literal["task", "exam", "announcement", "material"]
+    class Type(str, Enum):
+        TASK = "task"
+        EXAM = "exam"
+        ANNOUNCEMENT = "announcement"
+        MATERIAL = "material"

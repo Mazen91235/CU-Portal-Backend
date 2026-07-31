@@ -30,11 +30,11 @@ class DepartmentController(IDepartmentController):
                     message="Department ID is required",
                 )
             entity_search_dto = Generator[DepartmentSearchDto].generate(
-                DepartmentSearchDto, {"id": department_id}
+                DepartmentSearchDto, {"id": int(department_id)}
             )
             response = await self.department_service.find_one(
                 entity_search_dto,
-                ["faculty", "users", "subjects", "tasks", "announcements"],
+                ["faculty", "users", "subjects"],
             )
             if not response.success:
                 return ResponseHandler.generate_response(
@@ -57,24 +57,14 @@ class DepartmentController(IDepartmentController):
                     code=404,
                     message="Department not found",
                 )
-            summary_data = {
-                "users": len(department.users) if department.users else 0,
-                "subjects": len(department.subjects) if department.subjects else 0,
-                "tasks": len([t for t in department.tasks if t.type.lower() != "exam"]) if department.tasks else 0,
-                "exams": len([t for t in department.tasks if t.type.lower() == "exam"]) if department.tasks else 0,
-                "announcements": len(department.announcements) if department.announcements else 0,
-                "events": 0,
-            }
             department_mapped = Mapper[Department, DepartmentResponseDto].map(
                 department, DepartmentResponseDto, True
             )
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
-                data={
-                    "department": department_mapped,
-                    "summary": summary_data,
-                },
+                data=department_mapped,
+                message="Department found successfully",
             )
         except Exception as e:
             await self.logger.log(
@@ -171,67 +161,6 @@ class DepartmentController(IDepartmentController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def search(self, request):
-        try:
-            query_params = request.query_params
-            query_val = query_params.get("query", "").strip()
-            faculty_id = query_params.get("faculty_id")
-            study_type = query_params.get("study_type", "").strip().title()
-
-            payload = {}
-            if query_val:
-                payload["query"] = query_val
-            if faculty_id:
-                payload["faculty_id"] = int(faculty_id) if str(faculty_id).isdigit() else None
-            if study_type:
-                payload["study_type"] = study_type
-
-            entity_search_dto = Generator[DepartmentSearchDto].generate(
-                DepartmentSearchDto, payload
-            )
-            response = await self.department_service.find(
-                entity_search_dto,
-                None,
-                None,
-                False,
-                True,
-                False,  # case-insensitive starts_with or contains search
-                ["name"],
-                False,
-                1,
-                50,
-            )
-            if not response.success:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=response.code,
-                    message=response.message,
-                )
-            departments = response.data
-            departments_mapped = Mapper[Department, DepartmentResponseDto].map_list(
-                departments, DepartmentResponseDto, True
-            )
-            return ResponseHandler.generate_response(
-                success=True,
-                code=200,
-                data=departments_mapped,
-            )
-        except Exception as e:
-            await self.logger.log(
-                action="Search",
-                entity="Department",
-                level="error",
-                code=500,
-                message="An error occurred while processing the search",
-                details={"error": str(e)},
-                source="DepartmentController",
-            )
-            return ResponseHandler.generate_response(
-                success=False,
-                code=500,
-                message="An error occurred while processing the request, please try again later",
-            )
-
     async def create(self, request):
         try:
             await self.department_service.begin_transaction()
@@ -246,14 +175,14 @@ class DepartmentController(IDepartmentController):
                     code=response.code,
                     message=response.message,
                 )
-            await self.department_service.commit_transaction()
-            dept_mapped = Mapper[Department, DepartmentResponseDto].map(
+            department_mapped = Mapper[Department, DepartmentResponseDto].map(
                 response.data, DepartmentResponseDto, True
             )
+            await self.department_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
                 code=201,
-                data=dept_mapped,
+                data=department_mapped,
             )
         except Exception as e:
             await self.department_service.rollback_transaction()
@@ -284,9 +213,9 @@ class DepartmentController(IDepartmentController):
                     message="Department ID is required",
                 )
             payload = await request.json()
+            payload["id"] = int(department_id)
             data = Generator[DepartmentUpdateDto].generate(DepartmentUpdateDto, payload)
             department = Mapper[DepartmentUpdateDto, Department].map(data, Department)
-            department.id = int(department_id)
             response = await self.department_service.update(department)
             if not response.success:
                 await self.department_service.rollback_transaction()
@@ -295,14 +224,14 @@ class DepartmentController(IDepartmentController):
                     code=response.code,
                     message=response.message,
                 )
-            await self.department_service.commit_transaction()
-            dept_mapped = Mapper[Department, DepartmentResponseDto].map(
+            department_mapped = Mapper[Department, DepartmentResponseDto].map(
                 response.data, DepartmentResponseDto, True
             )
+            await self.department_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
-                data=dept_mapped,
+                data=department_mapped,
             )
         except Exception as e:
             await self.department_service.rollback_transaction()
@@ -332,8 +261,9 @@ class DepartmentController(IDepartmentController):
                     code=400,
                     message="Department ID is required",
                 )
-            department = Department()
-            department.id = int(department_id)
+            department = Generator[Department].generate(
+                Department, {"id": int(department_id)}
+            )
             response = await self.department_service.delete(department)
             if not response.success:
                 await self.department_service.rollback_transaction()

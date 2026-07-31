@@ -9,6 +9,7 @@ from core.entities.material import Material
 from core.entities.subject import Subject
 from core.entities.role import Role
 from core.entities.user import User
+from core.entities.notification import Notification
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import FetchedModel
 from core.utils.validator import Validator
@@ -254,35 +255,53 @@ class MaterialService(IMaterialService):
                     )
                 parent_id = parent_material.id
             subject_id = None
-            if data.subject_id:
-                subject_response = await self.subject_repository.find_one(
-                    Subject.id == data.subject_id
+            if not data.subject_id:
+                await self.logger.log(
+                    action="Create",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message=f"Subject ID is required for material creation",
+                    details={"error": "Subject ID is missing"},
+                    source="MaterialService",
                 )
-                if not subject_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=subject_response.code,
-                        data=None,
-                        message=subject_response.message,
-                    )
-                subject = subject_response.data
-                if not subject:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Material",
-                        level="error",
-                        code=404,
-                        message=f"Subject with ID {data.subject_id} not found",
-                        details={"error": "Subject not found"},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message=f"Subject with ID {data.subject_id} not found",
-                    )
-                subject_id = subject.id
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"Subject ID is required for material creation",
+                )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["users"]
+            )
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == data.subject_id,
+                dynamic_includes,
+            )
+            if not subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=subject_response.code,
+                    data=None,
+                    message=subject_response.message,
+                )
+            subject = subject_response.data
+            if not subject:
+                await self.logger.log(
+                    action="Create",
+                    entity="Material",
+                    level="error",
+                    code=404,
+                    message=f"Subject with ID {data.subject_id} not found",
+                    details={"error": "Subject not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"Subject with ID {data.subject_id} not found",
+                )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -410,6 +429,31 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Failed to create material, please try again later.",
                 )
+            user_ids = [user.id for user in subject.users] if subject.users else []
+            share_link = f"/user/materials/{subject_id}"
+            if parent_id:
+                share_link += f"/{parent_id}"
+            if data.type == "file":
+                share_link += f"?material_id={created_material.id}"
+            elif data.type != "folder":
+                share_link = created_material.url
+            notification_response = await self.helper_service.send_notification(
+                Notification.Type.MATERIAL,
+                created_material.id,
+                user_ids,
+                f"New material '{created_material.name}' has been created for subject {subject.name}.",
+                share_link,
+            )
+            if not notification_response.success:
+                await self.logger.log(
+                    action="Create",
+                    entity="Material",
+                    level="error",
+                    code=notification_response.code or 500,
+                    message=f"Failed to send notification for material creation: {notification_response.message}",
+                    details={"error": notification_response.error},
+                    source="MaterialService",
+                )
             return BaseResponseDto(
                 success=True,
                 code=201,
@@ -511,6 +555,37 @@ class MaterialService(IMaterialService):
                     code=404,
                     data=None,
                     message=f"Material with ID {data.id} not found",
+                )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["users"]
+            )
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == existing_material.subject_id,
+                dynamic_includes
+            )
+            if not subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=subject_response.code,
+                    data=None,
+                    message=subject_response.message,
+                )
+            subject = subject_response.data
+            if not subject:
+                await self.logger.log(
+                    action="Update",
+                    entity="Material",
+                    level="error",
+                    code=404,
+                    message=f"Subject with ID {existing_material.subject_id} not found",
+                    details={"error": "Subject not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"Subject with ID {existing_material.subject_id} not found",
                 )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
@@ -717,6 +792,31 @@ class MaterialService(IMaterialService):
                 )
             if to_be_removed:
                 await self._remove_files([to_be_removed_data])
+            user_ids = [user.id for user in subject.users] if subject.users else []
+            share_link = f"/user/materials/{updated_material.subject_id}"
+            if updated_material.parent_id:
+                share_link += f"/{updated_material.parent_id}"
+            if updated_material.type == "file":
+                share_link += f"?material_id={updated_material.id}"
+            elif updated_material.type != "folder":
+                share_link = updated_material.url
+            notification_response = await self.helper_service.send_notification(
+                ,
+                updated_material.id,
+                user_ids,
+                f"Material '{updated_material.name}' has been updated for subject {subject.name}.",
+                share_link,
+            )
+            if not notification_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Material",
+                    level="error",
+                    code=notification_response.code or 500,
+                    message=f"Failed to send notification for material update: {notification_response.message}",
+                    details={"error": notification_response.error},
+                    source="MaterialService",
+                )
             return BaseResponseDto(
                 success=True,
                 code=200,
@@ -1859,8 +1959,13 @@ class MaterialService(IMaterialService):
                 author_id=author_id,
             )
             if fetched_file_type == "file":
-                neurl=self.helper_service.get_file_url_from_id(fetched_file.id),
-                details={"fetched": True, "file_data": fetched_file.model_dump()},
+                new_material.url = self.helper_service.get_file_url_from_id(
+                    fetched_file.id
+                )
+                new_material.details = {
+                    "fetched": True,
+                    "file_data": fetched_file.model_dump(),
+                }
             unique_name_response = await self._generate_unique_name(
                 new_material.name, new_material.subject_id, new_material.parent_id
             )

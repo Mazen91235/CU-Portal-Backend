@@ -6,7 +6,6 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.year import Year
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.yearDtos import YearSearchDto
 
 
 class YearService(IYearService):
@@ -44,7 +43,7 @@ class YearService(IYearService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Year, data, None, is_and, starts_with, is_exact
+                Year, data, ["year"], is_and, starts_with, is_exact
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Year, includes
@@ -102,7 +101,7 @@ class YearService(IYearService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Year, data, None, is_and, starts_with, is_exact
+                Year, data, ["year"], is_and, starts_with, is_exact
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Year, includes
@@ -147,12 +146,22 @@ class YearService(IYearService):
                 message="An error occurred while finding academic years",
             )
 
-    async def create(self, data: Year):
+    async def create(self, data):
         try:
-            existing_response = await self.year_repository.find_one(Year.year == data.year)
-            if existing_response.success and existing_response.data:
+            existing_year_response = await self.year_repository.find_one(
+                Year.year == data.year
+            )
+            if not existing_year_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_year_response.code,
+                    data=None,
+                    message=existing_year_response.message,
+                )
+            existing_year = existing_year_response.data
+            if existing_year:
                 await self.logger.log(
-                    action="Add",
+                    action="Create",
                     entity="Year",
                     level="warning",
                     code=400,
@@ -175,8 +184,25 @@ class YearService(IYearService):
                     data=None,
                     message=result.message,
                 )
+            created_year = result.data
+            if not created_year:
+                await self.logger.log(
+                    action="Create",
+                    entity="Year",
+                    level="error",
+                    code=500,
+                    message="Failed to create year",
+                    details={"year": data.year},
+                    source="YearService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="Failed to create year",
+                )
             await self.logger.log(
-                action="Add",
+                action="Create",
                 entity="Year",
                 level="info",
                 code=201,
@@ -184,10 +210,10 @@ class YearService(IYearService):
                 details={"year": data.year},
                 source="YearService",
             )
-            return BaseResponseDto(success=True, code=201, data=result.data)
+            return BaseResponseDto(success=True, code=201, data=created_year)
         except Exception as ex:
             await self.logger.log(
-                action="Add",
+                action="Create",
                 entity="Year",
                 level="error",
                 code=500,
@@ -202,10 +228,18 @@ class YearService(IYearService):
                 message="An error occurred while creating academic year",
             )
 
-    async def update(self, data: Year):
+    async def update(self, data):
         try:
             year_response = await self.year_repository.find_one(Year.id == data.id)
-            if not year_response.success or not year_response.data:
+            if not year_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=year_response.code,
+                    data=None,
+                    message=year_response.message,
+                )
+            year = year_response.data
+            if not year:
                 await self.logger.log(
                     action="Edit",
                     entity="Year",
@@ -222,30 +256,37 @@ class YearService(IYearService):
                     message="Year not found",
                 )
 
-            existing_response = await self.year_repository.find_one(Year.year == data.year)
-            if existing_response.success and existing_response.data:
-                existing_year = existing_response.data
-                if existing_year.id != data.id:
-                    await self.logger.log(
-                        action="Edit",
-                        entity="Year",
-                        level="warning",
-                        code=400,
-                        message="Year already exists for update",
-                        details={"year": data.year},
-                        source="YearService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Year already exists",
-                    )
+            existing_response = await self.year_repository.find_one(
+                Year.year == data.year
+            )
+            if not existing_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_response.code,
+                    data=None,
+                    message=existing_response.message,
+                )
+            existing_year = existing_response.data
+            if existing_year and existing_year.id != data.id:
+                await self.logger.log(
+                    action="Edit",
+                    entity="Year",
+                    level="warning",
+                    code=400,
+                    message="Another year with the same value already exists",
+                    details={"year_id": data.id, "year": data.year},
+                    source="YearService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Another year with the same value already exists",
+                )
 
-            year_obj = year_response.data
-            year_obj.year = data.year
+            year.year = data.year
 
-            result = await self.year_repository.update(year_obj)
+            result = await self.year_repository.update(year, ["year"])
             if not result.success:
                 return BaseResponseDto(
                     success=False,
@@ -253,6 +294,25 @@ class YearService(IYearService):
                     data=None,
                     message=result.message,
                 )
+
+            updated_year = result.data
+            if not updated_year:
+                await self.logger.log(
+                    action="Edit",
+                    entity="Year",
+                    level="error",
+                    code=500,
+                    message="Failed to update year",
+                    details={"year_id": data.id, "year": data.year},
+                    source="YearService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="Failed to update year",
+                )
+
             await self.logger.log(
                 action="Edit",
                 entity="Year",
@@ -262,7 +322,7 @@ class YearService(IYearService):
                 details={"year_id": data.id, "year": data.year},
                 source="YearService",
             )
-            return BaseResponseDto(success=True, code=200, data=result.data)
+            return BaseResponseDto(success=True, code=200, data=updated_year)
         except Exception as ex:
             await self.logger.log(
                 action="Edit",
@@ -280,19 +340,24 @@ class YearService(IYearService):
                 message="An error occurred while updating academic year",
             )
 
-    async def delete(self, data: Year | None):
+    async def delete(self, data):
         try:
-            if not data or not data.id:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Year, ["users"]
+            )
+            year_response = await self.year_repository.find_one(
+                Year.id == data.id, dynamic_includes
+            )
+            if not year_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=404,
+                    code=year_response.code,
                     data=None,
-                    message="Year not found",
+                    message=year_response.message,
                 )
 
-            dynamic_includes = self.helper_service.generate_dynamic_includes(Year, ["users"])
-            year_response = await self.year_repository.find_one(Year.id == data.id, dynamic_includes)
-            if not year_response.success or not year_response.data:
+            year = year_response.data
+            if not year:
                 await self.logger.log(
                     action="Delete",
                     entity="Year",
@@ -309,7 +374,6 @@ class YearService(IYearService):
                     message="Year not found",
                 )
 
-            year = year_response.data
             if year.users and len(year.users) > 0:
                 await self.logger.log(
                     action="Delete",
