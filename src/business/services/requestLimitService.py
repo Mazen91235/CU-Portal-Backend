@@ -37,7 +37,7 @@ class RequestLimitService(IRequestLimitService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                RequestLimit, data, is_and, starts_with, is_exact
+                RequestLimit, data, [], is_and, starts_with, is_exact
             )
             result = await self.request_limit_repository.count(
                 predicate,

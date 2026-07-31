@@ -78,6 +78,13 @@ class IHelperService(ABC, Generic[U]):
         pass
 
     @abstractmethod
+    def get_file_url_from_id(
+        self,
+        file_id: str,
+    ) -> str | None:
+        pass
+
+    @abstractmethod
     def get_file_type(
         self,
         mime_type: str,
