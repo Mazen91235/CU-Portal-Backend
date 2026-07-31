@@ -1,8 +1,8 @@
 import asyncio
 from typing import Callable
-from fastapi import Request, Response, HTTPException
+from fastapi import Request, Response, Depends, HTTPException
 from fastapi.routing import APIRoute
-from fastapi.params import Depends
+from core.iMiddlewares.iRequestLimitMiddleware import IRequestLimitMiddleware
 from core.iLoggers.iBaseLogger import IBaseLogger
 from business.contextVars.userContext import user_context
 from business.contextVars.sessionContext import session_context
@@ -80,7 +80,19 @@ class CustomRoute(APIRoute):
         timeout_seconds = self.timeout_seconds
 
         async def custom_route_handler(request: Request) -> Response:
+            def _get_rate_limit_middleware() -> IRequestLimitMiddleware:
+                return request.app.state.container.request_limit_middleware.provider()
+
+            async def _rate_limit(
+                request: Request,
+                rate_middleware: IRequestLimitMiddleware = Depends(
+                    _get_rate_limit_middleware
+                ),
+            ):
+                return await rate_middleware.throttle(request)
+
             try:
+                await _rate_limit(request)
                 return await asyncio.wait_for(
                     original_route_handler(request), timeout=timeout_seconds
                 )

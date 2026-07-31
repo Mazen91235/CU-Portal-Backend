@@ -1,48 +1,67 @@
 from fastapi import APIRouter, Request, Depends
+from customRoute import CustomRoute
 from core.iControllers.iNotificationController import INotificationController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
-from core.iMiddlewares.iRequestLimitMiddleware import IRequestLimitMiddleware
+from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
 
-# User Router
-def create_notification_router(
-    controller_provider, auth_middleware_provider, rate_limit_provider
+
+def create_notification_user_router(
+    controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/notifications", tags=["User Notifications"])
+    router = APIRouter(
+        prefix="/notifications", tags=["User Notifications"], route_class=CustomRoute
+    )
 
     def _get_controller() -> INotificationController:
         return controller_provider()
 
     def _get_auth_middleware() -> IAuthMiddleware:
         return auth_middleware_provider()
-        
-    def _get_rate_limit_middleware() -> IRequestLimitMiddleware:
-        return rate_limit_provider()
 
-    async def _is_logged_in(request: Request, auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware)):
+    def _get_validation_middleware() -> IValidationMiddleware:
+        return validation_middleware_provider()
+
+    async def _is_logged_in(
+        request: Request,
+        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+    ):
         return await auth_middleware.is_logged_in(request)
-        
-    async def _rate_limit(request: Request, rate_middleware: IRequestLimitMiddleware = Depends(_get_rate_limit_middleware)):
-        return await rate_middleware.throttle(request)
+
+    def _validate(*keys):
+        async def validate_request(
+            request: Request,
+            validation_middleware: IValidationMiddleware = Depends(
+                _get_validation_middleware
+            ),
+        ):
+            return await validation_middleware.validate(request, *keys)
+
+        return validate_request
 
     @router.get(
-        "",
-        dependencies=[Depends(_is_logged_in), Depends(_rate_limit)],
+        "/",
+        dependencies=[Depends(_is_logged_in)],
         response_model=BaseResponseDto,
         summary="Get Notifications (User)",
-        description="Retrieves a paginated list of notifications for the logged-in user."
+        description="Retrieves a paginated list of notifications for the logged-in user.",
     )
-    async def get_notifications_user(request: Request, controller: INotificationController = Depends(_get_controller)):
-        return await controller.get_notifications_user(request)
+    async def find(
+        request: Request, controller: INotificationController = Depends(_get_controller)
+    ):
+        return await controller.find(request)
 
     @router.patch(
         "/{notification_id}",
-        dependencies=[Depends(_is_logged_in), Depends(_rate_limit)],
+        dependencies=[Depends(_is_logged_in)],
         response_model=BaseResponseDto,
         summary="Mark Notification as Seen",
-        description="Marks a specific notification as seen for the logged-in user."
+        description="Marks a specific notification as seen for the logged-in user.",
     )
-    async def mark_notification_as_seen(notification_id: int, request: Request, controller: INotificationController = Depends(_get_controller)):
-        return await controller.mark_notification_as_seen(request, notification_id)
+    async def mark_notification_as_seen(
+        request: Request,
+        controller: INotificationController = Depends(_get_controller),
+    ):
+        return await controller.mark_notification_as_seen(request)
 
     return router
