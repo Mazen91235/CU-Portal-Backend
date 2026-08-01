@@ -39,40 +39,6 @@ def create_announcement_user_router(
         return await auth_middleware.has_registered_subjects(request)
 
     @router.get(
-        "/",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
-        ],
-        response_model=BaseResponseDto[list[AnnouncementResponseDto]],
-        status_code=200,
-        summary="Find Announcements",
-        description="Find all announcements for the currently logged in user based on enrolled subjects",
-    )
-    async def find(
-        request: Request, controller: IAnnouncementController = Depends(_get_controller)
-    ):
-        return await controller.find(request)
-
-    @router.get(
-        "/search",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
-        ],
-        response_model=BaseResponseDto[list[AnnouncementResponseDto]],
-        status_code=200,
-        summary="Search Announcements",
-        description="Search for announcements in enrolled subjects based on query parameters",
-    )
-    async def search(
-        request: Request, controller: IAnnouncementController = Depends(_get_controller)
-    ):
-        return await controller.search(request)
-
-    @router.get(
         "/{announcement_id}",
         dependencies=[
             Depends(_is_logged_in),
@@ -88,6 +54,23 @@ def create_announcement_user_router(
         request: Request, controller: IAnnouncementController = Depends(_get_controller)
     ):
         return await controller.find_one(request)
+
+    @router.get(
+        "/",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
+        ],
+        response_model=BaseResponseDto[list[AnnouncementResponseDto]],
+        status_code=200,
+        summary="Find Announcements",
+        description="Find all announcements for the currently logged in user based on enrolled subjects",
+    )
+    async def find(
+        request: Request, controller: IAnnouncementController = Depends(_get_controller)
+    ):
+        return await controller.find(request)
 
     return router
 
@@ -145,6 +128,24 @@ def create_announcement_admin_router(
         return validate_request
 
     @router.get(
+        "/{announcement_id}",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Announcements")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
+        ],
+        response_model=BaseResponseDto[AnnouncementResponseDto],
+        status_code=200,
+        summary="Find Announcement",
+        description="Find an announcement by its ID (Admin View)",
+    )
+    async def find_one(
+        request: Request, controller: IAnnouncementController = Depends(_get_controller)
+    ):
+        return await controller.find_one(request)
+
+    @router.get(
         "/",
         dependencies=[
             Depends(_is_logged_in),
@@ -161,24 +162,6 @@ def create_announcement_admin_router(
         request: Request, controller: IAnnouncementController = Depends(_get_controller)
     ):
         return await controller.find(request)
-
-    @router.get(
-        "/search",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("View Announcements")),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
-        ],
-        response_model=BaseResponseDto[list[AnnouncementResponseDto]],
-        status_code=200,
-        summary="Search Announcements",
-        description="Search for announcements based on query parameters (Admin View)",
-    )
-    async def search(
-        request: Request, controller: IAnnouncementController = Depends(_get_controller)
-    ):
-        return await controller.search(request)
 
     @router.post(
         "/",
@@ -198,24 +181,6 @@ def create_announcement_admin_router(
         request: Request, controller: IAnnouncementController = Depends(_get_controller)
     ):
         return await controller.create(request)
-
-    @router.get(
-        "/{announcement_id}",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("View Announcements")),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
-        ],
-        response_model=BaseResponseDto[AnnouncementResponseDto],
-        status_code=200,
-        summary="Find Announcement",
-        description="Find an announcement by its ID (Admin View)",
-    )
-    async def find_one(
-        request: Request, controller: IAnnouncementController = Depends(_get_controller)
-    ):
-        return await controller.find_one(request)
 
     @router.patch(
         "/{announcement_id}",

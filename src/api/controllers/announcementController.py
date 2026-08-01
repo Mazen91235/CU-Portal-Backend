@@ -14,6 +14,7 @@ from core.dtos.announcementDtos import (
     AnnouncementUpdateDto,
     AnnouncementResponseDto,
     AnnouncementSearchDto,
+    AnnouncementDeleteDto,
 )
 from core.models.queryModel import QueryModel
 
@@ -26,28 +27,27 @@ class AnnouncementController(IAnnouncementController):
     # CRUD Functions
     async def find_one(self, request):
         try:
-            id_val = request.path_params.get("announcement_id")
-            if not id_val:
+            announcement_id = request.path_params.get("announcement_id")
+            if not announcement_id:
                 return ResponseHandler.generate_response(
                     success=False,
                     code=400,
                     message="Announcement ID is required",
                 )
                 
-            if not str(id_val).isdigit():
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Invalid Announcement ID format",
-                )
-            
             entity_search_dto = Generator[AnnouncementSearchDto].generate(
-                AnnouncementSearchDto, {"id": int(id_val)}
+                AnnouncementSearchDto, {"id": announcement_id}
             )
             
             response = await self.announcement_service.find_one(
                 entity_search_dto,
-                ["author", "subject", "faculty", "department", "year"],
+                [
+                    "author",
+                    "subject",
+                    "faculty",
+                    "department",
+                    "year",
+                ],
             )
             
             if not response.success:
@@ -72,21 +72,6 @@ class AnnouncementController(IAnnouncementController):
                     code=404,
                     message="Announcement not found",
                 )
-
-            # Security Scope Check in Controller
-            current_user = getattr(request.state, 'current_user', None)
-            permissions = getattr(request.state, 'permissions', [])
-            
-            if current_user and "View Announcements" not in permissions:
-                if (announcement.faculty_id != current_user.faculty_id or 
-                    announcement.department_id != current_user.department_id or 
-                    announcement.year_id != current_user.year_id):
-                    return ResponseHandler.generate_response(
-                        success=False,
-                        code=403,
-                        message="You are not authorized to view this announcement"
-                    )
-                
             announcement_mapped = Mapper[Announcement, AnnouncementResponseDto].map(
                 announcement, AnnouncementResponseDto, True
             )
@@ -121,24 +106,7 @@ class AnnouncementController(IAnnouncementController):
             entity_search_dto = Generator[AnnouncementSearchDto].generate_from_query(
                 AnnouncementSearchDto, query
             )
-            
-            # Security Scope Check in Controller
-            current_user = getattr(request.state, 'current_user', None)
-            permissions = getattr(request.state, 'permissions', [])
-            
-            if current_user:
-                if "View Announcements" not in permissions:
-                    entity_search_dto.faculty_id = current_user.faculty_id
-                    entity_search_dto.department_id = current_user.department_id
-                    entity_search_dto.year_id = current_user.year_id
-                else:
-                    if "Access All Faculties" not in permissions:
-                        entity_search_dto.faculty_id = current_user.faculty_id
-                    if "Access All Departments" not in permissions:
-                        entity_search_dto.department_id = current_user.department_id
-                    if "Access All Years" not in permissions:
-                        entity_search_dto.year_id = current_user.year_id
-            
+
             includes = query.includes
             selects = query.selects
             is_and = query.is_and
@@ -213,19 +181,12 @@ class AnnouncementController(IAnnouncementController):
     async def create(self, request):
         try:
             await self.announcement_service.begin_transaction()
+            payload = await request.json()
             
-            try:
-                payload = await request.json()
-            except json.JSONDecodeError:
-                await self.announcement_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Invalid or missing JSON payload",
-                )
-
             data = Generator[AnnouncementCreateDto].generate(AnnouncementCreateDto, payload)
-            response = await self.announcement_service.create(data)
+            announcement = Mapper[AnnouncementCreateDto, Announcement].map(data, Announcement)
+            
+            response = await self.announcement_service.create(announcement)
             
             if not response.success:
                 await self.announcement_service.rollback_transaction()
@@ -234,29 +195,17 @@ class AnnouncementController(IAnnouncementController):
                     code=response.code,
                     message=response.message,
                 )
-            
-            response_data = response.data
-            if not response_data:
-                await self.announcement_service.rollback_transaction()
-                await self.logger.log(
-                    action="Create",
-                    entity="Announcement",
-                    level="error",
-                    code=500,
-                    message="Failed to retrieve announcement data after creation",
-                    source="AnnouncementController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=500,
-                    message="An error occurred while processing the request, please try again later",
-                )
 
+            created_announcement = response.data
+            announcement_mapped = Mapper[Announcement, AnnouncementResponseDto].map(
+                created_announcement, AnnouncementResponseDto, True
+            )
+            
             await self.announcement_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
                 code=201,
-                data=response_data, 
+                data=announcement_mapped,
                 message="Announcement created successfully",
             )
         except Exception as e:
@@ -266,7 +215,7 @@ class AnnouncementController(IAnnouncementController):
                 entity="Announcement",
                 level="error",
                 code=500,
-                message=f"An error occurred while processing the request",
+                message="An error occurred while processing the request",
                 details={"error": str(e)},
                 source="AnnouncementController",
             )
@@ -279,28 +228,23 @@ class AnnouncementController(IAnnouncementController):
     async def update(self, request):
         try:
             await self.announcement_service.begin_transaction()
-            id_val = request.path_params.get("announcement_id")
+            announcement_id = request.path_params.get("announcement_id")
             
-            if not id_val or not str(id_val).isdigit():
+            if not announcement_id:
                 await self.announcement_service.rollback_transaction()
                 return ResponseHandler.generate_response(
                     success=False,
                     code=400,
-                    message="Valid Announcement ID is required",
+                    message="Announcement ID is required",
                 )
+
+            payload = await request.json()
             
-            try:
-                payload = await request.json()
-            except json.JSONDecodeError:
-                await self.announcement_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Invalid or missing JSON payload",
-                )
-                
             data = Generator[AnnouncementUpdateDto].generate(AnnouncementUpdateDto, payload)
-            response = await self.announcement_service.update(int(id_val), data)
+            announcement = Mapper[AnnouncementUpdateDto, Announcement].map(data, Announcement)
+            announcement.id = int(announcement_id)
+
+            response = await self.announcement_service.update(announcement)
             
             if not response.success:
                 await self.announcement_service.rollback_transaction()
@@ -309,29 +253,17 @@ class AnnouncementController(IAnnouncementController):
                     code=response.code,
                     message=response.message,
                 )
-                
-            response_data = response.data
-            if not response_data:
-                await self.announcement_service.rollback_transaction()
-                await self.logger.log(
-                    action="Update",
-                    entity="Announcement",
-                    level="error",
-                    code=500,
-                    message="Failed to update announcement",
-                    source="AnnouncementController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=500,
-                    message="An error occurred while processing the request, please try again later",
-                )
 
+            updated_announcement = response.data
+            announcement_mapped = Mapper[Announcement, AnnouncementResponseDto].map(
+                updated_announcement, AnnouncementResponseDto, True
+            )
+            
             await self.announcement_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
-                data=response_data,
+                data=announcement_mapped,
                 message="Announcement updated successfully",
             )
         except Exception as e:
@@ -341,7 +273,7 @@ class AnnouncementController(IAnnouncementController):
                 entity="Announcement",
                 level="error",
                 code=500,
-                message=f"An error occurred while processing the request",
+                message="An error occurred while processing the request",
                 details={"error": str(e)},
                 source="AnnouncementController",
             )
@@ -354,17 +286,22 @@ class AnnouncementController(IAnnouncementController):
     async def delete(self, request):
         try:
             await self.announcement_service.begin_transaction()
-            id_val = request.path_params.get("announcement_id")
+            announcement_id = request.path_params.get("announcement_id")
             
-            if not id_val or not str(id_val).isdigit():
+            if not announcement_id:
                 await self.announcement_service.rollback_transaction()
                 return ResponseHandler.generate_response(
                     success=False,
                     code=400,
-                    message="Valid Announcement ID is required",
+                    message="Announcement ID is required",
                 )
-                
-            response = await self.announcement_service.delete(int(id_val))
+
+            data = Generator[AnnouncementDeleteDto].generate(
+                AnnouncementDeleteDto, {"id": int(announcement_id)}
+            )
+            entity = Mapper[AnnouncementDeleteDto, Announcement].map(data, Announcement)
+            
+            response = await self.announcement_service.delete(entity)
             
             if not response.success:
                 await self.announcement_service.rollback_transaction()
@@ -373,12 +310,11 @@ class AnnouncementController(IAnnouncementController):
                     code=response.code,
                     message=response.message,
                 )
-                
+
             await self.announcement_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
-                data=True,
                 message="Announcement deleted successfully",
             )
         except Exception as e:
@@ -388,106 +324,7 @@ class AnnouncementController(IAnnouncementController):
                 entity="Announcement",
                 level="error",
                 code=500,
-                message=f"An error occurred while processing the request",
-                details={"error": str(e)},
-                source="AnnouncementController",
-            )
-            return ResponseHandler.generate_response(
-                success=False,
-                code=500,
-                message="An error occurred while processing the request, please try again later",
-            )
-
-    # Additional Query Functions
-    async def search(self, request):
-        try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[AnnouncementSearchDto],
-            )
-            entity_search_dto = Generator[AnnouncementSearchDto].generate_from_query(
-                AnnouncementSearchDto, query
-            )
-            
-            # Security Scope Check in Controller
-            current_user = getattr(request.state, 'current_user', None)
-            permissions = getattr(request.state, 'permissions', [])
-            
-            if current_user:
-                if "View Announcements" not in permissions:
-                    entity_search_dto.faculty_id = current_user.faculty_id
-                    entity_search_dto.department_id = current_user.department_id
-                    entity_search_dto.year_id = current_user.year_id
-                else:
-                    if "Access All Faculties" not in permissions:
-                        entity_search_dto.faculty_id = current_user.faculty_id
-                    if "Access All Departments" not in permissions:
-                        entity_search_dto.department_id = current_user.department_id
-                    if "Access All Years" not in permissions:
-                        entity_search_dto.year_id = current_user.year_id
-            
-            includes = query.includes
-            selects = query.selects
-            is_and = query.is_and
-            starts_with = query.starts_with
-            is_exact = query.is_exact
-            order_by = query.order_by
-            descending = query.descending
-            page = query.page or 1
-            limit = query.limit or 50
-
-            response = await self.announcement_service.find(
-                entity_search_dto,
-                includes,
-                selects,
-                is_and,
-                starts_with,
-                is_exact,
-                order_by,
-                descending,
-                page,
-                limit,
-            )
-
-            if not response.success:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=response.code,
-                    message=response.message,
-                )
-
-            announcements = response.data
-            if not announcements:
-                await self.logger.log(
-                    action="Search",
-                    entity="Announcement",
-                    level="info",
-                    code=404,
-                    message="Announcements not found",
-                    source="AnnouncementController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Announcements not found",
-                )
-
-            announcements_mapped = Mapper[Announcement, AnnouncementResponseDto].map_list(
-                announcements, AnnouncementResponseDto, True
-            )
-            
-            return ResponseHandler.generate_response(
-                success=True,
-                code=200,
-                data=announcements_mapped,
-            )
-        except Exception as e:
-            await self.logger.log(
-                action="Search",
-                entity="Announcement",
-                level="error",
-                code=500,
-                message=f"An error occurred while processing the request",
+                message="An error occurred while processing the request",
                 details={"error": str(e)},
                 source="AnnouncementController",
             )

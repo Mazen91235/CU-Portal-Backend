@@ -22,9 +22,6 @@ class AnnouncementCreateDto(BaseModel):
     date: str | None = Field(
         default=None, description="Date string for the announcement"
     )
-    author_id: int | None = Field(
-        default=None, gt=0, description="ID of the author"
-    )
     subject_id: int = Field(
         ..., gt=0, description="ID of the subject this announcement belongs to"
     )
@@ -57,9 +54,6 @@ class AnnouncementUpdateDto(BaseModel):
     )
     date: str | None = Field(
         default=None, description="ISO formatted date string for the announcement"
-    )
-    author_id: int | None = Field(
-        default=None, gt=0, description="ID of the author"
     )
     subject_id: int | None = Field(
         default=None, gt=0, description="ID of the subject this announcement belongs to"
@@ -117,17 +111,19 @@ class AnnouncementResponseDto(BaseModel):
         "from_attributes": True,
     }
 
+class AnnouncementDeleteDto(BaseModel):
+    id: int = Field(..., description="ID of the announcement to delete")
+
 
 class AnnouncementSearchDto(BaseSearchDto, BaseModel):
-    limit: int | None = Field(default=None, ge=1, le=100, description="Number of items per page for pagination")
     subject_id: int | None = Field(default=None, description="ID of Subject to filter by")
     faculty_id: int | None = Field(default=None, description="ID of Faculty to filter by")
     department_id: int | None = Field(default=None, description="ID of Department to filter by")
     year_id: int | None = Field(default=None, description="ID of Year to filter by")
     author_id: int | None = Field(default=None, description="ID of Author to filter by")
-    start_date: str | None = Field(
+    date_from: str | None = Field(
         default=None, description="Start date to filter announcements"
     )
-    end_date: str | None = Field(
+    date_to: str | None = Field(
         default=None, description="End date to filter announcements"
     )
