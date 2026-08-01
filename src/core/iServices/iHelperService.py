@@ -62,8 +62,9 @@ class IHelperService(ABC, Generic[U]):
     @abstractmethod
     async def send_notification(
         self,
-        type: Notification.NOTIFICATION_TYPES,
+        notification_type: Notification.Type,
         parent_id: int,
+        user_ids: list[int] | None,
         content: str,
         url: str | None = None,
     ) -> BaseResponseDto[bool]:
@@ -74,6 +75,13 @@ class IHelperService(ABC, Generic[U]):
     def get_file_id_from_url(
         self,
         url: str,
+    ) -> str | None:
+        pass
+
+    @abstractmethod
+    def get_file_url_from_id(
+        self,
+        file_id: str,
     ) -> str | None:
         pass
 

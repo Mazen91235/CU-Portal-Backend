@@ -13,7 +13,7 @@ from core.utils.jsonHandler import JSONHandler
 # Entities & DTOs
 from core.entities.user import User
 from core.dtos.userDtos import (
-    UserRegisterDto,
+    UserCreateDto,
     UserResponseDto,
     UserUpdateDto,
     UserSearchDto,
@@ -184,8 +184,8 @@ class UserController(IUserController):
         try:
             await self.user_service.begin_transaction()
             payload = await request.json()
-            data = Generator[UserRegisterDto].generate(UserRegisterDto, payload)
-            user = Mapper[UserRegisterDto, User].map(data, User)
+            data = Generator[UserCreateDto].generate(UserCreateDto, payload)
+            user = Mapper[UserCreateDto, User].map(data, User)
             response = await self.user_service.create(user)
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -290,82 +290,6 @@ class UserController(IUserController):
             await self.user_service.rollback_transaction()
             await self.logger.log(
                 action="Update",
-                entity="User",
-                level="error",
-                code=500,
-                message=f"An error occurred while processing the request",
-                details={"error": str(e)},
-                source="UserController",
-            )
-            return ResponseHandler.generate_response(
-                success=False,
-                code=500,
-                message="An error occurred while processing the request, please try again later",
-            )
-
-    # Additional Query Functions
-    async def search(self, request):
-        try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[UserSearchDto],
-            )
-            entity_search_dto = Generator[UserSearchDto].generate_from_query(
-                UserSearchDto, query
-            )
-            includes = query.includes
-            selects = query.selects
-            is_and = query.is_and
-            starts_with = query.starts_with
-            is_exact = query.is_exact
-            order_by = query.order_by
-            descending = query.descending
-            page = query.page or 1
-            limit = query.limit or 50
-
-            response = await self.user_service.find(
-                entity_search_dto,
-                includes,
-                selects,
-                is_and,
-                starts_with,
-                is_exact,
-                order_by,
-                descending,
-                page,
-                limit,
-            )
-
-            if not response.success:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=response.code,
-                    message=response.message,
-                )
-
-            users = response.data
-            if not users:
-                await self.logger.log(
-                    action="Search",
-                    entity="User",
-                    level="info",
-                    code=404,
-                    message="Users not found",
-                    source="UserController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Users not found",
-                )
-            return ResponseHandler.generate_response(
-                success=True,
-                code=200,
-                data=users,
-            )
-        except Exception as e:
-            await self.logger.log(
-                action="Search",
                 entity="User",
                 level="error",
                 code=500,

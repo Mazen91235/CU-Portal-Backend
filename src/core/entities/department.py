@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from enum import Enum
 from .base import (
     Base,
     Integer,
@@ -40,7 +40,7 @@ class Department(Base):
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
     )
-    study_type: Mapped[str] = mapped_column(
+    study_type: Mapped["Department.StudyType"] = mapped_column(
         String(12), nullable=True
     )  # Mainstream, Credit, etc.
 
@@ -111,3 +111,9 @@ class Department(Base):
             unique=True,
         ),
     )
+
+    # Attributes
+    class StudyType(str, Enum):
+        MAINSTREAM = "Mainstream"
+        CREDIT = "Credit"
+        BOTH = "Both"
