@@ -42,8 +42,8 @@ class Announcement(Base):
     urls: Mapped[list[str]] = mapped_column(
         MutableList.as_mutable(JSON), nullable=True, default=list
     )
-    links: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
+    links: Mapped[dict[str, str]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True, default=dict
     )
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict

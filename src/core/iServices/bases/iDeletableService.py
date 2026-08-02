@@ -8,5 +8,5 @@ T = TypeVar("T")  # Entity Type
 
 class IDeletableService(Generic[T], IBaseService):
     @abstractmethod
-    async def delete(self, data: T | None) -> BaseResponseDto[bool]:
+    async def delete(self, data: T) -> BaseResponseDto[bool]:
         pass

@@ -11,7 +11,10 @@ from sqlalchemy.orm import selectinload
 from business.contextVars.requestContext import request_context
 from business.contextVars.userContext import user_context
 from core.iServices.iHelperService import IHelperService
+from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.user import User
+from core.entities.notification import Notification
+from core.entities.userNotification import UserNotification
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import FetchedModel, DownloadedFileModel, FileModel
 from core.utils.entitiesHandler import EntitiesHandler
@@ -21,6 +24,16 @@ U = TypeVar("U")  # EntitySearchDto Type
 
 
 class HelperService(IHelperService[U]):
+    def __init__(
+        self,
+        notification_repository: IBaseRepository[Notification],
+        user_notification_repository: IBaseRepository[UserNotification],
+        user_repository: IBaseRepository[User],
+    ):
+        self.notification_repository = notification_repository
+        self.user_notification_repository = user_notification_repository
+        self.user_repository = user_repository
+
     def _get_column_type(self, column):
         column_property = getattr(column, "property", None)
         columns = getattr(column_property, "columns", None)
@@ -259,10 +272,70 @@ class HelperService(IHelperService[U]):
         return and_(*conditions) if is_and else or_(*conditions)
 
     # Notification Functions
-    async def send_notification(self, type, parent_id, content, url=None):
-        return BaseResponseDto(
-            success=True, data=True, message="Notification sent successfully"
-        )
+    async def send_notification(
+        self, notification_type, parent_id, user_ids, content, url=None
+    ):
+        try:
+            notification = Notification(
+                content=content,
+                type=notification_type,
+                parent_id=parent_id,
+                url=url,
+            )
+            create_notification_response = await self.notification_repository.create(
+                notification
+            )
+            if not create_notification_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_notification_response.code,
+                    data=False,
+                    message=create_notification_response.message,
+                )
+            created_notification = create_notification_response.data
+            if not created_notification:
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="Failed to create notification",
+                )
+            for user_id in user_ids or []:
+                user_notification = UserNotification(
+                    user_id=user_id, notification_id=created_notification.id
+                )
+                create_user_notification_response = (
+                    await self.user_notification_repository.create(user_notification)
+                )
+                if not create_user_notification_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=create_user_notification_response.code,
+                        data=False,
+                        message=create_user_notification_response.message,
+                    )
+                created_user_notification = create_user_notification_response.data
+                if not created_user_notification:
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=False,
+                        message="Failed to create user notification",
+                    )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Notification sent successfully",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="An error occurred while sending the notification",
+                error=str(ex),
+            )
 
     # File Functions
     async def _request_with_retries(
@@ -372,12 +445,25 @@ class HelperService(IHelperService[U]):
             if len(parts) > 1:
                 file_id_part = parts[1].split("/")[0]
                 return file_id_part
+        if "/folders/" in url:
+            parts = url.split("/folders/")
+            if len(parts) > 1:
+                folder_id_part = parts[1].split("/")[0]
+                return folder_id_part
         elif "id=" in url:
             parts = url.split("id=")
             if len(parts) > 1:
                 file_id_part = parts[1].split("&")[0]
                 return file_id_part
         return None
+
+    def get_file_url_from_id(self, file_id):
+        if not file_id:
+            return None
+        file_id = file_id.strip()
+        if not file_id:
+            return None
+        return f"https://drive.google.com/uc?export=view&id={file_id}"
 
     def get_file_type(self, mime_type):
         mime_type = mime_type.strip().lower()
@@ -478,6 +564,135 @@ class HelperService(IHelperService[U]):
                 size_in_bytes = size_value * (1024 ** units.index(unit))
                 return size_in_bytes <= max_size_in_bytes
         return False
+
+    async def verify_file_exists_on_drive(self, url):
+        try:
+            file_id = self.get_file_id_from_url(url)
+            if not file_id:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"Invalid URL format: {url}",
+                )
+            file_response = await self.fetch_from_drive(file_id)
+            if not file_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=file_response.code,
+                    data=None,
+                    message=file_response.message,
+                    error=file_response.error,
+                )
+            file_data = file_response.data
+            if not file_data:
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message=f"Failed to fetch file data from Google Drive, please try again later.",
+                    error="No data returned from Google Drive",
+                )
+            file = file_data.data
+            if not file:
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"File not found on Google Drive for URL: {url}",
+                    error="No file data returned from Google Drive",
+                )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=file,
+                message="File found on Google Drive",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while verifying file existence on Google Drive",
+                error=str(ex),
+            )
+
+    async def remove_files_from_drive(self, files):
+        try:
+            for file in files:
+                user_id = file.get("user_id")
+                file_id = file.get("file_id")
+                if not user_id or not file_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Couldn't remove files from Google Drive",
+                        error="Missing user_id or file_id in the provided files list",
+                    )
+                user_response = await self.user_repository.find_one(User.id == user_id)
+                if not user_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=user_response.code,
+                        data=False,
+                        message=user_response.message,
+                        error=user_response.message,
+                    )
+                user = user_response.data
+                if not user:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"User with ID {user_id} not found",
+                        error=f"User with ID {user_id} not found in the database",
+                    )
+                access_token_response = await self.get_google_access_token(
+                    FernetHandler.decrypt(user.google_refresh_token or "")
+                )
+                if not access_token_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=access_token_response.code,
+                        data=False,
+                        message=access_token_response.message,
+                        error=access_token_response.error,
+                    )
+                access_token = access_token_response.data
+                if not access_token:
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=False,
+                        message="Failed to retrieve Google access token",
+                        error="Access token is None after decryption and retrieval",
+                    )
+                delete_file_response = await self.delete_file_from_drive(
+                    access_token, file_id
+                )
+                if not delete_file_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=delete_file_response.code,
+                        data=False,
+                        message=delete_file_response.message,
+                        error=delete_file_response.error,
+                    )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Files removed from Google Drive successfully",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="An error occurred while removing files from Google Drive",
+                error=str(ex),
+            )
 
     async def fetch_from_drive(
         self,

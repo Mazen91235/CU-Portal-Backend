@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from customRoute import CustomRoute
 from core.iControllers.iUserController import IUserController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -9,7 +10,7 @@ from core.dtos.userDtos import UserResponseDto, UserTokenDetailsResponseDto
 def create_auth_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/auth", tags=["Authentication"])
+    router = APIRouter(prefix="/auth", tags=["Authentication"], route_class=CustomRoute)
 
     def _get_controller() -> IUserController:
         return controller_provider()

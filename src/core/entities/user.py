@@ -48,7 +48,7 @@ class User(Base):
     password: Mapped[str] = mapped_column(String(255), nullable=True)
     phone: Mapped[str] = mapped_column(String(13), nullable=False)
     gender: Mapped[str] = mapped_column(String(6), nullable=False)
-    type: Mapped[Optional[str]] = mapped_column(
+    type: Mapped[Optional["User.Type"]] = mapped_column(
         String(12), nullable=True
     )  # Mainstream, Credit
     section: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
