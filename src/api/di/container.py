@@ -12,6 +12,8 @@ from api.routes.mainRoutes import (
 )
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
+from api.routes.taskRoutes import create_task_user_router, create_task_admin_router
+from api.routes.announcementRoutes import create_announcement_user_router, create_announcement_admin_router
 from api.routes.notificationRoutes import create_notification_user_router
 from api.routes.materialRoutes import (
     create_material_user_router,
@@ -28,6 +30,8 @@ from api.controllers.userController import UserController
 from api.controllers.facultyController import FacultyController
 from api.controllers.messageController import MessageController
 from api.controllers.materialController import MaterialController
+from api.controllers.announcementController import AnnouncementController
+from api.controllers.taskController import TaskController
 from api.controllers.notificationController import NotificationController
 from api.controllers.yearController import YearController
 from api.controllers.departmentController import DepartmentController
@@ -36,6 +40,8 @@ from api.middlewares.validationMiddleware import ValidationMiddleware
 from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
 from business.contextVars.sessionContext import session_context
 from business.services.userService import UserService
+from business.services.taskService import TaskService
+from business.services.announcementService import AnnouncementService
 from business.services.notificationService import NotificationService
 from business.services.materialService import MaterialService
 from business.services.messageService import MessageService
@@ -54,6 +60,9 @@ from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
 from core.entities.token import Token
 from core.entities.requestLimit import RequestLimit
+from core.entities.announcement import Announcement
+from core.entities.task import Task
+from core.entities.subject import Subject
 from core.entities.year import Year
 from core.entities.department import Department
 from core.entities.userNotification import UserNotification
@@ -123,6 +132,15 @@ class Container(containers.DeclarativeContainer):
         session=db_session,
         model=RequestLimit,
         session_factory=session_factory,
+    )
+    announcement_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Announcement, session_factory=session_factory
+    )
+    task_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Task, session_factory=session_factory
+    )
+    subject_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Subject, session_factory=session_factory
     )
     year_repository = providers.Factory(
         BaseRepository, session=db_session, model=Year, session_factory=session_factory
@@ -224,6 +242,20 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
+    announcement_service = providers.Factory(
+        AnnouncementService,
+        announcement_repository=announcement_repository,
+        subject_repository=subject_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+    task_service = providers.Factory(
+        TaskService,
+        task_repository=task_repository,
+        subject_repository=subject_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
     notification_service = providers.Factory(
         NotificationService,
         user_notification_repository=user_notification_repository,
@@ -257,6 +289,16 @@ class Container(containers.DeclarativeContainer):
 
     user_controller = providers.Factory(
         UserController, user_service=user_service, logger=logger
+    )
+    announcement_controller = providers.Factory(
+        AnnouncementController,
+        announcement_service=announcement_service,
+        logger=logger,
+    )
+    task_controller = providers.Factory(
+        TaskController, 
+        task_service=task_service, 
+        logger=logger
     )
     notification_controller = providers.Factory(
         NotificationController, notification_service=notification_service, logger=logger
@@ -305,7 +347,12 @@ class Container(containers.DeclarativeContainer):
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
-
+    announcement_user_routes = providers.Factory(
+        create_announcement_user_router,
+        controller_provider=announcement_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
     year_admin_routes = providers.Factory(
         create_year_admin_router,
         controller_provider=year_controller.provider,
@@ -334,6 +381,19 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    announcement_admin_routes = providers.Factory(
+        create_announcement_admin_router,
+        controller_provider=announcement_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+    
+    task_user_routes = providers.Factory(
+        create_task_user_router,
+        controller_provider=task_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
     material_admin_routes = providers.Factory(
         create_material_admin_router,
         controller_provider=material_controller.provider,
@@ -353,6 +413,12 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    task_admin_routes = providers.Factory(
+        create_task_admin_router,
+        controller_provider=task_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
     faculty_admin_routes = providers.Factory(
         create_faculty_admin_router,
         controller_provider=faculty_controller.provider,
