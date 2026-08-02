@@ -59,7 +59,7 @@ class MaterialService(IMaterialService):
             predicate = self.helper_service.generate_dynamic_predicate(
                 Material,
                 data,
-                ["name", "email", "phone"],
+                ["name"],
                 is_and,
                 starts_with,
                 is_exact,
@@ -123,7 +123,7 @@ class MaterialService(IMaterialService):
             predicate = self.helper_service.generate_dynamic_predicate(
                 Material,
                 data,
-                ["name", "email", "phone"],
+                ["name"],
                 is_and,
                 starts_with,
                 is_exact,
@@ -336,63 +336,104 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Logged in user not found",
                 )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Role, ["exact_roles"]
+            )
+            logged_in_user_role_response = await self.role_repository.find_one(
+                Role.id == logged_in_user.role_id, dynamic_includes
+            )
+            if not logged_in_user_role_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_role_response.code,
+                    data=None,
+                    message=logged_in_user_role_response.message,
+                )
+            logged_in_user_role = logged_in_user_role_response.data
+            if not logged_in_user_role:
+                await self.logger.log(
+                    action="Create",
+                    entity="Material",
+                    level="error",
+                    code=401,
+                    message=f"Logged in user's role not found",
+                    details={"error": "Logged in user's role not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message=f"Logged in user's role not found",
+                )
+            logged_in_user_permissions = [
+                perm.name for perm in logged_in_user_role.exact_roles
+            ]
+            user_ids = [user.id for user in subject.users] if subject.users else []
+            if (
+                logged_in_user.id not in user_ids
+                and "Access All Courses" not in logged_in_user_permissions
+            ):
+                await self.logger.log(
+                    action="Create",
+                    entity="Material",
+                    level="error",
+                    code=403,
+                    message=f"User {logged_in_user.id} is not authorized to create material for subject {subject.id}",
+                    details={
+                        "error": "User not authorized to create material for this subject"
+                    },
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message=f"You are not authorized to create material for this subject.",
+                )
             data.author_id = logged_in_user.id
             data.details = data.details or {}
             data.details["fetched"] = False
             if data.type == "file":
-                file_id = self.helper_service.get_file_id_from_url(data.url or "")
-                if not file_id:
+                file_exists_response = (
+                    await self.helper_service.verify_file_exists_on_drive(
+                        data.url or ""
+                    )
+                )
+                if not file_exists_response.success:
                     await self.logger.log(
                         action="Create",
                         entity="Material",
                         level="error",
-                        code=400,
-                        message=f"Invalid URL format: {data.url}",
-                        details={"error": "Could not extract file ID from URL"},
+                        code=file_exists_response.code or 500,
+                        message=f"Failed to verify file existence on Google Drive: {file_exists_response.message}",
+                        details={"error": file_exists_response.error},
                         source="MaterialService",
                     )
                     return BaseResponseDto(
                         success=False,
-                        code=400,
+                        code=file_exists_response.code,
                         data=None,
-                        message=f"Invalid URL format: {data.url}",
+                        message=file_exists_response.message,
                     )
-                file_response = await self.helper_service.fetch_from_drive(file_id)
-                if not file_response.success:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Material",
-                        level="error",
-                        code=file_response.code or 500,
-                        message=file_response.message or "",
-                        details={"error": file_response.error},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=file_response.code,
-                        data=None,
-                        message=file_response.message,
-                    )
-                file_data = file_response.data
+                file_data = file_exists_response.data
                 if not file_data:
                     await self.logger.log(
                         action="Create",
                         entity="Material",
                         level="error",
-                        code=500,
-                        message=f"Failed to fetch file data from Google Drive for file ID: {file_id}",
-                        details={"error": "No data returned from Google Drive"},
+                        code=404,
+                        message=f"File not found on Google Drive for URL: {data.url}",
+                        details={"error": "File not found on Google Drive"},
                         source="MaterialService",
                     )
                     return BaseResponseDto(
                         success=False,
-                        code=500,
+                        code=404,
                         data=None,
-                        message=f"Failed to fetch file data from Google Drive, please try again later.",
+                        message=f"File not found on Google Drive for the provided URL.",
                     )
-                file = file_data.data
-                data.details["file_data"] = file.model_dump()
+                data.details["file_data"] = file_data.model_dump()
             unique_name_response = await self._generate_unique_name(
                 data.name, subject_id, parent_id
             )
@@ -429,7 +470,6 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Failed to create material, please try again later.",
                 )
-            user_ids = [user.id for user in subject.users] if subject.users else []
             share_link = f"/user/materials/{subject_id}"
             if parent_id:
                 share_link += f"/{parent_id}"
@@ -560,8 +600,7 @@ class MaterialService(IMaterialService):
                 Subject, ["users"]
             )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == existing_material.subject_id,
-                dynamic_includes
+                Subject.id == existing_material.subject_id, dynamic_includes
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -621,40 +660,62 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Logged in user not found",
                 )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Role, ["exact_roles"]
+            )
+            logged_in_user_role_response = await self.role_repository.find_one(
+                Role.id == logged_in_user.role_id, dynamic_includes
+            )
+            if not logged_in_user_role_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_role_response.code,
+                    data=None,
+                    message=logged_in_user_role_response.message,
+                )
+            logged_in_user_role = logged_in_user_role_response.data
+            if not logged_in_user_role:
+                await self.logger.log(
+                    action="Update",
+                    entity="Material",
+                    level="error",
+                    code=401,
+                    message=f"Logged in user's role not found",
+                    details={"error": "Logged in user's role not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message=f"Logged in user's role not found",
+                )
+            logged_in_user_permissions = [
+                perm.name for perm in logged_in_user_role.exact_roles
+            ]
+            user_ids = [user.id for user in subject.users] if subject.users else []
+            if (
+                logged_in_user.id not in user_ids
+                and "Access All Courses" not in logged_in_user_permissions
+            ):
+                await self.logger.log(
+                    action="Update",
+                    entity="Material",
+                    level="error",
+                    code=403,
+                    message=f"User {logged_in_user.id} is not authorized to update material for subject {subject.id}",
+                    details={
+                        "error": "User not authorized to update material for this subject"
+                    },
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message=f"You are not authorized to update material for this subject.",
+                )
             if existing_material.author_id != logged_in_user.id:
-                dynamic_includes = self.helper_service.generate_dynamic_includes(
-                    Role, ["exact_roles"]
-                )
-                logged_in_user_role_response = await self.role_repository.find_one(
-                    Role.id == logged_in_user.role_id, dynamic_includes
-                )
-                if not logged_in_user_role_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=logged_in_user_role_response.code,
-                        data=None,
-                        message=logged_in_user_role_response.message,
-                    )
-                logged_in_user_role = logged_in_user_role_response.data
-                if not logged_in_user_role:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Material",
-                        level="error",
-                        code=401,
-                        message=f"Logged in user's role not found",
-                        details={"error": "Logged in user's role not found"},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=401,
-                        data=None,
-                        message=f"Logged in user's role not found",
-                    )
-                logged_in_user_permissions = [
-                    perm.name for perm in logged_in_user_role.exact_roles
-                ]
                 if "Manage All Materials" not in logged_in_user_permissions:
                     await self.logger.log(
                         action="Update",
@@ -697,59 +758,45 @@ class MaterialService(IMaterialService):
                 and existing_material.type == "file"
                 and data.url != existing_material.url
             ):
-                file_id = self.helper_service.get_file_id_from_url(data.url or "")
-                if not file_id:
+                file_exists_response = (
+                    await self.helper_service.verify_file_exists_on_drive(
+                        data.url or ""
+                    )
+                )
+                if not file_exists_response.success:
                     await self.logger.log(
                         action="Update",
                         entity="Material",
                         level="error",
-                        code=400,
-                        message=f"Invalid URL format: {data.url}",
-                        details={"error": "Could not extract file ID from URL"},
+                        code=file_exists_response.code or 500,
+                        message=f"Failed to verify file existence on Google Drive: {file_exists_response.message}",
+                        details={"error": file_exists_response.error},
                         source="MaterialService",
                     )
                     return BaseResponseDto(
                         success=False,
-                        code=400,
+                        code=file_exists_response.code,
                         data=None,
-                        message=f"Invalid URL format: {data.url}",
+                        message=file_exists_response.message,
                     )
-                file_response = await self.helper_service.fetch_from_drive(file_id)
-                if not file_response.success:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Material",
-                        level="error",
-                        code=file_response.code or 500,
-                        message=file_response.message or "",
-                        details={"error": file_response.error},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=file_response.code,
-                        data=None,
-                        message=file_response.message,
-                    )
-                file_data = file_response.data
+                file_data = file_exists_response.data
                 if not file_data:
                     await self.logger.log(
                         action="Update",
                         entity="Material",
                         level="error",
-                        code=500,
-                        message=f"Failed to fetch file data from Google Drive for file ID: {file_id}",
-                        details={"error": "No data returned from Google Drive"},
+                        code=404,
+                        message=f"File not found on Google Drive for URL: {data.url}",
+                        details={"error": "File not found on Google Drive"},
                         source="MaterialService",
                     )
                     return BaseResponseDto(
                         success=False,
-                        code=500,
+                        code=404,
                         data=None,
-                        message=f"Failed to fetch file data from Google Drive, please try again later.",
+                        message=f"File not found on Google Drive for the provided URL.",
                     )
-                file = file_data.data
-                data.details["file_data"] = file.model_dump()
+                data.details["file_data"] = file_data.model_dump()
                 to_be_removed = (
                     existing_material.url
                     if not existing_material.details.get("fetched")
@@ -801,7 +848,7 @@ class MaterialService(IMaterialService):
             elif updated_material.type != "folder":
                 share_link = updated_material.url
             notification_response = await self.helper_service.send_notification(
-                ,
+                Notification.Type.MATERIAL,
                 updated_material.id,
                 user_ids,
                 f"Material '{updated_material.name}' has been updated for subject {subject.name}.",
@@ -872,6 +919,33 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"Material with ID {material_id} not found",
                     )
+                subject_response = await self.subject_repository.find_one(
+                    Subject.id == existing_material.subject_id
+                )
+                if not subject_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=subject_response.code,
+                        data=None,
+                        message=subject_response.message,
+                    )
+                subject = subject_response.data
+                if not subject:
+                    await self.logger.log(
+                        action="DeleteMany",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Subject with ID {existing_material.subject_id} not found",
+                        details={"error": "Subject not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Subject with ID {existing_material.subject_id} not found",
+                    )
                 logged_in_user_response = await self.helper_service.get_logged_in_user()
                 if not logged_in_user_response.success:
                     await self.logger.log(
@@ -906,40 +980,62 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"Logged in user not found",
                     )
+                dynamic_includes = self.helper_service.generate_dynamic_includes(
+                    Role, ["exact_roles"]
+                )
+                logged_in_user_role_response = await self.role_repository.find_one(
+                    Role.id == logged_in_user.role_id, dynamic_includes
+                )
+                if not logged_in_user_role_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=logged_in_user_role_response.code,
+                        data=None,
+                        message=logged_in_user_role_response.message,
+                    )
+                logged_in_user_role = logged_in_user_role_response.data
+                if not logged_in_user_role:
+                    await self.logger.log(
+                        action="DeleteMany",
+                        entity="Material",
+                        level="error",
+                        code=401,
+                        message=f"Logged in user's role not found",
+                        details={"error": "Logged in user's role not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=401,
+                        data=None,
+                        message=f"Logged in user's role not found",
+                    )
+                logged_in_user_permissions = [
+                    perm.name for perm in logged_in_user_role.exact_roles
+                ]
+                user_ids = [user.id for user in subject.users] if subject.users else []
+                if (
+                    logged_in_user.id not in user_ids
+                    and "Access All Courses" not in logged_in_user_permissions
+                ):
+                    await self.logger.log(
+                        action="DeleteMany",
+                        entity="Material",
+                        level="error",
+                        code=403,
+                        message=f"User {logged_in_user.id} is not authorized to delete material for subject {subject.id}",
+                        details={
+                            "error": "User not authorized to delete material for this subject"
+                        },
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=403,
+                        data=None,
+                        message=f"You are not authorized to delete material for this subject.",
+                    )
                 if existing_material.author_id != logged_in_user.id:
-                    dynamic_includes = self.helper_service.generate_dynamic_includes(
-                        Role, ["exact_roles"]
-                    )
-                    logged_in_user_role_response = await self.role_repository.find_one(
-                        Role.id == logged_in_user.role_id, dynamic_includes
-                    )
-                    if not logged_in_user_role_response.success:
-                        return BaseResponseDto(
-                            success=False,
-                            code=logged_in_user_role_response.code,
-                            data=None,
-                            message=logged_in_user_role_response.message,
-                        )
-                    logged_in_user_role = logged_in_user_role_response.data
-                    if not logged_in_user_role:
-                        await self.logger.log(
-                            action="DeleteMany",
-                            entity="Material",
-                            level="error",
-                            code=401,
-                            message=f"Logged in user's role not found",
-                            details={"error": "Logged in user's role not found"},
-                            source="MaterialService",
-                        )
-                        return BaseResponseDto(
-                            success=False,
-                            code=401,
-                            data=None,
-                            message=f"Logged in user's role not found",
-                        )
-                    logged_in_user_permissions = [
-                        perm.name for perm in logged_in_user_role.exact_roles
-                    ]
                     if "Manage All Materials" not in logged_in_user_permissions:
                         await self.logger.log(
                             action="DeleteMany",
@@ -1100,6 +1196,187 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"Destination must be a folder. Material with ID {destination_id} is not a folder.",
                     )
+                dynamic_includes = self.helper_service.generate_dynamic_includes(
+                    Subject, ["users"]
+                )
+                destination_subject_response = await self.subject_repository.find_one(
+                    Subject.id == destination_material.subject_id, dynamic_includes
+                )
+                if not destination_subject_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=destination_subject_response.code,
+                        data=None,
+                        message=destination_subject_response.message,
+                    )
+                destination_subject = destination_subject_response.data
+                if not destination_subject:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Destination subject with ID {destination_material.subject_id} not found",
+                        details={"error": "Destination subject not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Destination subject with ID {destination_material.subject_id} not found",
+                    )
+                logged_in_user_response = await self.helper_service.get_logged_in_user()
+                if not logged_in_user_response.success:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=logged_in_user_response.code or 500,
+                        message=f"Failed to get logged in user",
+                        details={"error": logged_in_user_response.message},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=logged_in_user_response.code,
+                        data=None,
+                        message=logged_in_user_response.message,
+                    )
+                logged_in_user = logged_in_user_response.data
+                if not logged_in_user:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=401,
+                        message=f"Logged in user not found",
+                        details={"error": "Logged in user not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=401,
+                        data=None,
+                        message=f"Logged in user not found",
+                    )
+                dynamic_includes = self.helper_service.generate_dynamic_includes(
+                    Role, ["exact_roles"]
+                )
+                logged_in_user_role_response = await self.role_repository.find_one(
+                    Role.id == logged_in_user.role_id, dynamic_includes
+                )
+                if not logged_in_user_role_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=logged_in_user_role_response.code,
+                        data=None,
+                        message=logged_in_user_role_response.message,
+                    )
+                logged_in_user_role = logged_in_user_role_response.data
+                if not logged_in_user_role:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=401,
+                        message=f"Logged in user's role not found",
+                        details={"error": "Logged in user's role not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=401,
+                        data=None,
+                        message=f"Logged in user's role not found",
+                    )
+                logged_in_user_permissions = [
+                    perm.name for perm in logged_in_user_role.exact_roles
+                ]
+                user_ids = (
+                    [user.id for user in destination_subject.users]
+                    if destination_subject.users
+                    else []
+                )
+                if (
+                    logged_in_user.id not in user_ids
+                    and "Access All Courses" not in logged_in_user_permissions
+                ):
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=403,
+                        message=f"User {logged_in_user.id} is not authorized to move material to subject {destination_subject.id}",
+                        details={
+                            "error": "User not authorized to move material to this subject"
+                        },
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=403,
+                        data=None,
+                        message=f"You are not authorized to move material to this subject.",
+                    )
+                dynamic_includes = self.helper_service.generate_dynamic_includes(
+                    Subject, ["users"]
+                )
+                existing_material_subject_response = (
+                    await self.subject_repository.find_one(
+                        Subject.id == existing_material.subject_id, dynamic_includes
+                    )
+                )
+                if not existing_material_subject_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=existing_material_subject_response.code,
+                        data=None,
+                        message=existing_material_subject_response.message,
+                    )
+                existing_material_subject = existing_material_subject_response.data
+                if not existing_material_subject:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Existing material's subject with ID {existing_material.subject_id} not found",
+                        details={"error": "Existing material's subject not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Existing material's subject with ID {existing_material.subject_id} not found",
+                    )
+                user_ids = (
+                    [user.id for user in existing_material_subject.users]
+                    if existing_material_subject.users
+                    else []
+                )
+                if (
+                    logged_in_user.id not in user_ids
+                    and "Access All Courses" not in logged_in_user_permissions
+                ):
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=403,
+                        message=f"User {logged_in_user.id} is not authorized to move material from subject {existing_material_subject.id}",
+                        details={
+                            "error": "User not authorized to move material from this subject"
+                        },
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=403,
+                        data=None,
+                        message=f"You are not authorized to move material from this subject.",
+                    )
                 existing_material.parent_id = destination_id
                 update_response = await self.material_repository.update(
                     existing_material, ["parent_id"]
@@ -1181,6 +1458,43 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Destination material with ID {destination_id} is not a folder",
                 )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["users"]
+            )
+            destination_material_subject_response = (
+                await self.subject_repository.find_one(
+                    Subject.id == destination_material.subject_id, dynamic_includes
+                )
+            )
+            if not destination_material_subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=destination_material_subject_response.code,
+                    data=None,
+                    message=destination_material_subject_response.message,
+                )
+            destination_material_subject = destination_material_subject_response.data
+            if not destination_material_subject:
+                await self.logger.log(
+                    action="CopyMany",
+                    entity="Material",
+                    level="error",
+                    code=404,
+                    message=f"Destination material's subject with ID {destination_material.subject_id} not found",
+                    details={"error": "Destination material's subject not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"Destination material's subject with ID {destination_material.subject_id} not found",
+                )
+            user_ids = (
+                [user.id for user in destination_material_subject.users]
+                if destination_material_subject.users
+                else []
+            )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -1215,7 +1529,71 @@ class MaterialService(IMaterialService):
                     data=None,
                     message="Logged-in user not found",
                 )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Role, ["exact_roles"]
+            )
+            logged_in_user_role_response = await self.role_repository.find_one(
+                Role.id == logged_in_user.role_id, dynamic_includes
+            )
+            if not logged_in_user_role_response.success:
+                await self.logger.log(
+                    action="CopyMany",
+                    entity="Material",
+                    level="error",
+                    code=logged_in_user_role_response.code or 500,
+                    message="Failed to retrieve logged-in user's role",
+                    details={"error": logged_in_user_role_response.message},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_role_response.code,
+                    data=None,
+                    message=logged_in_user_role_response.message,
+                )
+            logged_in_user_role = logged_in_user_role_response.data
+            if not logged_in_user_role:
+                await self.logger.log(
+                    action="CopyMany",
+                    entity="Material",
+                    level="error",
+                    code=401,
+                    message="Logged-in user's role not found",
+                    details={"error": "Logged-in user's role not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message="Logged-in user's role not found",
+                )
+            logged_in_user_permissions = [
+                perm.name for perm in logged_in_user_role.exact_roles
+            ]
+            if (
+                logged_in_user.id not in user_ids
+                and "Access All Courses" not in logged_in_user_permissions
+            ):
+                await self.logger.log(
+                    action="CopyMany",
+                    entity="Material",
+                    level="error",
+                    code=403,
+                    message=f"User {logged_in_user.id} is not authorized to copy material to subject {destination_material_subject.id}",
+                    details={
+                        "error": "User not authorized to copy material to this subject"
+                    },
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message=f"You are not authorized to copy material to this subject.",
+                )
             author_id = logged_in_user.id
+            author_permissions = logged_in_user_permissions
             access_token_response = await self.helper_service.get_google_access_token(
                 FernetHandler.decrypt(logged_in_user.google_refresh_token or "")
             )
@@ -1254,7 +1632,11 @@ class MaterialService(IMaterialService):
                 )
             for material_id in material_ids:
                 copy_response = await self._recursive_copy(
-                    material_id, destination_material.id, author_id, access_token
+                    material_id,
+                    destination_material.id,
+                    author_id,
+                    author_permissions,
+                    access_token,
                 )
                 if not copy_response.success:
                     return BaseResponseDto(
@@ -1308,8 +1690,11 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Invalid URL format: {url}",
                 )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["users"]
+            )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == subject_id
+                Subject.id == subject_id, dynamic_includes
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -1334,6 +1719,104 @@ class MaterialService(IMaterialService):
                     code=404,
                     data=None,
                     message=f"Subject with ID {subject_id} not found",
+                )
+            user_ids = [user.id for user in subject.users] if subject.users else []
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="FetchMaterialsFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message=f"Failed to get logged in user",
+                    details={"error": logged_in_user_response.message},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_response.code,
+                    data=None,
+                    message=logged_in_user_response.message,
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="FetchMaterialsFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=401,
+                    message=f"Logged in user not found",
+                    details={"error": "Logged in user not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message=f"Logged in user not found",
+                )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Role, ["exact_roles"]
+            )
+            logged_in_user_role_response = await self.role_repository.find_one(
+                Role.id == logged_in_user.role_id, dynamic_includes
+            )
+            if not logged_in_user_role_response.success:
+                await self.logger.log(
+                    action="FetchMaterialsFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=logged_in_user_role_response.code or 500,
+                    message=f"Failed to get logged in user's role",
+                    details={"error": logged_in_user_role_response.message},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_role_response.code,
+                    data=None,
+                    message=logged_in_user_role_response.message,
+                )
+            logged_in_user_role = logged_in_user_role_response.data
+            if not logged_in_user_role:
+                await self.logger.log(
+                    action="FetchMaterialsFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=401,
+                    message=f"Logged in user's role not found",
+                    details={"error": "Logged in user's role not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message=f"Logged in user's role not found",
+                )
+            logged_in_user_permissions = [
+                perm.name for perm in logged_in_user_role.exact_roles
+            ]
+            if (
+                logged_in_user.id not in user_ids
+                and "Access All Courses" not in logged_in_user_permissions
+            ):
+                await self.logger.log(
+                    action="FetchMaterialsFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=403,
+                    message=f"User {logged_in_user.id} is not authorized to fetch materials for subject {subject_id}",
+                    details={
+                        "error": "User not authorized to fetch materials for this subject"
+                    },
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message=f"You are not authorized to fetch materials for this subject.",
                 )
             parent = None
             if parent_id:
@@ -1443,6 +1926,54 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=create_response.message,
                 )
+            created_data = create_response.data
+            if not created_data:
+                await self.logger.log(
+                    action="FetchMaterialsFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=500,
+                    message=f"Failed to create materials from Google Drive data for file ID {file_id}",
+                    details={"error": "No data returned after creating materials"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message=f"Failed to create materials from Google Drive data, please try again later.",
+                )
+            share_link = f"/user/materials/{subject_id}"
+            if parent_id:
+                share_link += f"/{parent_id}"
+            if len(fetched_data.children) == 0:
+                share_link += f"?material_id={created_data.id}"
+            notification_response = await self.helper_service.send_notification(
+                notification_type=Notification.Type.MATERIAL,
+                parent_id=created_data.id,
+                user_ids=user_ids,
+                content=f"New material '{created_data.name}' has been fetched from drive to subject '{subject.name}'",
+                url=share_link,
+            )
+            if not notification_response.success:
+                await self.logger.log(
+                    action="FetchMaterialsFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=notification_response.code or 500,
+                    message=f"Failed to send notification for fetched material with ID {created_data.id}: {notification_response.message}",
+                    details={"error": notification_response.error},
+                    source="MaterialService",
+                )
+            await self.logger.log(
+                action="FetchMaterialsFromDrive",
+                entity="Material",
+                level="info",
+                code=200,
+                message=f"Materials fetched and created successfully from Google Drive for file ID {file_id}",
+                details={},
+                source="MaterialService",
+            )
             return BaseResponseDto(
                 success=True,
                 code=200,
@@ -1760,7 +2291,12 @@ class MaterialService(IMaterialService):
             )
 
     async def _recursive_copy(
-        self, material_id: int, destination_id: int, author_id: int, access_token: str
+        self,
+        material_id: int,
+        destination_id: int,
+        author_id: int,
+        author_permissions: list[str],
+        access_token: str,
     ) -> BaseResponseDto[bool]:
         try:
             existing_material_response = await self.material_repository.find_one(
@@ -1789,6 +2325,62 @@ class MaterialService(IMaterialService):
                     code=404,
                     data=None,
                     message=f"Material with ID {material_id} not found",
+                )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["users"]
+            )
+            existing_material_subject_response = await self.subject_repository.find_one(
+                Subject.id == existing_material.subject_id, dynamic_includes
+            )
+            if not existing_material_subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_material_subject_response.code,
+                    data=None,
+                    message=existing_material_subject_response.message,
+                )
+            existing_material_subject = existing_material_subject_response.data
+            if not existing_material_subject:
+                await self.logger.log(
+                    action="RecursiveCopy",
+                    entity="Material",
+                    level="error",
+                    code=404,
+                    message=f"Existing material's subject with ID {existing_material.subject_id} not found",
+                    details={"error": "Existing material's subject not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"Existing material's subject with ID {existing_material.subject_id} not found",
+                )
+            user_ids = (
+                [user.id for user in existing_material_subject.users]
+                if existing_material_subject.users
+                else []
+            )
+            if (
+                author_id not in user_ids
+                and "Access All Courses" not in author_permissions
+            ):
+                await self.logger.log(
+                    action="RecursiveCopy",
+                    entity="Material",
+                    level="error",
+                    code=403,
+                    message=f"User {author_id} is not authorized to copy material from subject {existing_material_subject.id}",
+                    details={
+                        "error": "User not authorized to copy material from this subject"
+                    },
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message=f"You are not authorized to copy material from this subject.",
                 )
             new_material = Material(
                 name=existing_material.name,
@@ -1909,7 +2501,11 @@ class MaterialService(IMaterialService):
             child_materials = child_materials_response.data
             for child in child_materials or []:
                 recursive_copy_response = await self._recursive_copy(
-                    child.id, created_material.id, author_id, access_token
+                    child.id,
+                    created_material.id,
+                    author_id,
+                    author_permissions,
+                    access_token,
                 )
                 if not recursive_copy_response.success:
                     return BaseResponseDto(

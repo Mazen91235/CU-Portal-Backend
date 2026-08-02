@@ -37,6 +37,5 @@ class FacultyDeleteDto(BaseModel):
     id: int = Field(..., description="ID of Faculty to delete")
 
 
-class FacultySearchDto(BaseSearchDto):
+class FacultySearchDto(BaseSearchDto, BaseModel):
     id: int | None = Field(default=None, description="ID of Faculty to filter by")
-    name: str | None = Field(default=None, description="Name of Faculty to filter by")

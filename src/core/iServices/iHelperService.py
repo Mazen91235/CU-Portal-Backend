@@ -101,11 +101,22 @@ class IHelperService(ABC, Generic[U]):
         pass
 
     @abstractmethod
-    def verify_file_size(
+    async def verify_file_size(
         self,
         file_size: str,
         max_size_in_bytes: int,
     ) -> bool:
+        pass
+
+    @abstractmethod
+    async def verify_file_exists_on_drive(
+        self,
+        url: str,
+    ) -> BaseResponseDto[FileModel]:
+        pass
+
+    @abstractmethod
+    async def remove_files_from_drive(self, files: list[dict]) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod

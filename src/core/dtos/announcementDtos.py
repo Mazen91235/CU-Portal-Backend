@@ -25,50 +25,16 @@ class AnnouncementCreateDto(BaseModel):
     subject_id: int = Field(
         ..., gt=0, description="ID of the subject this announcement belongs to"
     )
-    year_id: int | None = Field(
-        default=None, gt=0, description="ID of the academic year"
-    )
-    faculty_id: int | None = Field(
-        default=None, gt=0, description="ID of the faculty"
-    )
+    faculty_id: int | None = Field(default=None, gt=0, description="ID of the faculty")
     department_id: int | None = Field(
         default=None, gt=0, description="ID of the department"
-    )
-    urls: list[str] = Field(
-        default_factory=list, description="List of Google Drive file URLs attached to the announcement"
-    )
-    links: list[dict[str, str]] = Field(
-        default_factory=list, description="List of external links"
-    )
-    details: dict[str, Any] = Field(
-        default_factory=dict, description="Additional details dictionary"
-    )
-
-
-class AnnouncementUpdateDto(BaseModel):
-    title: str | None = Field(
-        default=None, min_length=1, max_length=255, description="Title of the announcement"
-    )
-    content: str | None = Field(
-        default=None, min_length=1, max_length=1000, description="Content of the announcement"
-    )
-    date: str | None = Field(
-        default=None, description="ISO formatted date string for the announcement"
-    )
-    subject_id: int | None = Field(
-        default=None, gt=0, description="ID of the subject this announcement belongs to"
     )
     year_id: int | None = Field(
         default=None, gt=0, description="ID of the academic year"
     )
-    faculty_id: int | None = Field(
-        default=None, gt=0, description="ID of the faculty"
-    )
-    department_id: int | None = Field(
-        default=None, gt=0, description="ID of the department"
-    )
     urls: list[str] = Field(
-        default_factory=list, description="List of Google Drive file URLs attached to the announcement"
+        default_factory=list,
+        description="List of Google Drive file URLs attached to the announcement",
     )
     links: list[dict[str, str]] = Field(
         default_factory=list, description="List of external links"
@@ -82,12 +48,24 @@ class AnnouncementResponseDto(BaseModel):
     id: int | None = Field(None, description="ID of the announcement")
     title: str | None = Field(None, description="Title of the announcement")
     content: str | None = Field(None, description="Content of the announcement")
-    date: datetime | None = Field(None, description="Scheduled date of the announcement")
-    urls: list[str] | None = Field(default_factory=list, description="List of attached file URLs")
-    links: list[dict[str, str]] | None = Field(default_factory=list, description="List of attached links")
-    details: dict | None = Field(default_factory=dict, description="Additional details (e.g., files_data)")
-    created_at: datetime | None = Field(None, description="Creation date of the announcement")
-    modified_at: datetime | None = Field(None, description="Last update date of the announcement")
+    date: datetime | None = Field(
+        None, description="Scheduled date of the announcement"
+    )
+    urls: list[str] | None = Field(
+        default_factory=list, description="List of attached file URLs"
+    )
+    links: list[dict[str, str]] | None = Field(
+        default_factory=list, description="List of attached links"
+    )
+    details: dict | None = Field(
+        default_factory=dict, description="Additional details (e.g., files_data)"
+    )
+    created_at: datetime | None = Field(
+        None, description="Creation date of the announcement"
+    )
+    modified_at: datetime | None = Field(
+        None, description="Last update date of the announcement"
+    )
 
     # Relationships
     author: UserResponseDto | None = Field(
@@ -96,14 +74,14 @@ class AnnouncementResponseDto(BaseModel):
     subject: SubjectResponseDto | None = Field(
         None, description="Subject associated with the announcement"
     )
+    faculty: FacultyResponseDto | None = Field(
+        None, description="Faculty associated with the announcement"
+    )
     department: DepartmentResponseDto | None = Field(
         None, description="Department associated with the announcement"
     )
     year: YearResponseDto | None = Field(
         None, description="Academic year associated with the announcement"
-    )
-    faculty: FacultyResponseDto | None = Field(
-        None, description="Faculty associated with the announcement"
     )
 
     # Pydantic Configuration
@@ -111,14 +89,63 @@ class AnnouncementResponseDto(BaseModel):
         "from_attributes": True,
     }
 
+
+class AnnouncementUpdateDto(BaseModel):
+    id: int = Field(..., description="ID of the announcement to update")
+    title: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+        description="Title of the announcement",
+    )
+    content: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=1000,
+        description="Content of the announcement",
+    )
+    date: str | None = Field(
+        default=None, description="ISO formatted date string for the announcement"
+    )
+    subject_id: int | None = Field(
+        default=None, gt=0, description="ID of the subject this announcement belongs to"
+    )
+    faculty_id: int | None = Field(default=None, gt=0, description="ID of the faculty")
+    department_id: int | None = Field(
+        default=None, gt=0, description="ID of the department"
+    )
+    year_id: int | None = Field(
+        default=None, gt=0, description="ID of the academic year"
+    )
+    urls: list[str] = Field(
+        default_factory=list,
+        description="List of Google Drive file URLs attached to the announcement",
+    )
+    links: list[dict[str, str]] = Field(
+        default_factory=list, description="List of external links"
+    )
+    details: dict[str, Any] = Field(
+        default_factory=dict, description="Additional details dictionary"
+    )
+
+
 class AnnouncementDeleteDto(BaseModel):
     id: int = Field(..., description="ID of the announcement to delete")
 
 
 class AnnouncementSearchDto(BaseSearchDto, BaseModel):
-    subject_id: int | None = Field(default=None, description="ID of Subject to filter by")
-    faculty_id: int | None = Field(default=None, description="ID of Faculty to filter by")
-    department_id: int | None = Field(default=None, description="ID of Department to filter by")
+    id: int | None = Field(
+        default=None, description="ID of the announcement to filter by"
+    )
+    subject_id: int | None = Field(
+        default=None, description="ID of Subject to filter by"
+    )
+    faculty_id: int | None = Field(
+        default=None, description="ID of Faculty to filter by"
+    )
+    department_id: int | None = Field(
+        default=None, description="ID of Department to filter by"
+    )
     year_id: int | None = Field(default=None, description="ID of Year to filter by")
     author_id: int | None = Field(default=None, description="ID of Author to filter by")
     date_from: str | None = Field(

@@ -163,6 +163,7 @@ class Container(containers.DeclarativeContainer):
         HelperService,
         notification_repository=notification_repository,
         user_notification_repository=user_notification_repository,
+        user_repository=user_repository,
     )
     logger = providers.Factory(
         BaseLogger, repository=log_repository, helper_service=helper_service

@@ -41,8 +41,8 @@ class Task(Base):
     urls: Mapped[list[str]] = mapped_column(
         MutableList.as_mutable(JSON), nullable=True, default=list
     )
-    links: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
+    links: Mapped[dict[str, str]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True, default=dict
     )
     url: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     details: Mapped[dict] = mapped_column(

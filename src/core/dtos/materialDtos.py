@@ -89,9 +89,6 @@ class MaterialsDeleteDto(BaseModel):
 
 class MaterialSearchDto(BaseModel):
     id: int | None = Field(default=None, description="ID of the material to filter by")
-    name: str | None = Field(
-        default=None, max_length=200, description="Name of the material to filter by"
-    )
     type: str | None = Field(
         default=None,
         max_length=30,

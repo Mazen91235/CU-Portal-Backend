@@ -49,7 +49,6 @@ class YearUpdateDto(BaseModel):
 
 class YearSearchDto(BaseSearchDto, BaseModel):
     id: int | None = Field(default=None, description="ID of the year to filter by")
-    year: int | None = Field(default=None, description="Academic year to filter by")
     created_at_from: datetime | None = Field(
         default=None, description="Filter years created after this date"
     )

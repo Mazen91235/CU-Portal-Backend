@@ -36,7 +36,7 @@ class AnnouncementController(IAnnouncementController):
                 )
                 
             entity_search_dto = Generator[AnnouncementSearchDto].generate(
-                AnnouncementSearchDto, {"id": announcement_id}
+                AnnouncementSearchDto, {"id": int(announcement_id)}
             )
             
             response = await self.announcement_service.find_one(
@@ -239,10 +239,9 @@ class AnnouncementController(IAnnouncementController):
                 )
 
             payload = await request.json()
-            
+            payload["id"] = int(announcement_id)
             data = Generator[AnnouncementUpdateDto].generate(AnnouncementUpdateDto, payload)
             announcement = Mapper[AnnouncementUpdateDto, Announcement].map(data, Announcement)
-            announcement.id = int(announcement_id)
 
             response = await self.announcement_service.update(announcement)
             
