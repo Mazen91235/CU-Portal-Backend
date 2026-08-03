@@ -248,7 +248,7 @@ class AuthMiddleware(IAuthMiddleware):
                     detail="Unauthorized: You are not logged in",
                 )
 
-            if not user.faculty or not user.department or not user.year or not user.type:
+            if not user.faculty_id or not user.department_id or not user.year_id or not user.type:
                 await self.logger.log(
                     action="ReadyCheck",
                     entity="User",

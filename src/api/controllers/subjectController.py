@@ -5,17 +5,19 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
+from core.utils.parser import Parser
 from business.contextVars.userContext import user_context
 
 # Entities & DTOs
 from core.entities.subject import Subject
 from core.dtos.subjectDtos import (
-   SubjectCreateDto,SubjectUpdateDto,SubjectSearchDto,SubjectResponseDto,SubjectMinResponseDto,
+   SubjectCreateDto,SubjectUpdateDto,SubjectSearchDto,SubjectResponseDto,SubjectAvailableSearchDto
 )
 
 from core.dtos.userSubjectLinkDtos import (
-  UserSubjectLinkRegisterDto,UserSubjectLinkUnregisterDto,SubjectEnrolledResponseDto
+  UserSubjectLinkRegisterDto,UserSubjectLinkUnregisterDto
 )
+from core.models.queryModel import QueryModel
 
 
 class SubjectController(ISubjectController):
@@ -25,7 +27,121 @@ class SubjectController(ISubjectController):
 
         self.logger = logger
 
-    # CRUD Functions
+    # CRUD Functions   
+    async def find_one(self, request):
+        try:
+            subject_id = request.path_params.get("subject_id")
+            if not subject_id:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=400,
+                    message="Subject ID is required",
+                )
+
+            entity_search_dto = Generator[SubjectSearchDto].generate(
+                SubjectSearchDto, {"id": subject_id}
+            )
+            response = await self.subject_service.find_one(
+                entity_search_dto, includes=["faculty", "department", "year", "users"]
+            )
+
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False, 
+                    code=response.code, 
+                    message=response.message)
+            
+            subject=response.data
+            if not subject:
+                await self.logger.log(
+                    action="FindOne", 
+                    entity="Subject", 
+                    level="info", 
+                    code=404,
+                    message="Subject not found", 
+                    source="SubjectController",
+                )
+                return ResponseHandler.generate_response(success=False, code=404, message="Subject not found")
+            
+            subject_mapped = Mapper[Subject, SubjectResponseDto].map(subject, SubjectResponseDto, True)
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                message="Subject retrieved successfully",
+                data=subject_mapped,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="FindOne", entity="Subject", level="error", code=500,
+                message="An error occurred while processing the request",
+                details={"error": str(e)}, source="SubjectController",
+            )
+            return ResponseHandler.generate_response(success=False, code=500, message="An error occurred while processing the request, please try again later")
+
+    async def find(self, request):
+        try:
+            query = Parser.parse_query(
+                request.query_params.get("query", "{}"),
+                QueryModel[SubjectSearchDto],
+            )
+            entity_search_dto = Generator[SubjectSearchDto].generate_from_query(
+                SubjectSearchDto, query
+            )
+            includes = query.includes or ["faculty", "department", "year", "users"]
+            selects = query.selects
+            is_and = query.is_and
+            starts_with = query.starts_with
+            is_exact = query.is_exact
+            order_by = query.order_by or "name"
+            descending = query.descending
+            page = query.page or 1
+            limit = query.limit or 50
+
+            response = await self.subject_service.find(
+                entity_search_dto,
+                includes,
+                selects,
+                is_and,
+                starts_with,
+                is_exact,
+                order_by,
+                descending,
+                page,
+                limit ,
+            )
+            if not response.success:
+                return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
+
+            subjects = response.data
+           
+
+            if subjects is None:
+                await self.logger.log(
+                    action="Find", 
+                    entity="Subject", 
+                    level="info", 
+                    code=404,
+                    message="Subjects not found",
+                    source="SubjectController",
+                )
+                return ResponseHandler.generate_response(success=False, code=404, message="Subjects not found")
+
+            subjects_mapped= Mapper[Subject, SubjectResponseDto].map_list(subjects, SubjectResponseDto, True)
+
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                message="Subjects retrieved successfully",
+                data=subjects_mapped
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="Find", entity="Subject", level="error", code=500,
+                message="An error occurred while processing the request",
+                details={"error": str(e)}, source="SubjectController",
+            )
+            return ResponseHandler.generate_response(success=False, code=500, message="An error occurred while processing the request, please try again later")
+
     async def create(self, request):
       try:
         await self.subject_service.begin_transaction()
@@ -45,11 +161,32 @@ class SubjectController(ISubjectController):
                     code=response.code,
                     message=response.message,
                 )
+        created_subject = response.data
+        if not created_subject:
+                        await self.subject_service.rollback_transaction()
+                        await self.logger.log(
+                            action="Create",
+                            entity="Subject",
+                            level="error",
+                            code=500,
+                            message="Failed to create subject",
+                            source="SubjectController",
+                        )
+                        return ResponseHandler.generate_response(
+                            success=False,
+                            code=500,
+                            message="An error occurred while processing the request, please try again later",
+                        )
+        created_subject_mapped = Mapper[Subject, SubjectResponseDto].map(
+                        created_subject, SubjectResponseDto, True
+                    )
         
         await self.subject_service.commit_transaction()
         return ResponseHandler.generate_response(
-            success=True, code=201, message="Subject created successfully", data=SubjectResponseDto.model_validate(response.data).model_dump(mode="json"),
-        )
+            success=True,
+            code=201, 
+            message="Subject created successfully", data=created_subject_mapped)
+      
       except Exception as e:
         await self.subject_service.rollback_transaction()
         await self.logger.log(
@@ -66,127 +203,6 @@ class SubjectController(ISubjectController):
             code=500,
             message="An error occurred while processing the request, please try again later",
         )
-    
-    async def find_one(self, request):
-        try:
-            subject_id = request.path_params.get("subject_id")
-            response = await self.subject_service.find_one(
-                Subject.id == int(subject_id), includes=["faculty", "department", "year", "users"]
-            )
-            if not response.success:
-                return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
-            if not response.data:
-                await self.logger.log(
-                    action="FindOne", entity="Subject", level="warning", code=404,
-                    message="Subject not found", details={"subject_id": subject_id},
-                    source="SubjectController",
-                )
-                return ResponseHandler.generate_response(success=False, code=404, message="Subject not found")
-            return ResponseHandler.generate_response(success=True, code=200, message="Subject retrieved successfully",  data=SubjectResponseDto.model_validate(response.data).model_dump(mode="json"),)
-        except Exception as e:
-            await self.logger.log(
-                action="FindOne", entity="Subject", level="error", code=500,
-                message="An error occurred while processing the request",
-                details={"error": str(e)}, source="SubjectController",
-            )
-            return ResponseHandler.generate_response(success=False, code=500, message="An error occurred while processing the request, please try again later")
-
-    async def find(self, request):
-        try:
-            query_params = dict(request.query_params)
-            data = Generator[SubjectSearchDto].generate(SubjectSearchDto, query_params)
-            page = data.page or 1
-            limit = data.limit or 50
-            order_by = query_params.get("order_by") or "name"
-
-            response = await self.subject_service.find(
-                data, includes=["faculty", "department", "year", "users"],
-                is_and=True, order_by=order_by, page=page, limit=limit + 1,
-            )
-            if not response.success:
-                return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
-
-            subjects = response.data
-            has_next = len(subjects) > limit
-            subjects = subjects[:limit]
-
-            if page > 1 and not subjects:
-                await self.logger.log(
-                    action="Find", entity="Subject", level="warning", code=400,
-                    message="Invalid page number provided for subjects retrieval.",
-                    details={"page": page}, source="SubjectController",
-                )
-                return ResponseHandler.generate_response(success=False, code=400, message="Invalid page number")
-
-            await self.logger.log(
-                action="Find", entity="Subject", level="info", code=200,
-                message="Subjects retrieved successfully.",
-                details={"subjects_count": len(subjects)}, source="SubjectController",
-            )
-            return ResponseHandler.generate_response(
-                success=True,
-                code=200,
-                message="Subjects retrieved successfully",
-                data=[SubjectResponseDto.model_validate(s).model_dump(mode="json") for s in subjects],
-                next=has_next,
-            )
-        except Exception as e:
-            await self.logger.log(
-                action="Find", entity="Subject", level="error", code=500,
-                message="An error occurred while processing the request",
-                details={"error": str(e)}, source="SubjectController",
-            )
-            return ResponseHandler.generate_response(success=False, code=500, message="An error occurred while processing the request, please try again later")
-
-    async def search(self, request):
-        try:
-            current_user = user_context.get()
-            if not current_user:
-                return ResponseHandler.generate_response(success=False, code=401, message="Unauthorized")
-
-            query_params = dict(request.query_params)
-            data = Generator[SubjectSearchDto].generate(SubjectSearchDto, query_params)
-            page = data.page or 1
-            limit = data.limit or 50
-
-            response = await self.subject_service.search(
-                current_user,
-                query=data.query,
-                faculty_id=data.faculty_id,
-                department_id=data.department_id,
-                year_id=data.year_id,
-                page=page,
-                limit=limit + 1,
-            )
-            if not response.success:
-                return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
-
-            subjects = response.data
-            has_next = len(subjects) > limit
-            subjects = subjects[:limit]
-
-            if page > 1 and not subjects:
-                await self.logger.log(
-                    action="Search", entity="Subject", level="warning", code=400,
-                    message="Invalid page number provided for subjects search.",
-                    details={"page": page}, source="SubjectController",
-                )
-                return ResponseHandler.generate_response(success=False, code=400, message="Invalid page number")
-
-            return ResponseHandler.generate_response(
-                success=True,
-                code=200,
-                message="Subjects search completed successfully",
-                data=[SubjectMinResponseDto.model_validate(s).model_dump(mode="json") for s in subjects],
-                next=has_next,
-            )
-        except Exception as e:
-            await self.logger.log(
-                action="Search", entity="Subject", level="error", code=500,
-                message="An error occurred while processing the request",
-                details={"error": str(e)}, source="SubjectController",
-            )
-            return ResponseHandler.generate_response(success=False, code=500, message="An error occurred while processing the request, please try again later")
 
     async def update(self, request):
         try:
@@ -196,14 +212,33 @@ class SubjectController(ISubjectController):
             data = Generator[SubjectUpdateDto].generate(SubjectUpdateDto, payload)
             subject = Mapper[SubjectUpdateDto, Subject].map(data, Subject)
             subject.details = {"description": data.description, "max_students": data.max_students}
-
-            response = await self.subject_service.update(subject_id, subject)
+            subject.id=subject_id
+            response = await self.subject_service.update(subject)
             if not response.success:
                 await self.subject_service.rollback_transaction()
                 return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
-
+            subject = response.data
+            if not subject:
+                await self.subject_service.rollback_transaction()
+                await self.logger.log(
+                    action="Update",
+                    entity="Subject",
+                    level="error",
+                    code=500,
+                    message="Failed to update subject",
+                    source="SubjectController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            subject_mapped = Mapper[Subject, SubjectResponseDto].map(subject, SubjectResponseDto, True)
             await self.subject_service.commit_transaction()
-            return ResponseHandler.generate_response(success=True, code=200, message="Subject updated successfully", data=SubjectResponseDto.model_validate(response.data).model_dump(mode="json"),)
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200, 
+                message="Subject updated successfully", data=subject_mapped)
         except Exception as e:
             await self.subject_service.rollback_transaction()
             await self.logger.log(
@@ -217,7 +252,8 @@ class SubjectController(ISubjectController):
         try:
             await self.subject_service.begin_transaction()
             subject_id = int(request.path_params.get("subject_id"))
-            response = await self.subject_service.delete(subject_id)
+            subject = Generator[Subject].generate(Subject, {"id": subject_id})
+            response = await self.subject_service.delete(subject)
             if not response.success:
                 await self.subject_service.rollback_transaction()
                 return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
@@ -232,33 +268,25 @@ class SubjectController(ISubjectController):
             )
             return ResponseHandler.generate_response(success=False, code=500, message="An error occurred while processing the request, please try again later")
     
-    # USER Functions
+        
+    # Subject Specific Functions
     async def register(self, request):
         try:
             await self.subject_service.begin_transaction()
             payload = await request.json()
             data = Generator[UserSubjectLinkRegisterDto].generate(UserSubjectLinkRegisterDto, payload)
 
-            user_response = await self.helper_service.get_logged_in_user()
-            if not user_response.success:
-                await self.subject_service.rollback_transaction()
-                return ResponseHandler.generate_response(success=False, code=user_response.code, message=user_response.message)
-            user = user_response.data
-            if not user:
-                await self.subject_service.rollback_transaction()
-                return ResponseHandler.generate_response(success=False, code=401, message="Unauthorized")
-
-            response = await self.subject_service.register(user.id, data.subject_id)
+            response = await self.subject_service.register(data)
             if not response.success:
                 await self.subject_service.rollback_transaction()
                 return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
+
 
             await self.subject_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 message="Registered to course successfully",
-                data=SubjectEnrolledResponseDto.model_validate(response.data).model_dump(mode="json"),
             )
         except Exception as e:
             await self.subject_service.rollback_transaction()
@@ -275,16 +303,8 @@ class SubjectController(ISubjectController):
             payload = await request.json()
             data = Generator[UserSubjectLinkUnregisterDto].generate(UserSubjectLinkUnregisterDto, payload)
 
-            user_response = await self.helper_service.get_logged_in_user()
-            if not user_response.success:
-                await self.subject_service.rollback_transaction()
-                return ResponseHandler.generate_response(success=False, code=user_response.code, message=user_response.message)
-            user = user_response.data
-            if not user:
-                await self.subject_service.rollback_transaction()
-                return ResponseHandler.generate_response(success=False, code=401, message="Unauthorized")
 
-            response = await self.subject_service.unregister(user.id, data.subject_id)
+            response = await self.subject_service.unregister(data)
             if not response.success:
                 await self.subject_service.rollback_transaction()
                 return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
@@ -294,7 +314,6 @@ class SubjectController(ISubjectController):
                 success=True,
                 code=200,
                 message="Unregistered from course successfully",
-                data=SubjectEnrolledResponseDto.model_validate(response.data).model_dump(mode="json"),
             )
         except Exception as e:
             await self.subject_service.rollback_transaction()
@@ -307,21 +326,31 @@ class SubjectController(ISubjectController):
 
     async def get_enrolled(self, request):
         try:
-            user_response = await self.helper_service.get_logged_in_user()
-            if not user_response.success:
-                return ResponseHandler.generate_response(success=False, code=user_response.code, message=user_response.message)
-            user = user_response.data
-            if not user:
-                return ResponseHandler.generate_response(success=False, code=401, message="Unauthorized")
-
-            response = await self.subject_service.get_enrolled(user.id)
+            response = await self.subject_service.get_enrolled()
             if not response.success:
                 return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
+
+            enrolled_subjects = response.data
+            if enrolled_subjects is None:
+                await self.logger.log(
+                    action="GetEnrolled",
+                    entity="Subject",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve enrolled subjects",
+                    source="SubjectController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            subjects_mapped = Mapper[Subject, SubjectResponseDto].map_list(enrolled_subjects, SubjectResponseDto, True)
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 message="Enrolled courses retrieved successfully",
-                data=[SubjectEnrolledResponseDto.model_validate(s).model_dump(mode="json") for s in response.data],
+                data=subjects_mapped,
             )
         except Exception as e:
             await self.logger.log(
@@ -333,24 +362,39 @@ class SubjectController(ISubjectController):
 
     async def get_available(self, request):
         try:
-            user_response = await self.helper_service.get_logged_in_user()
-            if not user_response.success:
-                return ResponseHandler.generate_response(success=False, code=user_response.code, message=user_response.message)
-            user = user_response.data
-            if not user:
-                return ResponseHandler.generate_response(success=False, code=401, message="Unauthorized")
+            query = Parser.parse_query(
+                request.query_params.get("query", "{}"),
+                QueryModel[SubjectAvailableSearchDto],
+            )
+            search_dto = Generator[SubjectAvailableSearchDto].generate_from_query(
+                SubjectAvailableSearchDto, query
+            )
 
-            query_params = dict(request.query_params)
-            query = query_params.get("query", "").strip() or None
-
-            response = await self.subject_service.get_available(user.id, query=query)
+            response = await self.subject_service.get_available(search_dto)
             if not response.success:
                 return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
+
+            available_subjects = response.data
+            if available_subjects is None:
+                await self.logger.log(
+                    action="GetAvailable",
+                    entity="Subject",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve available subjects",
+                    source="SubjectController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            subjects_mapped = Mapper[Subject, SubjectResponseDto].map_list(available_subjects, SubjectResponseDto, True)
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 message="Available courses retrieved successfully",
-                data=[SubjectEnrolledResponseDto.model_validate(s).model_dump(mode="json") for s in response.data],
+                data=subjects_mapped,
             )
         except Exception as e:
             await self.logger.log(
@@ -360,63 +404,30 @@ class SubjectController(ISubjectController):
             )
             return ResponseHandler.generate_response(success=False, code=500, message="An error occurred while processing the request, please try again later")
         
-    async def search_registered(self, request):
-        try:
-            user_response = await self.helper_service.get_logged_in_user()
-            if not user_response.success:
-                return ResponseHandler.generate_response(success=False, code=user_response.code, message=user_response.message)
-            current_user = user_response.data
-            if not current_user:
-                return ResponseHandler.generate_response(success=False, code=401, message="Unauthorized")
-
-            query_params = dict(request.query_params)
-            data = Generator[SubjectSearchDto].generate(SubjectSearchDto, query_params)
-            page = data.page or 1
-            limit = data.limit or 50
-
-            response = await self.subject_service.search_registered(
-                current_user.id, query=data.query, page=page, limit=limit + 1
-            )
-            if not response.success:
-                return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
-
-            subjects = response.data
-            has_next = len(subjects) > limit
-            subjects = subjects[:limit]
-
-            if page > 1 and not subjects:
-                return ResponseHandler.generate_response(success=False, code=400, message="Invalid page number")
-
-            return ResponseHandler.generate_response(
-                success=True, code=200, message="Registered courses search completed successfully",
-                data=[SubjectMinResponseDto.model_validate(s).model_dump(mode="json") for s in subjects],
-                next=has_next,
-            )
-        except Exception as e:
-            await self.logger.log(
-                action="Search", entity="Subject", level="error", code=500,
-                message="An error occurred while processing the request",
-                details={"error": str(e)}, source="SubjectController",
-            )
-            return ResponseHandler.generate_response(success=False, code=500, message="An error occurred while processing the request, please try again later")
-
     async def get_enrolled_one(self, request):
         try:
-            user_response = await self.helper_service.get_logged_in_user()
-            if not user_response.success:
-                return ResponseHandler.generate_response(success=False, code=user_response.code, message=user_response.message)
-            current_user = user_response.data
-            if not current_user:
-                return ResponseHandler.generate_response(success=False, code=401, message="Unauthorized")
-
             subject_id = int(request.path_params.get("subject_id"))
-            response = await self.subject_service.get_enrolled_one(current_user.id, subject_id)
+            entity_search_dto = Generator[SubjectSearchDto].generate(
+                SubjectSearchDto, {"id": subject_id}
+            )
+
+            response = await self.subject_service.get_enrolled_one(entity_search_dto)
             if not response.success:
                 return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
 
+            enrolled_subject = response.data
+            if not enrolled_subject:
+                await self.logger.log(
+                    action="GetEnrolledOne", entity="Subject", level="warning", code=404,
+                    message="Enrolled course not found", details={"subject_id": subject_id},
+                    source="SubjectController",
+                )
+                return ResponseHandler.generate_response(success=False, code=404, message="Enrolled course not found")
+
+            subject_mapped = Mapper[Subject, SubjectResponseDto].map(enrolled_subject, SubjectResponseDto, True)
             return ResponseHandler.generate_response(
                 success=True, code=200, message="Enrolled course retrieved successfully",
-                data=SubjectEnrolledResponseDto.model_validate(response.data).model_dump(mode="json"),
+                data=subject_mapped,
             )
         except Exception as e:
             await self.logger.log(

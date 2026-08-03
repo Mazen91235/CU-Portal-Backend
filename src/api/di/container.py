@@ -10,6 +10,7 @@ from api.routes.mainRoutes import (
     create_main_user_router,
     create_main_admin_router,
 )
+from api.routes.subjectRoutes import create_subject_admin_router, create_subject_user_router
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
 from api.routes.notificationRoutes import create_notification_user_router
@@ -62,7 +63,6 @@ from core.entities.message import Message
 from core.entities.faculty import Faculty
 from core.utils.databaseHandler import DatabaseHandler
 
-from api.routes.subjectRoutes import create_subject_admin_router, create_subject_user_router
 from api.controllers.subjectController import SubjectController
 from business.services.subjectService import SubjectService
 from core.entities.subject import Subject
@@ -402,6 +402,13 @@ class Container(containers.DeclarativeContainer):
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
+    
+    subject_user_routes = providers.Factory(
+        create_subject_user_router,
+        controller_provider=subject_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
 
     subject_admin_routes = providers.Factory(
         create_subject_admin_router,
@@ -410,9 +417,3 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
-    subject_user_routes = providers.Factory(
-        create_subject_user_router,
-        controller_provider=subject_controller.provider,
-        auth_middleware_provider=auth_middleware.provider,
-        validation_middleware_provider=validation_middleware.provider,
-    )
