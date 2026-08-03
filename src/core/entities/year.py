@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from .subject import Subject
     from .task import Task
     from .announcement import Announcement
+    from .week import Week
 
 
 class Year(Base):
@@ -63,9 +64,9 @@ class Year(Base):
     announcements: Mapped[list["Announcement"]] = relationship(
         "Announcement", back_populates="year", cascade="all, delete-orphan"
     )
-    # events: Mapped[list["Event"]] = relationship(
-    #     "Event", back_populates="year", cascade="all, delete-orphan"
-    # )
+    weeks: Mapped[list["Week"]] = relationship(
+        "Week", back_populates="year", cascade="all, delete-orphan"
+    )
     # roadmaps: Mapped[list["Roadmap"]] = relationship(
     #     "Roadmap", back_populates="year", cascade="all, delete-orphan"
     # )

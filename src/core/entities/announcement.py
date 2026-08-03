@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .department import Department
     from .faculty import Faculty
     from .subject import Subject
+    from .attachment import Attachment
 
 
 class Announcement(Base):
@@ -102,6 +103,9 @@ class Announcement(Base):
     )
     subject: Mapped[Optional["Subject"]] = relationship(
         "Subject", back_populates="announcements"
+    )
+    attachments: Mapped[list["Attachment"]] = relationship(
+        "Attachment", back_populates="announcement", cascade="all, delete-orphan"
     )
 
     # Indexes

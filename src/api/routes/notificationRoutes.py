@@ -3,6 +3,7 @@ from customRoute import CustomRoute
 from core.iControllers.iNotificationController import INotificationController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
+from core.dtos.notificationDtos import NotificationResponseDto
 from core.dtos.baseDtos import BaseResponseDto
 
 
@@ -42,7 +43,7 @@ def create_notification_user_router(
     @router.get(
         "/",
         dependencies=[Depends(_is_logged_in)],
-        response_model=BaseResponseDto,
+        response_model=BaseResponseDto[list[NotificationResponseDto]],
         summary="Get Notifications (User)",
         description="Retrieves a paginated list of notifications for the logged-in user.",
     )
@@ -54,7 +55,7 @@ def create_notification_user_router(
     @router.patch(
         "/{notification_id}",
         dependencies=[Depends(_is_logged_in)],
-        response_model=BaseResponseDto,
+        response_model=BaseResponseDto[bool],
         summary="Mark Notification as Seen",
         description="Marks a specific notification as seen for the logged-in user.",
     )

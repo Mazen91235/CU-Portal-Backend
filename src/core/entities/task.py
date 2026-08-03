@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .department import Department
     from .faculty import Faculty
     from .subject import Subject
+    from .attachment import Attachment
 
 
 class Task(Base):
@@ -105,6 +106,9 @@ class Task(Base):
         nullable=False,
     )
     author: Mapped["User"] = relationship("User", back_populates="tasks")
+    attachments: Mapped[list["Attachment"]] = relationship(
+        "Attachment", back_populates="task", cascade="all, delete-orphan"
+    )
 
     # Indexes
     __table_args__ = (
