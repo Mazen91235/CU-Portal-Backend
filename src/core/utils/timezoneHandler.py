@@ -29,6 +29,10 @@ class TimezoneHandler:
             return dt.astimezone(cls.UTC_TZ)
 
     @classmethod
+    def to_date(cls, dt: datetime) -> datetime:
+        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    @classmethod
     def add_days(cls, days: int, dt: datetime | None = None) -> datetime:
         if not dt:
             dt = cls.now("UTC")

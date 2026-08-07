@@ -76,12 +76,12 @@ class Task(Base):
     year: Mapped[Optional["Year"]] = relationship(
         "Year", back_populates="tasks", cascade="save-update, merge"
     )
-    department_id: Mapped[int] = mapped_column(
+    department_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("departments.id", ondelete="CASCADE", name="fk_department_task"),
-        nullable=False,
+        nullable=True,
     )
-    department: Mapped["Department"] = relationship(
+    department: Mapped[Optional["Department"]] = relationship(
         "Department", back_populates="tasks"
     )
     faculty_id: Mapped[Optional[int]] = mapped_column(

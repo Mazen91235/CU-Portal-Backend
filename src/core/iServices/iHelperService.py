@@ -23,6 +23,22 @@ class IHelperService(ABC, Generic[U]):
         pass
 
     @abstractmethod
+    async def get_logged_in_user_permissions(
+        self,
+    ) -> BaseResponseDto[list[str]]:
+        pass
+
+    @abstractmethod
+    async def verify_restricted_access(
+        self,
+        faculty_id: int | None = None,
+        department_id: int | None = None,
+        year_id: int | None = None,
+        subject_id: int | None = None,
+    ) -> BaseResponseDto[bool]:
+        pass
+
+    @abstractmethod
     async def send_email(
         self, to_email: str, subject: str, body: str
     ) -> BaseResponseDto[bool]:
@@ -101,7 +117,7 @@ class IHelperService(ABC, Generic[U]):
         pass
 
     @abstractmethod
-    async def verify_file_size(
+    def verify_file_size(
         self,
         file_size: str,
         max_size_in_bytes: int,

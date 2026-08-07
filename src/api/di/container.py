@@ -191,6 +191,11 @@ class Container(containers.DeclarativeContainer):
         notification_repository=notification_repository,
         user_notification_repository=user_notification_repository,
         user_repository=user_repository,
+        role_repository=role_repository,
+        faculty_repository=faculty_repository,
+        department_repository=department_repository,
+        year_repository=year_repository,
+        subject_repository=subject_repository,
     )
     logger = providers.Factory(
         BaseLogger, repository=log_repository, helper_service=helper_service
@@ -209,7 +214,6 @@ class Container(containers.DeclarativeContainer):
         MaterialService,
         material_repository=material_repository,
         subject_repository=subject_repository,
-        role_repository=role_repository,
         user_repository=user_repository,
         logger=logger,
         helper_service=helper_service,
@@ -240,7 +244,6 @@ class Container(containers.DeclarativeContainer):
         DepartmentService,
         department_repository=department_repository,
         faculty_repository=faculty_repository,
-        role_repository=role_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -255,10 +258,6 @@ class Container(containers.DeclarativeContainer):
         AnnouncementService,
         announcement_repository=announcement_repository,
         subject_repository=subject_repository,
-        role_repository=role_repository,
-        faculty_repository=faculty_repository,
-        department_repository=department_repository,
-        year_repository=year_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -266,10 +265,6 @@ class Container(containers.DeclarativeContainer):
         TaskService,
         task_repository=task_repository,
         subject_repository=subject_repository,
-        role_repository=role_repository,
-        faculty_repository=faculty_repository,
-        department_repository=department_repository,
-        year_repository=year_repository,
         logger=logger,
         helper_service=helper_service,
     )

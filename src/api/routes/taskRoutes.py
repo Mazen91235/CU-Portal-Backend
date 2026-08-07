@@ -18,8 +18,7 @@ def create_task_user_router(
         return auth_middleware_provider()
 
     def _get_validation_middleware() -> IValidationMiddleware:
-        return validation_middleware_provider()  
-    
+        return validation_middleware_provider()
 
     async def _is_logged_in(
         request: Request,
@@ -38,40 +37,40 @@ def create_task_user_router(
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
     ):
         return await auth_middleware.has_registered_subjects(request)
-    
+
     @router.get(
         "/{task_id}",
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_ready),
-            Depends(_has_registered_subjects)
+            Depends(_has_registered_subjects),
         ],
         response_model=BaseResponseDto[TaskResponseDto],
         status_code=200,
         summary="Find Task",
         description="Find a specific task by its ID if enrolled in the subject",
     )
-    async def find_one(  # type: ignore
+    async def find_one(
         request: Request, controller: ITaskController = Depends(_get_controller)
     ):
         return await controller.find_one(request)
+
     @router.get(
         "/",
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_ready),
-            Depends(_has_registered_subjects)
+            Depends(_has_registered_subjects),
         ],
         response_model=BaseResponseDto[list[TaskResponseDto]],
         status_code=200,
         summary="Find Tasks",
         description="Find all tasks for the currently logged-in user based on enrolled subjects",
     )
-    async def find(  # type: ignore
+    async def find(
         request: Request, controller: ITaskController = Depends(_get_controller)
     ):
         return await controller.find(request)
-
 
     return router
 
@@ -116,31 +115,32 @@ def create_task_admin_router(
             return await auth_middleware.is_authorized(request, *permissions)
 
         return authorize
+
     def _validate(*keys):
-            async def validate_request(
-                request: Request,
-                validation_middleware: IValidationMiddleware = Depends(
-                    _get_validation_middleware
-                ),
-            ):
-                return await validation_middleware.validate(request, *keys)
-            
-            return validate_request
-    
+        async def validate_request(
+            request: Request,
+            validation_middleware: IValidationMiddleware = Depends(
+                _get_validation_middleware
+            ),
+        ):
+            return await validation_middleware.validate(request, *keys)
+
+        return validate_request
+
     @router.get(
         "/{task_id}",
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("View Tasks")),
             Depends(_is_ready),
-            Depends(_has_registered_subjects)
+            Depends(_has_registered_subjects),
         ],
         response_model=BaseResponseDto[TaskResponseDto],
         status_code=200,
         summary="Find Task",
         description="Find a task by its ID (Admin View)",
     )
-    async def find_one(  # type: ignore
+    async def find_one(
         request: Request, controller: ITaskController = Depends(_get_controller)
     ):
         return await controller.find_one(request)
@@ -151,14 +151,14 @@ def create_task_admin_router(
             Depends(_is_logged_in),
             Depends(_is_authorized("View Tasks")),
             Depends(_is_ready),
-            Depends(_has_registered_subjects)
+            Depends(_has_registered_subjects),
         ],
         response_model=BaseResponseDto[list[TaskResponseDto]],
         status_code=200,
         summary="Find Tasks",
         description="Find tasks based on query parameters (Admin View)",
     )
-    async def find(  # type: ignore
+    async def find(
         request: Request, controller: ITaskController = Depends(_get_controller)
     ):
         return await controller.find(request)
@@ -170,14 +170,14 @@ def create_task_admin_router(
             Depends(_is_authorized("Manage Tasks")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
-            Depends(_validate("name", "url", "urls", "links", "details", "deadline", "due_date", "subject_id", "department_id", "faculty_id", "year_id"))
+            Depends(_validate("name", "deadline", "subject_id")),
         ],
         response_model=BaseResponseDto[TaskResponseDto],
         status_code=201,
         summary="Create Task",
         description="Create a new task for a specific subject",
     )
-    async def create(  # type: ignore
+    async def create(
         request: Request, controller: ITaskController = Depends(_get_controller)
     ):
         return await controller.create(request)
@@ -189,14 +189,14 @@ def create_task_admin_router(
             Depends(_is_authorized("Manage Tasks")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
-            Depends(_validate("name", "url", "urls", "links", "details", "deadline", "due_date", "subject_id", "department_id", "faculty_id", "year_id"))
+            Depends(_validate("name", "deadline", "subject_id")),
         ],
         response_model=BaseResponseDto[TaskResponseDto],
         status_code=200,
         summary="Update Task",
         description="Update an existing task by its ID",
     )
-    async def update(  # type: ignore
+    async def update(
         request: Request, controller: ITaskController = Depends(_get_controller)
     ):
         return await controller.update(request)
@@ -207,14 +207,14 @@ def create_task_admin_router(
             Depends(_is_logged_in),
             Depends(_is_authorized("Manage Tasks")),
             Depends(_is_ready),
-            Depends(_has_registered_subjects)
+            Depends(_has_registered_subjects),
         ],
         response_model=BaseResponseDto[bool],
         status_code=200,
         summary="Delete Task",
         description="Delete a task by its ID",
     )
-    async def delete(  # type: ignore
+    async def delete(
         request: Request, controller: ITaskController = Depends(_get_controller)
     ):
         return await controller.delete(request)
