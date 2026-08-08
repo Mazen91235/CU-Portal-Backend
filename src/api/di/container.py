@@ -12,7 +12,7 @@ from api.routes.mainRoutes import (
 )
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
-from api.routes.examRoutes import create_exam_admin_router, create_exam_router
+from api.routes.examRoutes import create_exam_user_router, create_exam_admin_router
 from api.routes.taskRoutes import create_task_user_router, create_task_admin_router
 from api.routes.announcementRoutes import (
     create_announcement_user_router,
@@ -283,7 +283,6 @@ class Container(containers.DeclarativeContainer):
         ExamService,
         task_repository=task_repository,
         subject_repository=subject_repository,
-        user_service=user_service,
         logger=logger,
         helper_service=helper_service,
     )
@@ -309,7 +308,6 @@ class Container(containers.DeclarativeContainer):
     )
 
     # --- 6. Controllers ---
-
     user_controller = providers.Factory(
         UserController, user_service=user_service, logger=logger
     )
@@ -373,6 +371,12 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    exam_user_routes = providers.Factory(
+        create_exam_user_router,
+        controller_provider=exam_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
     exam_admin_routes = providers.Factory(
         create_exam_admin_router,
         controller_provider=exam_controller.provider,
@@ -380,12 +384,6 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
-    exam_routes = providers.Factory(
-        create_exam_router,
-        controller_provider=exam_controller.provider,
-        auth_middleware_provider=auth_middleware.provider,
-        validation_middleware_provider=validation_middleware.provider,
-    )
     year_admin_routes = providers.Factory(
         create_year_admin_router,
         controller_provider=year_controller.provider,

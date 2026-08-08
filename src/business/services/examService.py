@@ -1,19 +1,13 @@
 import os
-import math
-from datetime import datetime
-from sqlalchemy import and_, func
-from sqlalchemy.orm import selectinload
+from sqlalchemy import and_
 from core.iServices.iExamService import IExamService
-from core.iServices.iUserService import IUserService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.task import Task
 from core.entities.subject import Subject
-from core.entities.user import User
+from core.entities.notification import Notification
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.examDtos import ExamSearchDto, ExamCreateDto, ExamUpdateDto
-from core.models.queryModel import QueryModel
 from core.utils.timezoneHandler import TimezoneHandler
 
 
@@ -22,341 +16,808 @@ class ExamService(IExamService):
         self,
         task_repository: IBaseRepository[Task],
         subject_repository: IBaseRepository[Subject],
-        user_service: IUserService,
         logger: IBaseLogger,
         helper_service: IHelperService,
     ):
         self.task_repository = task_repository
         self.subject_repository = subject_repository
-        self.user_service = user_service
         self.logger = logger
         self.helper_service = helper_service
 
-    async def find_one(self, predicate=None, includes=None, selects=None, order_by=None, descending=False):
-        return await self.task_repository.find_one(predicate, includes, selects, order_by, descending)
+    # Transaction Functions
 
-    async def find(self, predicate=None, includes=None, selects=None, order_by=None, descending=False, page=1, limit=50):
-        return await self.task_repository.find(predicate, includes, selects, order_by, descending, page, limit)
+    async def begin_transaction(self):
+        await self.task_repository.begin_transaction()
 
-    async def count(self, predicate=None):
-        return await self.task_repository.count(predicate)
+    async def commit_transaction(self):
+        await self.task_repository.commit_transaction()
 
-    async def create(self, entity: Task):
-        return await self.task_repository.create(entity)
+    async def rollback_transaction(self):
+        await self.task_repository.rollback_transaction()
 
-    async def update(self, entity: Task, updates=None):
-        return await self.task_repository.update(entity, updates)
-
-    async def delete(self, entity: Task):
-        return await self.task_repository.delete(entity)
-
-    # Admin Specific Methods
-    async def create_exam(self, data: ExamCreateDto) -> BaseResponseDto[Task]:
+    # CRUD Functions
+    async def find_one(
+        self,
+        data=None,
+        includes=None,
+        selects=None,
+        is_and=False,
+        starts_with=True,
+        is_exact=True,
+        order_by=None,
+        descending=False,
+    ):
         try:
-            current_user = (await self.helper_service.get_logged_in_user()).data
+            predicate = self.helper_service.generate_dynamic_predicate(
+                Task, data, ["name"], is_and, starts_with, is_exact
+            )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Task, includes
+            )
+            dynamic_selects = self.helper_service.generate_dynamic_selects(
+                "Task", selects
+            )
+            dynamic_order_by = self.helper_service.generate_dynamic_order_by(
+                "Task", order_by
+            )
 
-            # 1. Date Validation
-            try:
-                deadline_date = TimezoneHandler.from_isoformat(f"{data.due_date}T{data.start_time}")
-            except ValueError:
-                return BaseResponseDto(success=False, code=400, message="Invalid date or time format.")
+            result = await self.task_repository.find_one(
+                predicate,
+                dynamic_includes,
+                dynamic_selects,
+                dynamic_order_by,
+                descending,
+            )
 
-            if deadline_date <= TimezoneHandler.now("UTC"):
-                return BaseResponseDto(success=False, code=400, message="Exam Date must be a future date.")
+            if not result.success:
+                return BaseResponseDto(
+                    success=False, code=result.code, data=None, message=result.message
+                )
 
-            # 2. Subject Validation (Must belong to Admin's Faculty/Dept/Year)
-            subject_response = await self.subject_repository.find_one(Subject.id == data.subject_id)
+            exam = result.data
+
+            return BaseResponseDto(success=True, code=200, data=exam)
+
+        except Exception as ex:
+            await self.logger.log(
+                action="FindOne",
+                entity="Exam",
+                level="error",
+                code=500,
+                message="Error finding exam",
+                details={"error": str(ex)},
+                source="ExamService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while finding the exam",
+            )
+
+    async def find(
+        self,
+        data=None,
+        includes=None,
+        selects=None,
+        is_and=False,
+        starts_with=True,
+        is_exact=True,
+        order_by=None,
+        descending=False,
+        page=1,
+        limit=50,
+    ):
+        try:
+            predicate = self.helper_service.generate_dynamic_predicate(
+                Task, data, ["name"], is_and, starts_with, is_exact
+            )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Task, includes
+            )
+            dynamic_selects = self.helper_service.generate_dynamic_selects(
+                "Task", selects
+            )
+            dynamic_order_by = self.helper_service.generate_dynamic_order_by(
+                "Task", order_by
+            )
+
+            result = await self.task_repository.find(
+                predicate,
+                dynamic_includes,
+                dynamic_selects,
+                dynamic_order_by,
+                descending,
+                page,
+                limit,
+            )
+
+            if not result.success:
+                return BaseResponseDto(
+                    success=False, code=result.code, data=None, message=result.message
+                )
+            exams = result.data
+            return BaseResponseDto(success=True, code=200, data=exams)
+        except Exception as ex:
+            await self.logger.log(
+                action="Find",
+                entity="Exam",
+                level="error",
+                code=500,
+                message="An error occurred while finding exams",
+                details={"error": str(ex)},
+                source="ExamService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while finding exams",
+            )
+
+    async def create(self, data):
+        try:
+            existing_exam_response = await self.task_repository.find_one(
+                and_(
+                    Task.name == data.name,
+                    Task.type == "exam",
+                    Task.subject_id == data.subject_id,
+                )
+            )
+            if not existing_exam_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_exam_response.code,
+                    data=None,
+                    message=existing_exam_response.message,
+                )
+            existing_exam = existing_exam_response.data
+            if existing_exam:
+                await self.logger.log(
+                    action="Create",
+                    entity="Exam",
+                    level="warning",
+                    code=400,
+                    message="Exam with the same name already exists for this subject.",
+                    details={"name": data.name, "subject_id": data.subject_id},
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Exam with the same name already exists for this subject.",
+                )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["users"]
+            )
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == data.subject_id, dynamic_includes
+            )
+            if not subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=subject_response.code,
+                    data=None,
+                    message=subject_response.message,
+                )
             subject = subject_response.data
-
-            if (not subject or 
-                subject.faculty_id != current_user.faculty_id or 
-                subject.department_id != current_user.department_id or 
-                subject.year_id != current_user.year_id):
-                return BaseResponseDto(success=False, code=404, message="Subject not found in your criteria.")
-
-            # 3. Create Task Entity
-            exam = Task(
-                name=data.title,
-                type="exam",
-                faculty_id=current_user.faculty_id,
-                department_id=current_user.department_id,
-                year_id=current_user.year_id,
-                details={
-                    "description": data.description,
-                    "instructions": data.instructions,
-                    "location": data.location,
-                    "exam_type": data.exam_type,
-                    "exam_format": data.exam_format,
-                    "exam_weight": data.exam_weight,
-                    "duration": float(data.duration) if data.duration else None,
-                },
-                deadline=deadline_date,
-                due_date=deadline_date.date(),
-                subject_id=subject.id,
-                author_id=current_user.id,
+            if not subject:
+                await self.logger.log(
+                    action="Create",
+                    entity="Exam",
+                    level="warning",
+                    code=404,
+                    message="Subject not found for exam creation",
+                    details={"subject_id": data.subject_id},
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Subject not found for exam creation",
+                )
+            user_ids = [user.id for user in subject.users] if subject.users else []
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="Create",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve logged-in user for Exam Creation.",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while creating exam",
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="Create",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="No logged-in user found for Exam Creation.",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while creating exam",
+                )
+            data.author_id = logged_in_user.id
+            data.due_date = (
+                TimezoneHandler.to_date(data.deadline) if data.deadline else None
             )
-
-            result = await self.task_repository.create(exam)
-            if not result.success:
-                return result
-
-            # 4. Send Notification
-            diff_days = math.ceil((exam.deadline.date() - TimezoneHandler.now("UTC").date()).total_seconds() / 86400)
-            diff_string = f"due in {diff_days} day{'s' if diff_days > 1 else ''}" if diff_days > 0 else "due today"
-            
-            await self.helper_service.send_notification(
-                type="exam",
-                parent_id=exam.id,
-                content=f'New exam "{exam.name}" has been assigned for subject "{subject.name}". {diff_string}.',
-                url=f"{os.environ.get('FRONTEND_URL')}/user/exams/{exam.id}"
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                    subject_id=data.subject_id,
+                )
             )
-
-            return BaseResponseDto(success=True, code=201, data=result.data, message="Exam created successfully.")
-
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Create",
+                    entity="Exam",
+                    level="warning",
+                    code=403,
+                    message=f"Failed to verify restricted access for user {logged_in_user.id}: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="User does not have access to create exam for the specified criteria.",
+                )
+            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
+            data.department_id = data.department_id or logged_in_user.department_id
+            data.year_id = data.year_id or logged_in_user.year_id
+            create_exam_response = await self.task_repository.create(data)
+            if not create_exam_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_exam_response.code,
+                    data=None,
+                    message=create_exam_response.message,
+                )
+            created_exam = create_exam_response.data
+            if not created_exam:
+                await self.logger.log(
+                    action="Create",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="Failed to create exam without a specific error.",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while creating exam",
+                )
+            share_link = f"/users/exams/{created_exam.id}"
+            notification_response = await self.helper_service.send_notification(
+                Notification.Type.EXAM,
+                created_exam.id,
+                user_ids,
+                f"New exam '{created_exam.title}' has been created for subject {subject.name}.",
+                share_link,
+            )
+            if not notification_response.success:
+                await self.logger.log(
+                    action="Create",
+                    entity="Exam",
+                    level="warning",
+                    code=400,
+                    message="Failed to send notifications for Exam Creation.",
+                    details={"exam_id": created_exam.id},
+                    source="ExamService",
+                )
+            await self.logger.log(
+                action="Create",
+                entity="Exam",
+                level="info",
+                code=201,
+                message="Exam created successfully",
+                source="ExamService",
+            )
+            return BaseResponseDto(
+                success=True,
+                code=201,
+                data=created_exam,
+                message="Exam created successfully",
+            )
         except Exception as ex:
-            await self.logger.log("Add", "Exam", "error", 500, "Error creating exam", "ExamService", {"error": str(ex)})
-            return BaseResponseDto(success=False, code=500, message="An error occurred while creating exam.")
+            await self.logger.log(
+                action="Create",
+                entity="Exam",
+                level="error",
+                code=500,
+                message="An error occurred while creating exam",
+                details={"error": str(ex)},
+                source="ExamService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while creating exam",
+            )
 
-    async def update_exam(self, exam_id: int, data: ExamUpdateDto) -> BaseResponseDto[Task]:
+    async def update(self, data):
         try:
-            current_user = (await self.helper_service.get_logged_in_user()).data
-            permissions = (await self.user_service.get_user_permissions()).data or []
-
-            # 1. Fetch Existing Exam
-            exam_response = await self.task_repository.find_one(
-                and_(Task.id == exam_id, Task.type == "exam"),
-                includes=[selectinload(Task.author), selectinload(Task.subject)]
+            target_exam_response = await self.task_repository.find_one(
+                and_(Task.id == data.id, Task.type == "exam")
             )
-            exam = exam_response.data
-            if not exam:
-                return BaseResponseDto(success=False, code=404, message="Exam not found.")
-
-            # 2. Authorization Check
-            if exam.author_id != current_user.id and "Manage All Exams" not in permissions and "Manage All Tasks" not in permissions:
-                return BaseResponseDto(success=False, code=403, message="You are not authorized to update this exam.")
-
-            # 3. Date Validation
-            try:
-                deadline_date = TimezoneHandler.from_isoformat(f"{data.due_date}T{data.start_time}")
-            except ValueError:
-                return BaseResponseDto(success=False, code=400, message="Invalid date or time format.")
-
-            if deadline_date <= TimezoneHandler.now("UTC"):
-                return BaseResponseDto(success=False, code=400, message="Exam Date must be a future date.")
-
-            # 4. Update Properties
-            exam.name = data.title
-            exam.deadline = deadline_date
-            exam.due_date = deadline_date.date()
-            exam.details["description"] = data.description
-            exam.details["instructions"] = data.instructions
-            exam.details["location"] = data.location
-            exam.details["duration"] = float(data.duration) if data.duration else None
-            exam.details["exam_format"] = data.exam_format
-            exam.details["exam_weight"] = data.exam_weight
-            exam.details["exam_type"] = data.exam_type
-            exam.author_id = current_user.id  # Update author to latest editor
-
-            result = await self.task_repository.update(exam)
-            if not result.success:
-                return result
-
-            # 5. Send Notification
-            diff_days = math.ceil((exam.deadline.date() - TimezoneHandler.now("UTC").date()).total_seconds() / 86400)
-            diff_string = f"due in {diff_days} day{'s' if diff_days > 1 else ''}" if diff_days > 0 else "due today"
-            
-            await self.helper_service.send_notification(
-                type="exam",
-                parent_id=exam.id,
-                content=f'Exam "{exam.name}" has been updated for subject "{exam.subject.name}". {diff_string}.',
-                url=f"{os.environ.get('FRONTEND_URL')}/user/exams/{exam.id}"
+            if not target_exam_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=target_exam_response.code,
+                    data=None,
+                    message=target_exam_response.message,
+                )
+            target_exam = target_exam_response.data
+            if not target_exam:
+                await self.logger.log(
+                    action="Update",
+                    entity="Exam",
+                    level="info",
+                    code=404,
+                    message="Exam not found for update",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Exam not found",
+                )
+            existing_exam_response = await self.task_repository.find_one(
+                and_(
+                    Task.name == data.name,
+                    Task.type == "exam",
+                    Task.subject_id == data.subject_id,
+                )
             )
-
-            return BaseResponseDto(success=True, code=200, data=result.data, message="Exam updated successfully.")
-
+            if not existing_exam_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_exam_response.code,
+                    data=None,
+                    message=existing_exam_response.message,
+                )
+            existing_exam = existing_exam_response.data
+            if existing_exam and existing_exam.id != data.id:
+                await self.logger.log(
+                    action="Update",
+                    entity="Exam",
+                    level="warning",
+                    code=400,
+                    message="Another exam with the same name already exists for this subject.",
+                    details={"name": data.name, "subject_id": data.subject_id},
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Another exam with the same name already exists for this subject.",
+                )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["users"]
+            )
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == data.subject_id, dynamic_includes
+            )
+            if not subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=subject_response.code,
+                    data=None,
+                    message=subject_response.message,
+                )
+            subject = subject_response.data
+            if not subject:
+                await self.logger.log(
+                    action="Update",
+                    entity="Exam",
+                    level="warning",
+                    code=404,
+                    message="Subject not found for exam update",
+                    details={"subject_id": data.subject_id},
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Subject not found for exam update",
+                )
+            user_ids = [user.id for user in subject.users] if subject.users else []
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve logged-in user for Exam Update.",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while updating exam",
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="Update",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="No logged-in user found for Exam Update.",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while updating exam",
+                )
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                    subject_id=data.subject_id,
+                )
+            )
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Exam",
+                    level="warning",
+                    code=403,
+                    message=f"Failed to verify restricted access for user {logged_in_user.id}: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="User does not have access to update exam for the specified criteria.",
+                )
+            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
+            data.department_id = data.department_id or logged_in_user.department_id
+            data.year_id = data.year_id or logged_in_user.year_id
+            logged_in_user_permissions_response = (
+                await self.helper_service.get_logged_in_user_permissions()
+            )
+            if not logged_in_user_permissions_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve logged-in user permissions for Exam Update.",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while updating exam",
+                )
+            logged_in_user_permissions = logged_in_user_permissions_response.data
+            if not logged_in_user_permissions:
+                await self.logger.log(
+                    action="Update",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="No logged-in user permissions found for Exam Update.",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while updating exam",
+                )
+            if (
+                logged_in_user.id != target_exam.author_id
+                and "Manage All Exams" not in logged_in_user_permissions
+            ):
+                await self.logger.log(
+                    action="Update",
+                    entity="Exam",
+                    level="warning",
+                    code=403,
+                    message="User does not have permission to update this exam.",
+                    details={
+                        "user_id": logged_in_user.id,
+                        "exam_id": target_exam.id,
+                    },
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message="You do not have permission to update this exam.",
+                )
+            data.author_id = logged_in_user.id
+            data.due_date = (
+                TimezoneHandler.to_date(data.deadline) if data.deadline else None
+            )
+            target_exam.name = data.name
+            target_exam.deadline = data.deadline
+            target_exam.due_date = data.due_date
+            target_exam.subject_id = data.subject_id
+            target_exam.faculty_id = data.faculty_id
+            target_exam.department_id = data.department_id
+            target_exam.year_id = data.year_id
+            target_exam.details = data.details
+            target_exam.author_id = data.author_id
+            update_response = await self.task_repository.update(target_exam)
+            if not update_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_response.code,
+                    data=None,
+                    message=update_response.message,
+                )
+            updated_exam = update_response.data
+            if not updated_exam:
+                await self.logger.log(
+                    action="Update",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="Failed to update exam without a specific error.",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while updating exam",
+                )
+            share_link = f"/users/exams/{updated_exam.id}"
+            notification_response = await self.helper_service.send_notification(
+                Notification.Type.EXAM,
+                updated_exam.id,
+                user_ids,
+                f"Exam '{updated_exam.title}' has been updated for subject {subject.name}.",
+                share_link,
+            )
+            if not notification_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Exam",
+                    level="warning",
+                    code=400,
+                    message="Failed to send notifications for Exam Update.",
+                    details={"exam_id": updated_exam.id},
+                    source="ExamService",
+                )
+            await self.logger.log(
+                action="Update",
+                entity="Exam",
+                level="info",
+                code=200,
+                message="Exam updated successfully",
+                source="ExamService",
+            )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=updated_exam,
+                message="Exam updated successfully",
+            )
         except Exception as ex:
-            await self.logger.log("Edit", "Exam", "error", 500, "Error updating exam", "ExamService", {"error": str(ex)})
-            return BaseResponseDto(success=False, code=500, message="An error occurred while updating exam.")
+            await self.logger.log(
+                action="Update",
+                entity="Exam",
+                level="error",
+                code=500,
+                message="An error occurred while updating exam",
+                details={"error": str(ex)},
+                source="ExamService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while updating exam",
+            )
 
-    async def delete_exam(self, exam_id: int) -> BaseResponseDto[bool]:
+    async def delete(self, data):
         try:
-            current_user = (await self.helper_service.get_logged_in_user()).data
-            permissions = (await self.user_service.get_user_permissions()).data or []
-
-            exam_response = await self.task_repository.find_one(and_(Task.id == exam_id, Task.type == "exam"))
-            exam = exam_response.data
-            
-            if not exam:
-                return BaseResponseDto(success=False, code=404, message="Exam not found.")
-
-            if exam.author_id != current_user.id and "Manage All Exams" not in permissions and "Manage All Tasks" not in permissions:
-                return BaseResponseDto(success=False, code=403, message="You are not authorized to delete this exam.")
-
-            result = await self.task_repository.delete(exam)
-            return BaseResponseDto(success=result.success, code=result.code, data=result.data, message="Exam deleted successfully.")
-
+            target_exam_response = await self.task_repository.find_one(
+                and_(Task.id == data.id, Task.type == "exam")
+            )
+            if not target_exam_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=target_exam_response.code,
+                    data=None,
+                    message=target_exam_response.message,
+                )
+            target_exam = target_exam_response.data
+            if not target_exam:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Exam",
+                    level="warning",
+                    code=404,
+                    message="Exam not found for deletion",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Exam not found",
+                )
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve logged-in user for Exam Deletion.",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while deleting exam",
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="No logged-in user found for Exam Deletion.",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while deleting exam",
+                )
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                    subject_id=data.subject_id,
+                )
+            )
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Exam",
+                    level="warning",
+                    code=403,
+                    message=f"Failed to verify restricted access for user {logged_in_user.id}: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="User does not have access to delete exam for the specified criteria.",
+                )
+            logged_in_user_permissions_response = (
+                await self.helper_service.get_logged_in_user_permissions()
+            )
+            if not logged_in_user_permissions_response.success:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve logged-in user permissions for Exam Delete.",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while deleting exam",
+                )
+            logged_in_user_permissions = logged_in_user_permissions_response.data
+            if not logged_in_user_permissions:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="No logged-in user permissions found for Exam Delete.",
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while deleting exam",
+                )
+            if (
+                logged_in_user.id != target_exam.author_id
+                and "Manage All Exams" not in logged_in_user_permissions
+            ):
+                await self.logger.log(
+                    action="Delete",
+                    entity="Exam",
+                    level="warning",
+                    code=403,
+                    message="User does not have permission to delete this exam.",
+                    details={
+                        "user_id": logged_in_user.id,
+                        "exam_id": target_exam.id,
+                    },
+                    source="ExamService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message="You do not have permission to delete this exam.",
+                )
+            delete_response = await self.task_repository.delete(target_exam)
+            if not delete_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=delete_response.code,
+                    data=None,
+                    message=delete_response.message,
+                )
+            await self.logger.log(
+                action="Delete",
+                entity="Exam",
+                level="info",
+                code=200,
+                message="Exam deleted successfully",
+                source="ExamService",
+            )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=None,
+                message="Exam deleted successfully",
+            )
         except Exception as ex:
-            await self.logger.log("Delete", "Exam", "error", 500, "Error deleting exam", "ExamService", {"error": str(ex)})
-            return BaseResponseDto(success=False, code=500, message="An error occurred while deleting exam.")
-
-    async def get_exams_admin(self, query: QueryModel[ExamSearchDto]) -> BaseResponseDto[list[Task]]:
-        try:
-            current_user = (await self.helper_service.get_logged_in_user()).data
-            permissions = (await self.user_service.get_user_permissions()).data or []
-
-            # Admin Faculty/Department/Year Filtering overrides
-            if "Access All Faculties" not in permissions and not query.data.faculty_id:
-                query.data.faculty_id = current_user.faculty_id
-            if "Access All Departments" not in permissions and not query.data.department_id:
-                query.data.department_id = current_user.department_id
-            if "Access All Years" not in permissions and not query.data.year_id:
-                query.data.year_id = current_user.year_id
-
-            # Base condition to only get exams
-            base_condition = (Task.type == "exam")
-
-            # Date range filters
-            date_conditions = []
-            if query.data.start_date:
-                start_date = TimezoneHandler.from_isoformat(query.data.start_date).date()
-                date_conditions.append(Task.due_date >= start_date)
-            if query.data.end_date:
-                end_date = TimezoneHandler.from_isoformat(query.data.end_date).date()
-                date_conditions.append(Task.due_date <= end_date)
-
-            # Generate dynamic predicates based on the rest of the DTO
-            dynamic_predicate = self.helper_service.generate_dynamic_predicate(
-                Task, query.data, ["name"], query.is_and, query.starts_with, query.is_exact
+            await self.logger.log(
+                action="Delete",
+                entity="Exam",
+                level="error",
+                code=500,
+                message="An error occurred while deleting exam",
+                details={"error": str(ex)},
+                source="ExamService",
             )
-
-            # Combine all predicates
-            all_conditions = [base_condition] + date_conditions
-            if dynamic_predicate is not None:
-                all_conditions.append(dynamic_predicate)
-            
-            final_predicate = and_(*all_conditions)
-
-            # Resolve Dynamic Includes and Selects
-            includes = self.helper_service.generate_dynamic_includes(Task, query.includes)
-            selects = self.helper_service.generate_dynamic_selects("Task", query.selects)
-            order_by = self.helper_service.generate_dynamic_order_by("Task", query.order_by)
-
-            # Default ordering if none provided
-            if not order_by:
-                order_by = [Task.deadline]
-                query.descending = False
-
-            return await self.task_repository.find(
-                predicate=final_predicate,
-                includes=includes,
-                selects=selects,
-                order_by=order_by,
-                descending=query.descending,
-                page=query.page,
-                limit=query.limit,
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while deleting exam",
             )
-
-        except Exception as ex:
-            await self.logger.log("Get", "Exams", "error", 500, "Error fetching admin exams", "ExamService", {"error": str(ex)})
-            return BaseResponseDto(success=False, code=500, message="An error occurred while fetching exams.")
-
-    async def get_exam_admin(self, exam_id: int) -> BaseResponseDto[Task]:
-        try:
-            includes = [
-                selectinload(Task.author), selectinload(Task.subject),
-                selectinload(Task.faculty), selectinload(Task.department), selectinload(Task.year)
-            ]
-            result = await self.task_repository.find_one(
-                and_(Task.id == exam_id, Task.type == "exam"),
-                includes=includes
-            )
-            if not result.data:
-                return BaseResponseDto(success=False, code=404, message="Exam not found.")
-            return result
-        except Exception as ex:
-            await self.logger.log("Get", "Exam", "error", 500, "Error fetching admin exam", "ExamService", {"error": str(ex)})
-            return BaseResponseDto(success=False, code=500, message="An error occurred while fetching the exam.")
-
-    # ---------------------------------------------------------
-    # User Specific Methods
-    # ---------------------------------------------------------
-    async def get_exams_user(self, query: QueryModel[ExamSearchDto]) -> BaseResponseDto[list[Task]]:
-        try:
-            current_user = (await self.helper_service.get_logged_in_user()).data
-
-            # Base constraints for the student
-            conditions = [
-                Task.type == "exam",
-                Task.faculty_id == current_user.faculty_id,
-                Task.department_id == current_user.department_id,
-                Task.year_id == current_user.year_id,
-                # Enforces that the user is actually enrolled in the subject of the exam
-                Task.subject.has(Subject.users.any(User.id == current_user.id))
-            ]
-
-            # Custom Date filters
-            if query.data.start_date:
-                start_date = TimezoneHandler.from_isoformat(query.data.start_date)
-                conditions.append(Task.deadline >= start_date)
-            if query.data.end_date:
-                end_date = TimezoneHandler.from_isoformat(query.data.end_date)
-                conditions.append(Task.deadline <= end_date)
-
-            # Setup basic query predicate (Subject ID and Name filtering handled dynamically)
-            dynamic_predicate = self.helper_service.generate_dynamic_predicate(
-                Task, query.data, ["name"], query.is_and, query.starts_with, query.is_exact
-            )
-            if dynamic_predicate is not None:
-                conditions.append(dynamic_predicate)
-
-            final_predicate = and_(*conditions)
-
-            includes = self.helper_service.generate_dynamic_includes(Task, query.includes)
-            
-            # Default includes for user perspective
-            if not includes:
-                includes = [selectinload(Task.subject), selectinload(Task.author)]
-
-            # Default ordering
-            order_by = self.helper_service.generate_dynamic_order_by("Task", query.order_by)
-            if not order_by:
-                order_by = [Task.deadline]
-                query.descending = False
-
-            return await self.task_repository.find(
-                predicate=final_predicate,
-                includes=includes,
-                order_by=order_by,
-                descending=query.descending,
-                page=query.page,
-                limit=query.limit,
-            )
-
-        except Exception as ex:
-            await self.logger.log("Get", "Exams", "error", 500, "Error fetching user exams", "ExamService", {"error": str(ex)})
-            return BaseResponseDto(success=False, code=500, message="An error occurred while fetching your exams.")
-
-    async def get_exam_user(self, exam_id: int) -> BaseResponseDto[Task]:
-        try:
-            current_user = (await self.helper_service.get_logged_in_user()).data
-            
-            # Enforce enrollment check within the query directly
-            predicate = and_(
-                Task.id == exam_id, 
-                Task.type == "exam",
-                Task.subject.has(Subject.users.any(User.id == current_user.id))
-            )
-            
-            result = await self.task_repository.find_one(
-                predicate=predicate,
-                includes=[selectinload(Task.subject), selectinload(Task.author)]
-            )
-            
-            if not result.data:
-                return BaseResponseDto(success=False, code=404, message="Exam not found or you are not enrolled in its subject.")
-                
-            return result
-
-        except Exception as ex:
-            await self.logger.log("Get", "Exam", "error", 500, "Error fetching user exam", "ExamService", {"error": str(ex)})
-            return BaseResponseDto(success=False, code=500, message="An error occurred while fetching the exam.")

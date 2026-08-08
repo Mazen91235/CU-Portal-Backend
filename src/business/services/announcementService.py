@@ -6,6 +6,7 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.announcement import Announcement
 from core.entities.subject import Subject
+from core.entities.notification import Notification
 from core.dtos.baseDtos import BaseResponseDto
 from core.utils.validator import Validator
 
@@ -194,6 +195,37 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="Announcement with the same title already exists for this subject.",
                 )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["users"]
+            )
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == data.subject_id
+            )
+            if not subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=subject_response.code,
+                    data=None,
+                    message=subject_response.message,
+                )
+            subject = subject_response.data
+            if not subject:
+                await self.logger.log(
+                    action="Create",
+                    entity="Announcement",
+                    level="warning",
+                    code=404,
+                    message="Subject not found for Announcement Creation.",
+                    details={"subject_id": data.subject_id},
+                    source="AnnouncementService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Subject not found",
+                )
+            user_ids = [user.id for user in subject.users] if subject.users else []
             files = []
             for url in data.urls:
                 file_exists_response = (
@@ -337,6 +369,24 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="An error occurred while creating announcement",
                 )
+            share_link = f"/users/announcements/{created_announcement.id}"
+            notification_response = await self.helper_service.send_notification(
+                Notification.Type.ANNOUNCEMENT,
+                created_announcement.id,
+                user_ids,
+                f"New announcement '{created_announcement.title}' has been created for subject {subject.name}.",
+                share_link,
+            )
+            if not notification_response.success:
+                await self.logger.log(
+                    action="Create",
+                    entity="Announcement",
+                    level="warning",
+                    code=400,
+                    message="Failed to send notifications for Announcement Creation.",
+                    details={"announcement_id": created_announcement.id},
+                    source="AnnouncementService",
+                )
             await self.logger.log(
                 action="Create",
                 entity="Announcement",
@@ -396,6 +446,37 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="Announcement not found",
                 )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["users"]
+            )
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == data.subject_id, dynamic_includes
+            )
+            if not subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=subject_response.code,
+                    data=None,
+                    message=subject_response.message,
+                )
+            subject = subject_response.data
+            if not subject:
+                await self.logger.log(
+                    action="Update",
+                    entity="Announcement",
+                    level="warning",
+                    code=404,
+                    message="Subject not found for Announcement Update.",
+                    details={"subject_id": data.subject_id},
+                    source="AnnouncementService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Subject not found",
+                )
+            user_ids = [user.id for user in subject.users] if subject.users else []
             existing_announcement_response = (
                 await self.announcement_repository.find_one(
                     and_(
@@ -663,6 +744,24 @@ class AnnouncementService(IAnnouncementService):
                         details={"urls": to_be_removed_urls},
                         source="AnnouncementService",
                     )
+            share_link = f"/users/announcements/{updated_announcement.id}"
+            notification_response = await self.helper_service.send_notification(
+                Notification.Type.ANNOUNCEMENT,
+                updated_announcement.id,
+                user_ids,
+                f"Announcement '{updated_announcement.title}' has been updated for subject {subject.name}.",
+                share_link,
+            )
+            if not notification_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Announcement",
+                    level="warning",
+                    code=400,
+                    message="Failed to send notifications for Announcement Update.",
+                    details={"announcement_id": updated_announcement.id},
+                    source="AnnouncementService",
+                )
             await self.logger.log(
                 action="Update",
                 entity="Announcement",

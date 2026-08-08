@@ -6,6 +6,7 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.task import Task
 from core.entities.subject import Subject
+from core.entities.notification import Notification
 from core.dtos.baseDtos import BaseResponseDto
 from core.utils.validator import Validator
 from core.utils.timezoneHandler import TimezoneHandler
@@ -160,6 +161,7 @@ class TaskService(ITaskService):
             existing_task_response = await self.task_repository.find_one(
                 and_(
                     Task.name == data.name,
+                    Task.type == "task",
                     Task.subject_id == data.subject_id,
                 )
             )
@@ -187,6 +189,37 @@ class TaskService(ITaskService):
                     data=None,
                     message="Task with the same name already exists for this subject.",
                 )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["users"]
+            )
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == data.subject_id, dynamic_includes
+            )
+            if not subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=subject_response.code,
+                    data=None,
+                    message=subject_response.message,
+                )
+            subject = subject_response.data
+            if not subject:
+                await self.logger.log(
+                    action="Create",
+                    entity="Task",
+                    level="warning",
+                    code=404,
+                    message="Subject not found for Task Creation.",
+                    details={"subject_id": data.subject_id},
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Subject not found",
+                )
+            user_ids = [user.id for user in subject.users] if subject.users else []
             files = []
             for url in data.urls:
                 file_exists_response = (
@@ -346,6 +379,24 @@ class TaskService(ITaskService):
                     data=None,
                     message="An error occurred while creating task",
                 )
+            share_link = f"/users/tasks/{created_task.id}"
+            notification_response = await self.helper_service.send_notification(
+                Notification.Type.TASK,
+                created_task.id,
+                user_ids,
+                f"New task '{created_task.title}' has been created for subject {subject.name}.",
+                share_link,
+            )
+            if not notification_response.success:
+                await self.logger.log(
+                    action="Create",
+                    entity="Task",
+                    level="warning",
+                    code=400,
+                    message="Failed to send notifications for Task Creation.",
+                    details={"task_id": created_task.id},
+                    source="TaskService",
+                )
             await self.logger.log(
                 action="Create",
                 entity="Task",
@@ -380,7 +431,7 @@ class TaskService(ITaskService):
     async def update(self, data):
         try:
             target_task_response = await self.task_repository.find_one(
-                Task.id == data.id
+                and_(Task.id == data.id, Task.type == "task")
             )
             if not target_task_response.success:
                 return BaseResponseDto(
@@ -408,6 +459,7 @@ class TaskService(ITaskService):
             existing_task_response = await self.task_repository.find_one(
                 and_(
                     Task.name == data.name,
+                    Task.type == "task",
                     Task.subject_id == data.subject_id,
                 )
             )
@@ -435,6 +487,37 @@ class TaskService(ITaskService):
                     data=None,
                     message="Another task with the same name already exists for this subject.",
                 )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["users"]
+            )
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == data.subject_id, dynamic_includes
+            )
+            if not subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=subject_response.code,
+                    data=None,
+                    message=subject_response.message,
+                )
+            subject = subject_response.data
+            if not subject:
+                await self.logger.log(
+                    action="Update",
+                    entity="Task",
+                    level="warning",
+                    code=404,
+                    message="Subject not found for Task Update.",
+                    details={"subject_id": data.subject_id},
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Subject not found",
+                )
+            user_ids = [user.id for user in subject.users] if subject.users else []
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -688,6 +771,14 @@ class TaskService(ITaskService):
                         details={"urls": to_be_removed_urls},
                         source="TaskService",
                     )
+            share_link = f"/users/tasks/{updated_task.id}"
+            notification_response = await self.helper_service.send_notification(
+                Notification.Type.TASK,
+                updated_task.id,
+                user_ids,
+                f"Task '{updated_task.title}' has been updated for subject {subject.name}.",
+                share_link,
+            )
             await self.logger.log(
                 action="Update",
                 entity="Task",
@@ -722,7 +813,7 @@ class TaskService(ITaskService):
     async def delete(self, data):
         try:
             target_task_response = await self.task_repository.find_one(
-                Task.id == data.id
+                and_(Task.id == data.id, Task.type == "task")
             )
             if not target_task_response.success:
                 return BaseResponseDto(

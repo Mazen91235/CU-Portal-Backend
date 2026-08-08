@@ -133,7 +133,6 @@ class TaskDeleteDto(BaseModel):
 
 class TaskSearchDto(BaseSearchDto, BaseModel):
     id: int | None = Field(default=None, description="ID of the task to search for")
-    name: str | None = Field(default=None, description="Name/Title to search by")
     subject_id: int | None = Field(
         default=None, description="ID of Subject to filter by"
     )
