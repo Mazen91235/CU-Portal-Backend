@@ -23,6 +23,22 @@ class IHelperService(ABC, Generic[U]):
         pass
 
     @abstractmethod
+    async def get_logged_in_user_permissions(
+        self,
+    ) -> BaseResponseDto[list[str]]:
+        pass
+
+    @abstractmethod
+    async def verify_restricted_access(
+        self,
+        faculty_id: int | None = None,
+        department_id: int | None = None,
+        year_id: int | None = None,
+        subject_id: int | None = None,
+    ) -> BaseResponseDto[bool]:
+        pass
+
+    @abstractmethod
     async def send_email(
         self, to_email: str, subject: str, body: str
     ) -> BaseResponseDto[bool]:
@@ -62,8 +78,9 @@ class IHelperService(ABC, Generic[U]):
     @abstractmethod
     async def send_notification(
         self,
-        type: Notification.NOTIFICATION_TYPES,
+        notification_type: Notification.Type,
         parent_id: int,
+        user_ids: list[int] | None,
         content: str,
         url: str | None = None,
     ) -> BaseResponseDto[bool]:
@@ -74,6 +91,13 @@ class IHelperService(ABC, Generic[U]):
     def get_file_id_from_url(
         self,
         url: str,
+    ) -> str | None:
+        pass
+
+    @abstractmethod
+    def get_file_url_from_id(
+        self,
+        file_id: str,
     ) -> str | None:
         pass
 
@@ -98,6 +122,17 @@ class IHelperService(ABC, Generic[U]):
         file_size: str,
         max_size_in_bytes: int,
     ) -> bool:
+        pass
+
+    @abstractmethod
+    async def verify_file_exists_on_drive(
+        self,
+        url: str,
+    ) -> BaseResponseDto[FileModel]:
+        pass
+
+    @abstractmethod
+    async def remove_files_from_drive(self, files: list[dict]) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod
