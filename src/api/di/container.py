@@ -12,6 +12,7 @@ from api.routes.mainRoutes import (
 )
 from api.routes.authRoutes import create_auth_router
 from api.routes.userRoutes import create_user_user_router, create_user_admin_router
+from api.routes.examRoutes import create_exam_admin_router, create_exam_router
 from api.routes.taskRoutes import create_task_user_router, create_task_admin_router
 from api.routes.announcementRoutes import (
     create_announcement_user_router,
@@ -30,6 +31,7 @@ from api.routes.yearRoutes import create_year_admin_router
 from api.routes.departmentRoutes import create_department_admin_router
 from api.routes.facultyRoutes import create_faculty_admin_router
 from api.controllers.userController import UserController
+from api.controllers.examController import ExamController
 from api.controllers.facultyController import FacultyController
 from api.controllers.messageController import MessageController
 from api.controllers.materialController import MaterialController
@@ -53,6 +55,7 @@ from business.services.yearService import YearService
 from business.services.departmentService import DepartmentService
 from business.services.requestLimitService import RequestLimitService
 from business.services.helperService import HelperService
+from business.services.examService import ExamService
 from business.loggers.baseLogger import BaseLogger
 from infrastructure.repositories.baseRepository import BaseRepository
 from core.entities.log import Log
@@ -276,6 +279,14 @@ class Container(containers.DeclarativeContainer):
         helper_service=helper_service,
     )
 
+    exam_service = providers.Factory(
+        ExamService,
+        task_repository=task_repository,
+        subject_repository=subject_repository,
+        user_service=user_service,
+        logger=logger,
+        helper_service=helper_service,
+    )
     # --- 5. Middlewares ---
     auth_middleware = providers.Factory(
         AuthMiddleware,
@@ -334,6 +345,10 @@ class Container(containers.DeclarativeContainer):
         DepartmentController, department_service=department_service, logger=logger
     )
 
+    exam_controller = providers.Factory(
+        ExamController, exam_service=exam_service, logger=logger
+    )
+
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
     main_admin_routes = providers.Factory(create_main_admin_router)
@@ -354,6 +369,20 @@ class Container(containers.DeclarativeContainer):
     user_admin_routes = providers.Factory(
         create_user_admin_router,
         controller_provider=user_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    exam_admin_routes = providers.Factory(
+        create_exam_admin_router,
+        controller_provider=exam_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    exam_routes = providers.Factory(
+        create_exam_router,
+        controller_provider=exam_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
