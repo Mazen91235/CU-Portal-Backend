@@ -30,6 +30,7 @@ from api.routes.messageRoutes import (
 from api.routes.yearRoutes import create_year_admin_router
 from api.routes.departmentRoutes import create_department_admin_router
 from api.routes.facultyRoutes import create_faculty_admin_router
+from api.routes.releaseRoutes import create_release_admin_router, create_release_user_router
 from api.controllers.userController import UserController
 from api.controllers.examController import ExamController
 from api.controllers.facultyController import FacultyController
@@ -40,6 +41,7 @@ from api.controllers.taskController import TaskController
 from api.controllers.notificationController import NotificationController
 from api.controllers.yearController import YearController
 from api.controllers.departmentController import DepartmentController
+from api.controllers.releaseController import ReleaseController
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
 from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
@@ -56,6 +58,7 @@ from business.services.departmentService import DepartmentService
 from business.services.requestLimitService import RequestLimitService
 from business.services.helperService import HelperService
 from business.services.examService import ExamService
+from business.services.releaseService import ReleaseService
 from business.loggers.baseLogger import BaseLogger
 from infrastructure.repositories.baseRepository import BaseRepository
 from core.entities.log import Log
@@ -75,6 +78,9 @@ from core.entities.userNotification import UserNotification
 from core.entities.notification import Notification
 from core.entities.message import Message
 from core.entities.faculty import Faculty
+from core.entities.release import Release
+from core.entities.version import Version
+from core.entities.releaseItem import ReleaseItem
 from core.utils.databaseHandler import DatabaseHandler
 
 DB_URL = DatabaseHandler.get_db_url()
@@ -187,6 +193,24 @@ class Container(containers.DeclarativeContainer):
         model=Faculty,
         session_factory=session_factory,
     )
+    release_repository = providers.Factory(
+        BaseRepository, 
+        session=db_session, 
+        model=Release, 
+        session_factory=session_factory
+    )
+    version_repository = providers.Factory(
+        BaseRepository, 
+        session=db_session, 
+        model=Version, 
+        session_factory=session_factory
+    )
+    release_item_repository = providers.Factory(
+        BaseRepository, 
+        session=db_session, 
+        model=ReleaseItem, 
+        session_factory=session_factory
+    )
 
     # --- 4. Services ---
     helper_service = providers.Factory(
@@ -286,6 +310,14 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
+    release_service = providers.Factory(
+        ReleaseService,
+        release_repository=release_repository,
+        version_repository=version_repository,
+        release_item_repository=release_item_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
     # --- 5. Middlewares ---
     auth_middleware = providers.Factory(
         AuthMiddleware,
@@ -345,6 +377,9 @@ class Container(containers.DeclarativeContainer):
 
     exam_controller = providers.Factory(
         ExamController, exam_service=exam_service, logger=logger
+    )
+    release_controller = providers.Factory(
+        ReleaseController, release_service=release_service, logger=logger
     )
 
     # --- 7. Routes ---
@@ -462,4 +497,16 @@ class Container(containers.DeclarativeContainer):
         controller_provider=faculty_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
+    )
+    release_admin_routes = providers.Factory(
+        create_release_admin_router,
+        controller_provider=release_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        rate_limit_provider=request_limit_middleware.provider,
+    )
+
+    release_user_routes = providers.Factory(
+        create_release_user_router,
+        controller_provider=release_controller.provider,
+        rate_limit_provider=request_limit_middleware.provider,
     )
