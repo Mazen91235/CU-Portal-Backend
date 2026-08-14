@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-
+from customRoute import CustomRoute
 from core.iControllers.iMessageController import IMessageController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -7,8 +7,8 @@ from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.messageDtos import MessageResponseDto
 
 
-def create_message_router(controller_provider, validation_middleware_provider):
-    router = APIRouter(prefix="/messages", tags=["Messages"])
+def create_message_public_router(controller_provider, validation_middleware_provider):
+    router = APIRouter(prefix="/messages", tags=["Messages"], route_class=CustomRoute)
 
     def _get_controller() -> IMessageController:
         return controller_provider()
@@ -43,13 +43,10 @@ def create_message_router(controller_provider, validation_middleware_provider):
     return router
 
 
-create_message_public_router = create_message_router
-
-
 def create_message_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/messages", tags=["Messages"])
+    router = APIRouter(prefix="/messages", tags=["Messages"], route_class=CustomRoute)
 
     def _get_controller() -> IMessageController:
         return controller_provider()

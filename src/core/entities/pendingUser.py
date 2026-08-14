@@ -19,6 +19,7 @@ from .base import (
 
 if TYPE_CHECKING:
     from .user import User
+    from .attachment import Attachment
 
 
 class PendingUser(Base):
@@ -50,6 +51,9 @@ class PendingUser(Base):
     )
     user: Mapped["User"] = relationship(
         "User", back_populates="pending_user", cascade="save-update, merge"
+    )
+    attachment: Mapped[Optional["Attachment"]] = relationship(
+        "Attachment", back_populates="pending_user", cascade="save-update, merge"
     )
 
     # Indexes

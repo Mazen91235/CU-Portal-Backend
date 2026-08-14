@@ -35,6 +35,8 @@ if TYPE_CHECKING:
     from .log import Log
     from .subject import Subject
     from .requestLimit import RequestLimit
+    from .event import Event
+    from .note import Note
 
 
 class User(Base):
@@ -48,7 +50,7 @@ class User(Base):
     password: Mapped[str] = mapped_column(String(255), nullable=True)
     phone: Mapped[str] = mapped_column(String(13), nullable=False)
     gender: Mapped[str] = mapped_column(String(6), nullable=False)
-    type: Mapped[Optional[str]] = mapped_column(
+    type: Mapped[Optional["User.Type"]] = mapped_column(
         String(12), nullable=True
     )  # Mainstream, Credit
     section: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -147,9 +149,6 @@ class User(Base):
     materials: Mapped[list["Material"]] = relationship(
         "Material", back_populates="author", cascade="all, delete-orphan"
     )
-    # grades: Mapped[list["Grade"]] = relationship(
-    #     "Grade", back_populates="author", cascade="all, delete-orphan"
-    # )
     tasks: Mapped[list["Task"]] = relationship(
         "Task", back_populates="author", cascade="all, delete-orphan"
     )
@@ -162,11 +161,20 @@ class User(Base):
         back_populates="users",
         cascade="all, delete",
     )
+    events: Mapped[list["Event"]] = relationship(
+        "Event", back_populates="author", cascade="all, delete-orphan"
+    )
+    going_events: Mapped[list["Event"]] = relationship(
+        "Event",
+        secondary="user_events",
+        back_populates="attendees",
+        cascade="all, delete",
+    )
+    notes: Mapped[list["Note"]] = relationship(
+        "Note", back_populates="author", cascade="all, delete-orphan"
+    )
     # marks: Mapped[list["Mark"]] = relationship(
     #     "Mark", back_populates="author", cascade="all, delete-orphan"
-    # )
-    # events: Mapped[list["Event"]] = relationship(
-    #     "Event", back_populates="author", cascade="all, delete-orphan"
     # )
     # roadmaps: Mapped[list["Roadmap"]] = relationship(
     #     "Roadmap", back_populates="author", cascade="all, delete-orphan"
@@ -182,9 +190,6 @@ class User(Base):
     # )
     # reviews: Mapped[list["Review"]] = relationship(
     #     "Review", back_populates="author", cascade="all, delete-orphan"
-    # )
-    # going_events: Mapped[list["Event"]] = relationship(
-    #     "Event", secondary="event_users", back_populates="users", cascade="all, delete"
     # )
     logs: Mapped[list["Log"]] = relationship(
         "Log", back_populates="user", cascade="all, delete-orphan"

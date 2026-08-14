@@ -10,6 +10,7 @@ if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
 from api.di.container import Container
+from api.routes.customRoute import CustomRoute
 from business.contextVars.sessionContext import session_context
 
 
@@ -17,6 +18,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="CU - Portal", version="1.0.0")
     container = Container()
     app.state.container = container
+    app.router.route_class = CustomRoute
 
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
@@ -39,17 +41,39 @@ def create_app() -> FastAPI:
     auth_routes = container.auth_routes()
     user_user_routes = container.user_user_routes()
     user_admin_routes = container.user_admin_routes()
+    year_admin_routes = container.year_admin_routes()
+    department_admin_routes = container.department_admin_routes()
+    material_user_routes = container.material_user_routes()
+    material_admin_routes = container.material_admin_routes()
+    announcement_user_routes = container.announcement_user_routes()
+    announcement_admin_routes = container.announcement_admin_routes()
+    task_user_routes = container.task_user_routes()
+    task_admin_routes = container.task_admin_routes()
+    exam_user_routes = container.exam_user_routes()
+    exam_admin_routes = container.exam_admin_routes()
     message_public_routes = container.message_public_routes()
     message_admin_routes = container.message_admin_routes()
     faculty_admin_routes = container.faculty_admin_routes()
     event_organizer_user_routes = container.event_organizer_user_routes()
     event_organizer_admin_routes = container.event_organizer_admin_routes()
+    notification_user_routes = container.notification_user_routes()
     main_user_routes.include_router(user_user_routes)
-    main_admin_routes.include_router(user_admin_routes)
-    main_admin_routes.include_router(message_admin_routes)
-    main_admin_routes.include_router(faculty_admin_routes)
+    main_user_routes.include_router(material_user_routes)
+    main_user_routes.include_router(notification_user_routes)
+    main_user_routes.include_router(announcement_user_routes)
+    main_user_routes.include_router(task_user_routes)
+    main_user_routes.include_router(exam_user_routes)
     main_user_routes.include_router(event_organizer_user_routes)
+    main_admin_routes.include_router(user_admin_routes)
+    main_admin_routes.include_router(faculty_admin_routes)
+    main_admin_routes.include_router(department_admin_routes)
+    main_admin_routes.include_router(year_admin_routes)
+    main_admin_routes.include_router(announcement_admin_routes)
+    main_admin_routes.include_router(task_admin_routes)
+    main_admin_routes.include_router(exam_admin_routes)
+    main_admin_routes.include_router(material_admin_routes)
     main_admin_routes.include_router(event_organizer_admin_routes)
+    main_admin_routes.include_router(message_admin_routes)
     app.include_router(main_user_routes)
     app.include_router(main_admin_routes)
     app.include_router(auth_routes)

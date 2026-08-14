@@ -5,5 +5,7 @@ from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.messageDtos import MessageSearchDto
 
 
-class IMessageService(IQueryableService[Message, MessageSearchDto],ICreatableService[Message]):
+class IMessageService(
+    IQueryableService[Message, MessageSearchDto], ICreatableService[Message]
+):
     pass

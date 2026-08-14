@@ -1,0 +1,373 @@
+from core.iControllers.iExamController import IExamController
+from core.iServices.iExamService import IExamService
+from core.iLoggers.iBaseLogger import IBaseLogger
+from core.utils.mapper import Mapper
+from core.utils.generator import Generator
+from core.utils.responseHandler import ResponseHandler
+from core.utils.parser import Parser
+import json
+
+# Entities & DTOs
+from core.entities.task import Task
+from core.dtos.examDtos import (
+    ExamCreateDto,
+    ExamUpdateDto,
+    ExamResponseDto,
+    ExamSearchDto,
+    ExamDeleteDto,
+)
+from core.models.queryModel import QueryModel
+
+
+class ExamController(IExamController):
+    def __init__(self, exam_service: IExamService, logger: IBaseLogger):
+        self.exam_service = exam_service
+        self.logger = logger
+
+    # CRUD Functions
+    async def find_one(self, request):
+        try:
+            exam_id = request.path_params.get("exam_id")
+            if not exam_id:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=400,
+                    message="Exam ID is required",
+                )
+
+            entity_search_dto = Generator[ExamSearchDto].generate(
+                ExamSearchDto, {"id": int(exam_id)}
+            )
+
+            response = await self.exam_service.find_one(
+                entity_search_dto,
+                [
+                    "author",
+                    "subject",
+                    "faculty",
+                    "department",
+                    "year",
+                ],
+            )
+
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+
+            exam = response.data
+
+            if not exam:
+                await self.logger.log(
+                    action="FindOne",
+                    entity="Exam",
+                    level="info",
+                    code=404,
+                    message="Exam not found",
+                    source="ExamController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=404,
+                    message="Exam not found",
+                )
+
+            exam_mapped = Mapper[Task, ExamResponseDto].map(exam, ExamResponseDto, True)
+
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=exam_mapped,
+            )
+
+        except Exception as e:
+            await self.logger.log(
+                action="FindOne",
+                entity="Exam",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": str(e)},
+                source="ExamController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def find(self, request):
+        try:
+            query = Parser.parse_query(
+                request.query_params.get("query", "{}"),
+                QueryModel[ExamSearchDto],
+            )
+            entity_search_dto = Generator[ExamSearchDto].generate_from_query(
+                ExamSearchDto, query
+            )
+
+            includes = query.includes
+            selects = query.selects
+            is_and = query.is_and
+            starts_with = query.starts_with
+            is_exact = query.is_exact
+            order_by = query.order_by
+            descending = query.descending
+            page = query.page or 1
+            limit = query.limit or 50
+
+            response = await self.exam_service.find(
+                entity_search_dto,
+                includes,
+                selects,
+                is_and,
+                starts_with,
+                is_exact,
+                order_by,
+                descending,
+                page,
+                limit,
+            )
+
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+
+            exams = response.data
+
+            if not exams:
+                await self.logger.log(
+                    action="Find",
+                    entity="Exam",
+                    level="info",
+                    code=404,
+                    message="Exams not found",
+                    source="ExamController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=404,
+                    message="Exams not found",
+                )
+
+            exams_mapped = Mapper[Task, ExamResponseDto].map_list(
+                exams, ExamResponseDto, True
+            )
+
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=exams_mapped,
+            )
+
+        except Exception as e:
+            await self.logger.log(
+                action="Find",
+                entity="Exam",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": str(e)},
+                source="ExamController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def create(self, request):
+        try:
+            await self.exam_service.begin_transaction()
+            payload = await request.json()
+            data = Generator[ExamCreateDto].generate(ExamCreateDto, payload)
+            exam = Mapper[ExamCreateDto, Task].map(data, Task)
+
+            response = await self.exam_service.create(exam)
+
+            if not response.success:
+                await self.exam_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+
+            created_exam = response.data
+            if not created_exam:
+                await self.exam_service.rollback_transaction()
+                await self.logger.log(
+                    action="Create",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="Failed to create exam",
+                    details={},
+                    source="ExamController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="Failed to create exam",
+                )
+
+            exam_mapped = Mapper[Task, ExamResponseDto].map(
+                created_exam, ExamResponseDto, True
+            )
+
+            await self.exam_service.commit_transaction()
+            return ResponseHandler.generate_response(
+                success=True,
+                code=201,
+                data=exam_mapped,
+                message="Exam created successfully",
+            )
+
+        except Exception as e:
+            await self.exam_service.rollback_transaction()
+            await self.logger.log(
+                action="Create",
+                entity="Exam",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": str(e)},
+                source="ExamController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def update(self, request):
+        try:
+            await self.exam_service.begin_transaction()
+            exam_id = request.path_params.get("exam_id")
+
+            if not exam_id:
+                await self.exam_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=400,
+                    message="Exam ID is required",
+                )
+
+            payload = await request.json()
+            payload["id"] = int(exam_id)
+            data = Generator[ExamUpdateDto].generate(ExamUpdateDto, payload)
+            exam = Mapper[ExamUpdateDto, Task].map(data, Task)
+
+            response = await self.exam_service.update(exam)
+
+            if not response.success:
+                await self.exam_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+
+            updated_exam = response.data
+            if not updated_exam:
+                await self.exam_service.rollback_transaction()
+                await self.logger.log(
+                    action="Update",
+                    entity="Exam",
+                    level="error",
+                    code=500,
+                    message="Failed to update exam",
+                    details={},
+                    source="ExamController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="Failed to update exam",
+                )
+            exam_mapped = Mapper[Task, ExamResponseDto].map(
+                updated_exam, ExamResponseDto, True
+            )
+
+            await self.exam_service.commit_transaction()
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=exam_mapped,
+                message="Exam updated successfully",
+            )
+
+        except Exception as e:
+            await self.exam_service.rollback_transaction()
+            await self.logger.log(
+                action="Update",
+                entity="Exam",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": str(e)},
+                source="ExamController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def delete(self, request):
+        try:
+            await self.exam_service.begin_transaction()
+
+            exam_id = request.path_params.get("exam_id")
+
+            if not exam_id:
+                await self.exam_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=400,
+                    message="Exam ID is required",
+                )
+
+            data = Generator[ExamDeleteDto].generate(
+                ExamDeleteDto, {"id": int(exam_id)}
+            )
+            entity = Mapper[ExamDeleteDto, Task].map(data, Task)
+
+            response = await self.exam_service.delete(entity)
+
+            if not response.success:
+                await self.exam_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+
+            await self.exam_service.commit_transaction()
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                message="Exam deleted successfully",
+            )
+
+        except Exception as e:
+            await self.exam_service.rollback_transaction()
+            await self.logger.log(
+                action="Delete",
+                entity="Exam",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": str(e)},
+                source="ExamController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )

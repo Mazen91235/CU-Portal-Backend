@@ -14,8 +14,12 @@ class MessageCreateDto(BaseModel):
     email: EmailStr = Field(
         ..., min_length=1, max_length=100, description="Sender email address"
     )
-    phone: str = Field(..., min_length=1, max_length=20, description="Sender phone number")
-    content: str = Field(..., min_length=1, max_length=500, description="Message content")
+    phone: str = Field(
+        ..., min_length=1, max_length=20, description="Sender phone number"
+    )
+    content: str = Field(
+        ..., min_length=1, max_length=500, description="Message content"
+    )
 
 
 class MessageResponseDto(BaseModel):
@@ -39,14 +43,6 @@ class MessageResponseDto(BaseModel):
 
 class MessageSearchDto(BaseSearchDto, BaseModel):
     id: int | None = Field(default=None, description="ID of the message to filter by")
-    name: str | None = Field(default=None, description="Sender name to filter by")
-    email: EmailStr | None = Field(
-        default=None, description="Sender email address to filter by"
-    )
-    phone: str | None = Field(
-        default=None, description="Sender phone number to filter by"
-    )
-    content: str | None = Field(default=None, description="Message content to filter by")
     created_at_from: datetime | None = Field(
         default=None, description="Creation Date from sender to filter by"
     )
@@ -59,4 +55,3 @@ class MessageSearchDto(BaseSearchDto, BaseModel):
     updated_at_to: datetime | None = Field(
         default=None, description="Last Update Date to user to filter by"
     )
-    

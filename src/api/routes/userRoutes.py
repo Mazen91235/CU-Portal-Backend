@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from customRoute import CustomRoute
 from core.iControllers.iUserController import IUserController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -9,7 +10,7 @@ from core.dtos.userDtos import UserResponseDto, UserStatisticsResponseDto
 def create_user_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="", tags=[])
+    router = APIRouter(prefix="", tags=[], route_class=CustomRoute)
 
     def _get_controller() -> IUserController:
         return controller_provider()
@@ -114,7 +115,7 @@ def create_user_user_router(
 def create_user_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/users", tags=["Users"])
+    router = APIRouter(prefix="/users", tags=["Users"], route_class=CustomRoute)
 
     def _get_controller() -> IUserController:
         return controller_provider()

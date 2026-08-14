@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from enum import Enum
 from .base import (
     Base,
     Integer,
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from .subject import Subject
     from .task import Task
     from .announcement import Announcement
+    from .week import Week
 
 
 class Department(Base):
@@ -40,7 +41,7 @@ class Department(Base):
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
     )
-    study_type: Mapped[str] = mapped_column(
+    study_type: Mapped["Department.StudyType"] = mapped_column(
         String(12), nullable=True
     )  # Mainstream, Credit, etc.
 
@@ -78,9 +79,9 @@ class Department(Base):
     announcements: Mapped[list["Announcement"]] = relationship(
         "Announcement", back_populates="department", cascade="all, delete-orphan"
     )
-    # events: Mapped[list["Event"]] = relationship(
-    #     "Event", back_populates="department", cascade="all, delete-orphan"
-    # )
+    weeks: Mapped[list["Week"]] = relationship(
+        "Week", back_populates="department", cascade="all, delete-orphan"
+    )
     # roadmaps: Mapped[list["Roadmap"]] = relationship(
     #     "Roadmap", back_populates="department", cascade="all, delete-orphan"
     # )
@@ -111,3 +112,9 @@ class Department(Base):
             unique=True,
         ),
     )
+
+    # Attributes
+    class StudyType(str, Enum):
+        MAINSTREAM = "Mainstream"
+        CREDIT = "Credit"
+        BOTH = "Both"
