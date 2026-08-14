@@ -17,9 +17,11 @@ from api.routes.messageRoutes import (
     create_message_admin_router,
 )
 from api.routes.facultyRoutes import create_faculty_admin_router
+from api.routes.eventOrganizerRoutes import create_event_organizer_admin_router, create_event_organizer_user_router
 from api.controllers.userController import UserController
 from api.controllers.facultyController import FacultyController
 from api.controllers.messageController import MessageController
+from api.controllers.eventOrganizerController import EventOrganizerController
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
 from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
@@ -27,6 +29,7 @@ from business.contextVars.sessionContext import session_context
 from business.services.userService import UserService
 from business.services.messageService import MessageService
 from business.services.facultyService import FacultyService
+from business.services.eventOrganizerService import EventOrganizerService
 from business.services.requestLimitService import RequestLimitService
 from business.services.helperService import HelperService
 from business.loggers.baseLogger import BaseLogger
@@ -39,6 +42,7 @@ from core.entities.token import Token
 from core.entities.requestLimit import RequestLimit
 from core.entities.message import Message
 from core.entities.faculty import Faculty
+from core.entities.eventOrganizer import EventOrganizer
 from core.utils.databaseHandler import DatabaseHandler
 
 DB_URL = DatabaseHandler.get_db_url()
@@ -103,6 +107,12 @@ class Container(containers.DeclarativeContainer):
         model=Faculty,
         session_factory=session_factory,
     )
+    event_organizer_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=EventOrganizer,
+        session_factory=session_factory,
+    )
 
     # --- 4. Services ---
     helper_service = providers.Factory(HelperService)
@@ -130,6 +140,13 @@ class Container(containers.DeclarativeContainer):
     faculty_service = providers.Factory(
         FacultyService,
         faculty_repository=faculty_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+
+    event_organizer_service = providers.Factory(
+        EventOrganizerService,
+        event_organizer_repository=event_organizer_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -176,6 +193,12 @@ class Container(containers.DeclarativeContainer):
         FacultyController, faculty_service=faculty_service, logger=logger
     )
 
+    event_organizer_controller = providers.Factory(
+        EventOrganizerController, 
+        event_organizer_service=event_organizer_service, 
+        logger=logger
+    )
+
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
     main_admin_routes = providers.Factory(create_main_admin_router)
@@ -217,6 +240,20 @@ class Container(containers.DeclarativeContainer):
     faculty_admin_routes = providers.Factory(
         create_faculty_admin_router,
         controller_provider=faculty_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    event_organizer_user_routes = providers.Factory(
+        create_event_organizer_user_router,
+        controller_provider=event_organizer_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    event_organizer_admin_routes = providers.Factory(
+        create_event_organizer_admin_router,
+        controller_provider=event_organizer_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
