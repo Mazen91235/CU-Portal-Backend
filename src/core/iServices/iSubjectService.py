@@ -2,20 +2,12 @@ from abc import abstractmethod
 from core.iServices.bases.iCrudService import ICrudService
 from core.entities.subject import Subject
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.userSubjectLinkDtos import (UserSubjectLinkRegisterDto, UserSubjectLinkUnregisterDto)
-from core.dtos.subjectDtos import (SubjectAvailableSearchDto,SubjectSearchDto)
+from core.dtos.subjectDtos import SubjectSearchDto
 
 
-class ISubjectService(
-    ICrudService[Subject]
-):
-   
+class ISubjectService(ICrudService[Subject, SubjectSearchDto]):
     @abstractmethod
-    async def register(self, data:UserSubjectLinkRegisterDto) -> BaseResponseDto[bool]:
-        pass
-
-    @abstractmethod
-    async def unregister(self, data:UserSubjectLinkUnregisterDto) -> BaseResponseDto[bool]:
+    async def get_available(self) -> BaseResponseDto[list[Subject]]:
         pass
 
     @abstractmethod
@@ -23,9 +15,13 @@ class ISubjectService(
         pass
 
     @abstractmethod
-    async def get_available(self, data: SubjectAvailableSearchDto) -> BaseResponseDto[list[Subject]]:
+    async def get_enrolled_one(self, subject_id: int) -> BaseResponseDto[Subject]:
         pass
 
     @abstractmethod
-    async def get_enrolled_one(self, data: SubjectSearchDto) -> BaseResponseDto[Subject]:
+    async def register(self, subject_id: int) -> BaseResponseDto:
+        pass
+
+    @abstractmethod
+    async def unregister(self, subject_id: int) -> BaseResponseDto:
         pass

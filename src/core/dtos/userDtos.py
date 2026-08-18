@@ -106,6 +106,7 @@ class UserUpdateDto(BaseModel):
 
 
 class UserSearchDto(BaseSearchDto, BaseModel):
+    id: int | None = Field(default=None, description="ID of User to filter by")
     faculty_id: int | None = Field(
         default=None, description="ID of Faculty to filter by"
     )
@@ -119,6 +120,9 @@ class UserSearchDto(BaseSearchDto, BaseModel):
     )
     refresh_expire_at_from: datetime | None = Field(
         default=None, description="Refresh token expiration date to filter by (>=)"
+    )
+    refresh_expire_at_to: datetime | None = Field(
+        default=None, description="Refresh token expiration date to filter by (<=)"
     )
 
 

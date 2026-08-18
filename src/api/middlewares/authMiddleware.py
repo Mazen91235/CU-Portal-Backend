@@ -2,11 +2,11 @@ from fastapi import Request, HTTPException
 from business.contextVars.userContext import user_context
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iServices.iUserService import IUserService
-from core.iServices.iTokenService import ITokenService
 from core.iServices.iRoleService import IRoleService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.entities.user import User
 from core.dtos.userDtos import UserSearchDto
+from core.dtos.roleDtos import RoleSearchDto
 from core.utils.timezoneHandler import TimezoneHandler
 
 
@@ -14,12 +14,10 @@ class AuthMiddleware(IAuthMiddleware):
     def __init__(
         self,
         user_service: IUserService,
-        token_service: ITokenService,
         role_service: IRoleService,
         logger: IBaseLogger,
     ):
         self.user_service = user_service
-        self.token_service = token_service
         self.role_service = role_service
         self.logger = logger
 
@@ -230,7 +228,6 @@ class AuthMiddleware(IAuthMiddleware):
                 detail="Internal Server Error during authorization check",
             )
 
-
     async def is_ready(self, request: Request):
         try:
             user = user_context.get()
@@ -248,7 +245,13 @@ class AuthMiddleware(IAuthMiddleware):
                     detail="Unauthorized: You are not logged in",
                 )
 
-            if not user.faculty_id or not user.department_id or not user.year_id or not user.type:
+            if (
+                not user.faculty_id
+                or not user.department_id
+                or not user.year_id
+                or not user.type
+                or not user.type.strip()
+            ):
                 await self.logger.log(
                     action="ReadyCheck",
                     entity="User",
@@ -294,4 +297,63 @@ class AuthMiddleware(IAuthMiddleware):
             raise HTTPException(
                 status_code=500,
                 detail="Internal Server Error during readiness check",
+            )
+
+    async def has_registered_subjects(self, request: Request):
+        try:
+            user = user_context.get()
+            if not user:
+                await self.logger.log(
+                    action="RegisteredSubjectsCheck",
+                    entity="User",
+                    level="warning",
+                    code=401,
+                    message="Unauthenticated request attempted registered subjects check",
+                    source="AuthMiddleware",
+                )
+                raise HTTPException(
+                    status_code=401,
+                    detail="Unauthorized: You are not logged in",
+                )
+
+            user_response = await self.user_service.find_one(
+                UserSearchDto(id=user.id),
+                ["subjects"],
+            )
+            if not user_response.success:
+                raise HTTPException(
+                    status_code=user_response.code or 500,
+                    detail=user_response.message,
+                )
+            user_with_subjects = user_response.data
+            if not user_with_subjects or not user_with_subjects.subjects:
+                await self.logger.log(
+                    action="RegisteredSubjectsCheck",
+                    entity="User",
+                    level="warning",
+                    code=403,
+                    message="User has not registered any subjects",
+                    details={"user_id": user.id},
+                    source="AuthMiddleware",
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail="You need to register for at least one subject to access this resource",
+                )
+            return None
+
+        except HTTPException:
+            raise
+        except Exception as ex:
+            await self.logger.log(
+                action="RegisteredSubjectsCheck",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while validating registered subjects: {str(ex)}",
+                source="AuthMiddleware",
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Internal Server Error during registered subjects check",
             )

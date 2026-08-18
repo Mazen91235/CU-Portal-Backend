@@ -313,7 +313,7 @@ class HelperService(IHelperService[U]):
             if subject_id:
                 dynamic_includes = self.generate_dynamic_includes(Subject, ["users"])
                 subject_response = await self.subject_repository.find_one(
-                    Subject.id == subject_id
+                    Subject.id == subject_id, dynamic_includes
                 )
                 if not subject_response.success:
                     return BaseResponseDto(
@@ -329,6 +329,27 @@ class HelperService(IHelperService[U]):
                         code=404,
                         data=False,
                         message=f"Subject with ID {subject_id} not found",
+                    )
+                if faculty_id and subject.faculty_id != faculty_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Subject does not belong to the specified faculty",
+                    )
+                if department_id and subject.department_id != department_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Subject does not belong to the specified department",
+                    )
+                if year_id and subject.year_id != year_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Subject does not belong to the specified year",
                     )
                 user_ids = [user.id for user in subject.users] if subject.users else []
                 if (
@@ -353,6 +374,134 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=False,
                 message="An error occurred while verifying restricted access",
+                error=str(ex),
+            )
+
+    async def verify_academic_data(
+        self, faculty_id=None, department_id=None, year_id=None, subject_id=None
+    ):
+        try:
+            if faculty_id:
+                faculty_response = await self.faculty_repository.find_one(
+                    Faculty.id == faculty_id
+                )
+                if not faculty_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=faculty_response.code,
+                        data=False,
+                        message=faculty_response.message,
+                    )
+                faculty = faculty_response.data
+                if not faculty:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Faculty with ID {faculty_id} not found",
+                    )
+            if department_id and not faculty_id:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=False,
+                    message="Department ID specified without corresponding Faculty ID",
+                )
+            if department_id:
+                department_response = await self.department_repository.find_one(
+                    Department.id == department_id
+                )
+                if not department_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=department_response.code,
+                        data=False,
+                        message=department_response.message,
+                    )
+                department = department_response.data
+                if not department:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Department with ID {department_id} not found",
+                    )
+                if faculty_id and department.faculty_id != faculty_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Department does not belong to the specified faculty",
+                    )
+            if year_id:
+                year_response = await self.year_repository.find_one(Year.id == year_id)
+                if not year_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=year_response.code,
+                        data=False,
+                        message=year_response.message,
+                    )
+                year = year_response.data
+                if not year:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Year with ID {year_id} not found",
+                    )
+            if subject_id:
+                subject_response = await self.subject_repository.find_one(
+                    Subject.id == subject_id
+                )
+                if not subject_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=subject_response.code,
+                        data=False,
+                        message=subject_response.message,
+                    )
+                subject = subject_response.data
+                if not subject:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Subject with ID {subject_id} not found",
+                    )
+                if faculty_id and subject.faculty_id != faculty_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Subject does not belong to the specified faculty",
+                    )
+                if department_id and subject.department_id != department_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Subject does not belong to the specified department",
+                    )
+                if year_id and subject.year_id != year_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Subject does not belong to the specified year",
+                    )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Academic data is valid and consistent",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="An error occurred while verifying academic data",
                 error=str(ex),
             )
 
