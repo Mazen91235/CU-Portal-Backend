@@ -229,3 +229,69 @@ class AuthMiddleware(IAuthMiddleware):
                 status_code=500,
                 detail="Internal Server Error during authorization check",
             )
+
+
+    async def is_ready(self, request: Request):
+        try:
+            user = user_context.get()
+            if not user:
+                await self.logger.log(
+                    action="ReadyCheck",
+                    entity="User",
+                    level="warning",
+                    code=401,
+                    message="Unauthenticated request attempted ready check",
+                    source="AuthMiddleware",
+                )
+                raise HTTPException(
+                    status_code=401,
+                    detail="Unauthorized: You are not logged in",
+                )
+
+            if not user.faculty_id or not user.department_id or not user.year_id or not user.type:
+                await self.logger.log(
+                    action="ReadyCheck",
+                    entity="User",
+                    level="warning",
+                    code=403,
+                    message="User not ready to use the system",
+                    details={"user_id": user.id},
+                    source="AuthMiddleware",
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail="Please complete your profile to proceed",
+                )
+
+            if not user.status:
+                await self.logger.log(
+                    action="ReadyCheck",
+                    entity="User",
+                    level="warning",
+                    code=403,
+                    message="User not verified yet",
+                    details={"user_id": user.id},
+                    source="AuthMiddleware",
+                )
+                raise HTTPException(
+                    status_code=403,
+                    detail="Your account is not verified yet. Please wait for an admin to verify your account",
+                )
+
+            return None
+
+        except HTTPException:
+            raise
+        except Exception as ex:
+            await self.logger.log(
+                action="ReadyCheck",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while validating user readiness: {str(ex)}",
+                source="AuthMiddleware",
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Internal Server Error during readiness check",
+            )
