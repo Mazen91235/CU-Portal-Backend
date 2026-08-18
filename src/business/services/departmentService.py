@@ -7,7 +7,6 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.department import Department
 from core.entities.faculty import Faculty
-from core.entities.role import Role
 from core.dtos.baseDtos import BaseResponseDto
 
 
@@ -16,13 +15,11 @@ class DepartmentService(IDepartmentService):
         self,
         department_repository: IBaseRepository[Department],
         faculty_repository: IBaseRepository[Faculty],
-        role_repository: IBaseRepository[Role],
         logger: IBaseLogger,
         helper_service: IHelperService,
     ):
         self.department_repository = department_repository
         self.faculty_repository = faculty_repository
-        self.role_repository = role_repository
         self.logger = logger
         self.helper_service = helper_service
 
@@ -155,89 +152,26 @@ class DepartmentService(IDepartmentService):
 
     async def create(self, data):
         try:
-            logged_in_user_response = await self.helper_service.get_logged_in_user()
-            if not logged_in_user_response.success:
-                await self.logger.log(
-                    action="Create",
-                    entity="Department",
-                    level="warning",
-                    code=401,
-                    message="User not logged in for department creation",
-                    details={},
-                    source="DepartmentService",
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id
                 )
-                return BaseResponseDto(
-                    success=False,
-                    code=401,
-                    message="User not logged in",
-                )
-            logged_in_user = logged_in_user_response.data
-            if not logged_in_user:
-                await self.logger.log(
-                    action="Create",
-                    entity="Department",
-                    level="warning",
-                    code=401,
-                    message="User not logged in for department creation",
-                    details={},
-                    source="DepartmentService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=401,
-                    message="User not logged in",
-                )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Role, ["exact_roles"]
             )
-            logged_in_user_role_response = await self.role_repository.find_one(
-                Role.id == logged_in_user.role_id, dynamic_includes
-            )
-            if not logged_in_user_role_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    message="User role not found",
-                )
-            logged_in_user_role = logged_in_user_role_response.data
-            if not logged_in_user_role:
+            if not verify_restricted_access_response.success:
                 await self.logger.log(
                     action="Create",
                     entity="Department",
                     level="warning",
                     code=403,
-                    message="User role not found for department creation",
-                    details={"user_id": logged_in_user.id},
+                    message=f"Failed to verify restricted access for user on faculty {data.faculty_id}: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
                     source="DepartmentService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=403,
-                    message="User role not found",
-                )
-            logged_in_user_permissions = [
-                perm.name for perm in logged_in_user_role.exact_roles
-            ]
-
-            if (
-                data.faculty_id != logged_in_user.faculty_id
-                and "Access All Faculties" not in logged_in_user_permissions
-            ):
-                await self.logger.log(
-                    action="Create",
-                    entity="Department",
-                    level="warning",
                     code=403,
                     message="User does not have access to create department for this faculty.",
-                    details={"faculty_id": data.faculty_id},
-                    source="DepartmentService",
                 )
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    message="You do not have access to create department for this faculty",
-                )
-
             faculty_response = await self.faculty_repository.find_one(
                 Faculty.id == data.faculty_id
             )
@@ -458,86 +392,25 @@ class DepartmentService(IDepartmentService):
                     code=404,
                     message="Department not found for update",
                 )
-            logged_in_user_response = await self.helper_service.get_logged_in_user()
-            if not logged_in_user_response.success:
-                await self.logger.log(
-                    action="Update",
-                    entity="Department",
-                    level="warning",
-                    code=401,
-                    message="User not logged in for department update",
-                    details={},
-                    source="DepartmentService",
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id
                 )
-                return BaseResponseDto(
-                    success=False,
-                    code=401,
-                    message="User not logged in",
-                )
-            logged_in_user = logged_in_user_response.data
-            if not logged_in_user:
-                await self.logger.log(
-                    action="Update",
-                    entity="Department",
-                    level="warning",
-                    code=401,
-                    message="User not logged in for department update",
-                    details={},
-                    source="DepartmentService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=401,
-                    message="User not logged in",
-                )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Role, ["exact_roles"]
             )
-            logged_in_user_role_response = await self.role_repository.find_one(
-                Role.id == logged_in_user.role_id, dynamic_includes
-            )
-            if not logged_in_user_role_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    message="User role not found",
-                )
-            logged_in_user_role = logged_in_user_role_response.data
-            if not logged_in_user_role:
+            if not verify_restricted_access_response.success:
                 await self.logger.log(
                     action="Update",
                     entity="Department",
                     level="warning",
                     code=403,
-                    message="User role not found for department update",
-                    details={"user_id": logged_in_user.id},
+                    message=f"Failed to verify restricted access for user on faculty {data.faculty_id}: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
                     source="DepartmentService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=403,
-                    message="User role not found",
-                )
-            logged_in_user_permissions = [
-                perm.name for perm in logged_in_user_role.exact_roles
-            ]
-            if (
-                department.faculty_id != logged_in_user.faculty_id
-                or data.faculty_id != logged_in_user.faculty_id
-            ) and "Access All Faculties" not in logged_in_user_permissions:
-                await self.logger.log(
-                    action="Update",
-                    entity="Department",
-                    level="warning",
                     code=403,
                     message="User does not have access to update department for this faculty.",
-                    details={"faculty_id": department.faculty_id},
-                    source="DepartmentService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    message="You do not have access to update department for this faculty",
                 )
             faculty_response = await self.faculty_repository.find_one(
                 Faculty.id == data.faculty_id

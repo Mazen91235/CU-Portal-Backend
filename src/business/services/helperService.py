@@ -13,6 +13,11 @@ from business.contextVars.userContext import user_context
 from core.iServices.iHelperService import IHelperService
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.user import User
+from core.entities.role import Role
+from core.entities.faculty import Faculty
+from core.entities.department import Department
+from core.entities.year import Year
+from core.entities.subject import Subject
 from core.entities.notification import Notification
 from core.entities.userNotification import UserNotification
 from core.dtos.baseDtos import BaseResponseDto
@@ -28,9 +33,21 @@ class HelperService(IHelperService[U]):
         self,
         notification_repository: IBaseRepository[Notification],
         user_notification_repository: IBaseRepository[UserNotification],
+        user_repository: IBaseRepository[User],
+        role_repository: IBaseRepository[Role],
+        faculty_repository: IBaseRepository[Faculty],
+        department_repository: IBaseRepository[Department],
+        year_repository: IBaseRepository[Year],
+        subject_repository: IBaseRepository[Subject],
     ):
         self.notification_repository = notification_repository
         self.user_notification_repository = user_notification_repository
+        self.user_repository = user_repository
+        self.role_repository = role_repository
+        self.faculty_repository = faculty_repository
+        self.department_repository = department_repository
+        self.year_repository = year_repository
+        self.subject_repository = subject_repository
 
     def _get_column_type(self, column):
         column_property = getattr(column, "property", None)
@@ -90,6 +107,252 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while fetching logged-in user",
+                error=str(ex),
+            )
+
+    async def get_logged_in_user_permissions(self):
+        try:
+            user_response = await self.get_logged_in_user()
+            if not user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=user_response.code,
+                    data=None,
+                    message=user_response.message,
+                )
+            user = user_response.data
+            if not user:
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message="No logged-in user found",
+                )
+            dynamic_includes = self.generate_dynamic_includes(Role, ["exact_roles"])
+            role_response = await self.role_repository.find_one(
+                Role.id == user.role_id, dynamic_includes
+            )
+            if not role_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=role_response.code,
+                    data=None,
+                    message=role_response.message,
+                )
+            role = role_response.data
+            if not role:
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"Role with ID {user.role_id} not found",
+                )
+            permissions = (
+                [permission.name for permission in role.exact_roles]
+                if role.exact_roles
+                else []
+            )
+            return BaseResponseDto(success=True, data=permissions)
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while fetching logged-in user permissions",
+                error=str(ex),
+            )
+
+    async def verify_restricted_access(
+        self, faculty_id=None, department_id=None, year_id=None, subject_id=None
+    ):
+        try:
+            user_response = await self.get_logged_in_user()
+            if not user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=user_response.code,
+                    data=False,
+                    message=user_response.message,
+                )
+            user = user_response.data
+            if not user:
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=False,
+                    message="No logged-in user found",
+                )
+            user_permissions_response = await self.get_logged_in_user_permissions()
+            if not user_permissions_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=user_permissions_response.code,
+                    data=False,
+                    message=user_permissions_response.message,
+                )
+            user_permissions = user_permissions_response.data
+            if not user_permissions:
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=False,
+                    message="User has no permissions assigned",
+                )
+            if (
+                faculty_id
+                and user.faculty_id != faculty_id
+                and "Access All Faculties" not in user_permissions
+            ):
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=False,
+                    message="User does not have access to the specified faculty",
+                )
+            if faculty_id:
+                faculty_response = await self.faculty_repository.find_one(
+                    Faculty.id == faculty_id
+                )
+                if not faculty_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=faculty_response.code,
+                        data=False,
+                        message=faculty_response.message,
+                    )
+                faculty = faculty_response.data
+                if not faculty:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Faculty with ID {faculty_id} not found",
+                    )
+            if (
+                department_id
+                and user.department_id != department_id
+                and "Access All Departments" not in user_permissions
+            ):
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=False,
+                    message="User does not have access to the specified department",
+                )
+            if department_id and not faculty_id:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=False,
+                    message="Department ID specified without corresponding Faculty ID",
+                )
+            if department_id:
+                department_response = await self.department_repository.find_one(
+                    Department.id == department_id
+                )
+                if not department_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=department_response.code,
+                        data=False,
+                        message=department_response.message,
+                    )
+                department = department_response.data
+                if not department:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Department with ID {department_id} not found",
+                    )
+                if faculty_id and department.faculty_id != faculty_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Department does not belong to the specified faculty",
+                    )
+                if (
+                    department.faculty_id != user.faculty_id
+                    and "Access All Faculties" not in user_permissions
+                ):
+                    return BaseResponseDto(
+                        success=False,
+                        code=403,
+                        data=False,
+                        message="User does not have access to the faculty of the specified department",
+                    )
+            if (
+                year_id
+                and user.year_id != year_id
+                and "Access All Years" not in user_permissions
+            ):
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=False,
+                    message="User does not have access to the specified year",
+                )
+            if year_id:
+                year_response = await self.year_repository.find_one(Year.id == year_id)
+                if not year_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=year_response.code,
+                        data=False,
+                        message=year_response.message,
+                    )
+                year = year_response.data
+                if not year:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Year with ID {year_id} not found",
+                    )
+            if subject_id:
+                dynamic_includes = self.generate_dynamic_includes(Subject, ["users"])
+                subject_response = await self.subject_repository.find_one(
+                    Subject.id == subject_id
+                )
+                if not subject_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=subject_response.code,
+                        data=False,
+                        message=subject_response.message,
+                    )
+                subject = subject_response.data
+                if not subject:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Subject with ID {subject_id} not found",
+                    )
+                user_ids = [user.id for user in subject.users] if subject.users else []
+                if (
+                    user.id not in user_ids
+                    and "Access All Courses" not in user_permissions
+                ):
+                    return BaseResponseDto(
+                        success=False,
+                        code=403,
+                        data=False,
+                        message="User does not have access to the specified subject",
+                    )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="User has access to the specified faculty, department, and year",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="An error occurred while verifying restricted access",
                 error=str(ex),
             )
 
@@ -562,6 +825,135 @@ class HelperService(IHelperService[U]):
                 size_in_bytes = size_value * (1024 ** units.index(unit))
                 return size_in_bytes <= max_size_in_bytes
         return False
+
+    async def verify_file_exists_on_drive(self, url):
+        try:
+            file_id = self.get_file_id_from_url(url)
+            if not file_id:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"Invalid URL format: {url}",
+                )
+            file_response = await self.fetch_from_drive(file_id)
+            if not file_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=file_response.code,
+                    data=None,
+                    message=file_response.message,
+                    error=file_response.error,
+                )
+            file_data = file_response.data
+            if not file_data:
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message=f"Failed to fetch file data from Google Drive, please try again later.",
+                    error="No data returned from Google Drive",
+                )
+            file = file_data.data
+            if not file:
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"File not found on Google Drive for URL: {url}",
+                    error="No file data returned from Google Drive",
+                )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=file,
+                message="File found on Google Drive",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while verifying file existence on Google Drive",
+                error=str(ex),
+            )
+
+    async def remove_files_from_drive(self, files):
+        try:
+            for file in files:
+                user_id = file.get("user_id")
+                file_id = file.get("file_id")
+                if not user_id or not file_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Couldn't remove files from Google Drive",
+                        error="Missing user_id or file_id in the provided files list",
+                    )
+                user_response = await self.user_repository.find_one(User.id == user_id)
+                if not user_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=user_response.code,
+                        data=False,
+                        message=user_response.message,
+                        error=user_response.message,
+                    )
+                user = user_response.data
+                if not user:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"User with ID {user_id} not found",
+                        error=f"User with ID {user_id} not found in the database",
+                    )
+                access_token_response = await self.get_google_access_token(
+                    FernetHandler.decrypt(user.google_refresh_token or "")
+                )
+                if not access_token_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=access_token_response.code,
+                        data=False,
+                        message=access_token_response.message,
+                        error=access_token_response.error,
+                    )
+                access_token = access_token_response.data
+                if not access_token:
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=False,
+                        message="Failed to retrieve Google access token",
+                        error="Access token is None after decryption and retrieval",
+                    )
+                delete_file_response = await self.delete_file_from_drive(
+                    access_token, file_id
+                )
+                if not delete_file_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=delete_file_response.code,
+                        data=False,
+                        message=delete_file_response.message,
+                        error=delete_file_response.error,
+                    )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Files removed from Google Drive successfully",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="An error occurred while removing files from Google Drive",
+                error=str(ex),
+            )
 
     async def fetch_from_drive(
         self,

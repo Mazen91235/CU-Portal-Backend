@@ -82,12 +82,6 @@ class DepartmentSearchDto(BaseSearchDto, BaseModel):
     id: int | None = Field(
         default=None, description="ID of the department to filter by"
     )
-    name: str | None = Field(
-        default=None, description="Name of the department to filter by"
-    )
-    code: str | None = Field(
-        default=None, description="Code of the department to filter by"
-    )
     faculty_id: int | None = Field(default=None, description="Faculty ID to filter by")
     study_type: Department.StudyType | None = Field(
         default=None, description="Study type to filter by"

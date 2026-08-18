@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .department import Department
     from .faculty import Faculty
     from .subject import Subject
+    from .attachment import Attachment
 
 
 class Task(Base):
@@ -41,8 +42,8 @@ class Task(Base):
     urls: Mapped[list[str]] = mapped_column(
         MutableList.as_mutable(JSON), nullable=True, default=list
     )
-    links: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
+    links: Mapped[dict[str, str]] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True, default=dict
     )
     url: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     details: Mapped[dict] = mapped_column(
@@ -75,12 +76,12 @@ class Task(Base):
     year: Mapped[Optional["Year"]] = relationship(
         "Year", back_populates="tasks", cascade="save-update, merge"
     )
-    department_id: Mapped[int] = mapped_column(
+    department_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("departments.id", ondelete="CASCADE", name="fk_department_task"),
-        nullable=False,
+        nullable=True,
     )
-    department: Mapped["Department"] = relationship(
+    department: Mapped[Optional["Department"]] = relationship(
         "Department", back_populates="tasks"
     )
     faculty_id: Mapped[Optional[int]] = mapped_column(
@@ -105,6 +106,9 @@ class Task(Base):
         nullable=False,
     )
     author: Mapped["User"] = relationship("User", back_populates="tasks")
+    attachments: Mapped[list["Attachment"]] = relationship(
+        "Attachment", back_populates="task", cascade="all, delete-orphan"
+    )
 
     # Indexes
     __table_args__ = (
