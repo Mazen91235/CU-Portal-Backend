@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iRoleController import IRoleController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -10,7 +10,7 @@ from core.dtos.roleDtos import RoleResponseDto
 def create_role_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/roles", tags=["Roles"])
+    router = APIRouter(prefix="/roles", tags=["Roles"], route_class=CustomRoute)
 
     def _get_controller() -> IRoleController:
         return controller_provider()
@@ -36,9 +36,23 @@ def create_role_admin_router(
 
         return authorize
 
+    def _validate(*keys):
+        async def validate_request(
+            request: Request,
+            validation_middleware: IValidationMiddleware = Depends(
+                _get_validation_middleware
+            ),
+        ):
+            return await validation_middleware.validate(request, *keys)
+
+        return validate_request
+
     @router.get(
         "/{role_id}",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Roles"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Roles")),
+        ],
         response_model=BaseResponseDto[RoleResponseDto],
         status_code=200,
         summary="Find role by ID",
@@ -64,7 +78,11 @@ def create_role_admin_router(
 
     @router.post(
         "/",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("Add Roles"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Add Roles")),
+            Depends(_validate("name", "permissions")),
+        ],
         response_model=BaseResponseDto[RoleResponseDto],
         status_code=201,
         summary="Create a role",
@@ -77,7 +95,11 @@ def create_role_admin_router(
 
     @router.patch(
         "/{role_id}",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("Edit Roles"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Edit Roles")),
+            Depends(_validate("name", "permissions")),
+        ],
         response_model=BaseResponseDto[RoleResponseDto],
         status_code=200,
         summary="Update a role",
@@ -90,7 +112,10 @@ def create_role_admin_router(
 
     @router.delete(
         "/{role_id}",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("Delete Roles"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Delete Roles")),
+        ],
         response_model=BaseResponseDto[bool],
         status_code=200,
         summary="Delete a role",

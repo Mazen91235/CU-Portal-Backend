@@ -4,9 +4,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from core.dtos.userDtos import UserResponseDto
     from core.dtos.roleDtos import RoleResponseDto
-    from .baseDtos import BaseSearchDto
 
 
 class ExactRoleResponseDto(BaseModel):
@@ -18,6 +16,7 @@ class ExactRoleResponseDto(BaseModel):
     updated_at: datetime | None = Field(
         None, description="Timestamp when the role was last updated"
     )
+    # Relationships
     roles: list[RoleResponseDto] | None = Field(
         None, description="List of roles associated with the exact role"
     )

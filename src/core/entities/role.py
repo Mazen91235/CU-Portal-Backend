@@ -74,7 +74,6 @@ class Role(Base):
             "Delete Years",
             "Access All Years",
             "View Users",
-            "Add Users",
             "Manage Users",
             "View Roles",
             "Add Roles",

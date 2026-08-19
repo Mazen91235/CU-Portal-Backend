@@ -1,9 +1,13 @@
 from __future__ import annotations
 from datetime import datetime
+from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from core.dtos.notificationDtos import NotificationResponseDto
+    from core.dtos.userDtos import UserResponseDto
+
 from core.dtos.baseDtos import BaseSearchDto
-from core.dtos.notificationDtos import NotificationResponseDto
-from core.dtos.userDtos import UserResponseDto
 
 
 class UserNotificationResponseDto(BaseModel):
@@ -28,7 +32,7 @@ class UserNotificationResponseDto(BaseModel):
     }
 
 
-class UserNotificationSearchDto(BaseSearchDto, BaseModel):
+class UserNotificationSearchDto(BaseSearchDto):
     id: int | None = Field(None, description="Filter by user notification ID")
     seen: bool | None = Field(None, description="Filter notifications by seen status")
     user_id: int | None = Field(None, description="Filter by user ID")

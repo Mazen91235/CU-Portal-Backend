@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iExamController import IExamController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -10,9 +11,8 @@ def create_exam_user_router(
     controller_provider,
     auth_middleware_provider,
     validation_middleware_provider,
-    rate_limit_provider,
 ):
-    router = APIRouter(prefix="/exams", tags=["User Exams"])
+    router = APIRouter(prefix="/exams", tags=["User Exams"], route_class=CustomRoute)
 
     def _get_controller() -> IExamController:
         return controller_provider()
@@ -81,7 +81,7 @@ def create_exam_user_router(
 def create_exam_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/exams", tags=["Admin Exams"])
+    router = APIRouter(prefix="/exams", tags=["Admin Exams"], route_class=CustomRoute)
 
     def _get_controller() -> IExamController:
         return controller_provider()
@@ -170,7 +170,7 @@ def create_exam_admin_router(
         "/",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("Manage Exams")),
+            Depends(_is_authorized("Add Exams")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
             Depends(_validate("name", "deadline", "subject_id")),
@@ -189,7 +189,7 @@ def create_exam_admin_router(
         "/{exam_id}",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("Manage Exams")),
+            Depends(_is_authorized("Edit Exams")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
             Depends(_validate("name", "deadline", "subject_id")),
@@ -208,7 +208,7 @@ def create_exam_admin_router(
         "/{exam_id}",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("Manage Exams")),
+            Depends(_is_authorized("Delete Exams")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
         ],

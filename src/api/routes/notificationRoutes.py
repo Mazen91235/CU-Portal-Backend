@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iNotificationController import INotificationController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware

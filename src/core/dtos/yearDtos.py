@@ -9,7 +9,8 @@ if TYPE_CHECKING:
     from core.dtos.subjectDtos import SubjectResponseDto
     from core.dtos.taskDtos import TaskResponseDto
     from core.dtos.announcementDtos import AnnouncementResponseDto
-    from .baseDtos import BaseSearchDto
+
+from core.dtos.baseDtos import BaseSearchDto
 
 
 class YearCreateDto(BaseModel):
@@ -47,7 +48,7 @@ class YearUpdateDto(BaseModel):
     )
 
 
-class YearSearchDto(BaseSearchDto, BaseModel):
+class YearSearchDto(BaseSearchDto):
     id: int | None = Field(default=None, description="ID of the year to filter by")
     created_at_from: datetime | None = Field(
         default=None, description="Filter years created after this date"

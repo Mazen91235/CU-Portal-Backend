@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iTaskController import ITaskController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -9,7 +10,7 @@ from core.dtos.taskDtos import TaskResponseDto
 def create_task_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/tasks", tags=["User Tasks"])
+    router = APIRouter(prefix="/tasks", tags=["User Tasks"], route_class=CustomRoute)
 
     def _get_controller() -> ITaskController:
         return controller_provider()
@@ -78,7 +79,7 @@ def create_task_user_router(
 def create_task_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/tasks", tags=["Admin Tasks"])
+    router = APIRouter(prefix="/tasks", tags=["Admin Tasks"], route_class=CustomRoute)
 
     def _get_controller() -> ITaskController:
         return controller_provider()
@@ -167,7 +168,7 @@ def create_task_admin_router(
         "/",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("Manage Tasks")),
+            Depends(_is_authorized("Add Tasks")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
             Depends(_validate("name", "deadline", "subject_id")),
@@ -186,7 +187,7 @@ def create_task_admin_router(
         "/{task_id}",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("Manage Tasks")),
+            Depends(_is_authorized("Edit Tasks")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
             Depends(_validate("name", "deadline", "subject_id")),
@@ -205,7 +206,7 @@ def create_task_admin_router(
         "/{task_id}",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("Manage Tasks")),
+            Depends(_is_authorized("Delete Tasks")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
         ],

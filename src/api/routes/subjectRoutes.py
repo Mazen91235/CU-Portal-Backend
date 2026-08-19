@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iSubjectController import ISubjectController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -9,7 +10,7 @@ from core.dtos.subjectDtos import SubjectResponseDto
 def create_subject_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/courses", tags=["Courses"])
+    router = APIRouter(prefix="/courses", tags=["Courses"], route_class=CustomRoute)
 
     def _get_controller() -> ISubjectController:
         return controller_provider()
@@ -86,8 +87,8 @@ def create_subject_user_router(
         "/register",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_validate("subject_id")),
             Depends(_is_ready),
+            Depends(_validate("subject_id")),
         ],
         response_model=BaseResponseDto,
         status_code=200,
@@ -103,8 +104,8 @@ def create_subject_user_router(
         "/unregister",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_validate("subject_id")),
             Depends(_is_ready),
+            Depends(_validate("subject_id")),
         ],
         response_model=BaseResponseDto,
         status_code=200,
@@ -122,7 +123,7 @@ def create_subject_user_router(
 def create_subject_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/courses", tags=["Courses"])
+    router = APIRouter(prefix="/courses", tags=["Courses"], route_class=CustomRoute)
 
     def _get_controller() -> ISubjectController:
         return controller_provider()
@@ -148,6 +149,12 @@ def create_subject_admin_router(
 
         return authorize
 
+    async def _is_ready(
+        request: Request,
+        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+    ):
+        return await auth_middleware.is_ready(request)
+
     def _validate(*keys):
         async def validate_request(
             request: Request,
@@ -161,7 +168,11 @@ def create_subject_admin_router(
 
     @router.get(
         "/{subject_id}",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Courses"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Courses")),
+            Depends(_is_ready),
+        ],
         response_model=BaseResponseDto[SubjectResponseDto],
         status_code=200,
         summary="Find Course",
@@ -174,7 +185,11 @@ def create_subject_admin_router(
 
     @router.get(
         "/",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Courses"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Courses")),
+            Depends(_is_ready),
+        ],
         response_model=BaseResponseDto[list[SubjectResponseDto]],
         status_code=200,
         summary="Find Courses",
@@ -190,6 +205,7 @@ def create_subject_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Add Courses")),
+            Depends(_is_ready),
             Depends(
                 _validate(
                     "name",
@@ -215,6 +231,7 @@ def create_subject_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Edit Courses")),
+            Depends(_is_ready),
             Depends(
                 _validate("name", "code", "faculty_id", "department_id", "year_id")
             ),
@@ -234,6 +251,7 @@ def create_subject_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Delete Courses")),
+            Depends(_is_ready),
         ],
         response_model=BaseResponseDto,
         status_code=200,

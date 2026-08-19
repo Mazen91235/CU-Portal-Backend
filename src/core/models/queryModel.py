@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 U = TypeVar("U")  # EntitySearchDto Type
 
 
-class QueryModel(Generic[U], BaseModel):
+class QueryModel(BaseModel, Generic[U]):
     data: U = Field(..., description="The search criteria for the query")
     includes: list[str] = Field(
         ..., description="List of related entities to include in the response"

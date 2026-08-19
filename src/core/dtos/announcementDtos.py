@@ -4,12 +4,13 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from .baseDtos import BaseSearchDto
     from .userDtos import UserResponseDto
     from .subjectDtos import SubjectResponseDto
     from .departmentDtos import DepartmentResponseDto
     from .yearDtos import YearResponseDto
     from .facultyDtos import FacultyResponseDto
+
+from core.dtos.baseDtos import BaseSearchDto
 
 
 class AnnouncementCreateDto(BaseModel):
@@ -133,7 +134,7 @@ class AnnouncementDeleteDto(BaseModel):
     id: int = Field(..., description="ID of the announcement to delete")
 
 
-class AnnouncementSearchDto(BaseSearchDto, BaseModel):
+class AnnouncementSearchDto(BaseSearchDto):
     id: int | None = Field(
         default=None, description="ID of the announcement to filter by"
     )

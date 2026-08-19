@@ -1,6 +1,7 @@
 import os
 import sys
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,8 +14,57 @@ from api.di.container import Container
 from api.routes.customRoute import CustomRoute
 from business.contextVars.sessionContext import session_context
 
+# Imports for Model Rebuild and Open-API Schema Generation
+from core.dtos.baseDtos import BaseResponseDto
+from core.dtos.announcementDtos import AnnouncementResponseDto
+from core.dtos.departmentDtos import DepartmentResponseDto
+from core.dtos.examDtos import ExamResponseDto
+from core.dtos.exactRoleDtos import ExactRoleResponseDto
+from core.dtos.facultyDtos import FacultyResponseDto
+from core.dtos.logDtos import LogResponseDto
+from core.dtos.materialDtos import MaterialResponseDto
+from core.dtos.messageDtos import MessageResponseDto
+from core.dtos.notificationDtos import NotificationResponseDto
+from core.dtos.pendingUserDtos import PendingUserResponseDto
+from core.dtos.roleDtos import RoleResponseDto
+from core.dtos.subjectDtos import SubjectResponseDto
+from core.dtos.taskDtos import TaskResponseDto
+from core.dtos.userDtos import UserResponseDto
+from core.dtos.userNotificationDtos import UserNotificationResponseDto
+from core.dtos.yearDtos import YearResponseDto
+from core.entities.department import Department
+from core.entities.faculty import Faculty
+from core.entities.notification import Notification
+from core.entities.subject import Subject
+from core.entities.task import Task
+from core.entities.announcement import Announcement
+from core.entities.user import User
+
+load_dotenv()  # Load environment variables from .env file
+
+
+def rebuild_response_dtos() -> None:
+    dto_namespace = {
+        name: value
+        for name, value in globals().items()
+        if name.endswith("ResponseDto") or name == "BaseResponseDto"
+    }
+    response_dtos = tuple(dto_namespace.values())
+    dto_namespace.update(
+        Department=Department,
+        Faculty=Faculty,
+        Subject=Subject,
+        Task=Task,
+        Announcement=Announcement,
+        Notification=Notification,
+        User=User,
+    )
+    for dto in response_dtos:
+        dto.model_rebuild(_types_namespace=dto_namespace)
+
 
 def create_app() -> FastAPI:
+    rebuild_response_dtos()
     app = FastAPI(title="CU - Portal", version="1.0.0")
     container = Container()
     app.state.container = container
@@ -23,7 +73,6 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
         # Create one DB session per request and store it in ContextVar.
-        await container.request_limit_middleware.provider().throttle(request)
         session = container.session_factory()()
         session_token = session_context.set(session)
         try:

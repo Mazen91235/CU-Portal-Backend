@@ -11,7 +11,8 @@ if TYPE_CHECKING:
     from core.dtos.subjectDtos import SubjectResponseDto
     from core.dtos.taskDtos import TaskResponseDto
     from core.dtos.announcementDtos import AnnouncementResponseDto
-    from .baseDtos import BaseSearchDto
+
+from core.dtos.baseDtos import BaseSearchDto
 
 
 class DepartmentCreateDto(BaseModel):
@@ -78,7 +79,7 @@ class DepartmentUpdateDto(BaseModel):
     )
 
 
-class DepartmentSearchDto(BaseSearchDto, BaseModel):
+class DepartmentSearchDto(BaseSearchDto):
     id: int | None = Field(
         default=None, description="ID of the department to filter by"
     )

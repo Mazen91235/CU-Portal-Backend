@@ -6,7 +6,8 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from core.dtos.userDtos import UserResponseDto
     from core.dtos.exactRoleDtos import ExactRoleResponseDto
-    from .baseDtos import BaseSearchDto
+
+from core.dtos.baseDtos import BaseSearchDto
 
 
 class RoleCreateDto(BaseModel):
@@ -48,7 +49,7 @@ class RoleDeleteDto(BaseModel):
     id: int = Field(..., gt=0, description="ID of the role to delete")
 
 
-class RoleSearchDto(BaseSearchDto, BaseModel):
+class RoleSearchDto(BaseSearchDto):
     id: int | None = Field(None, description="ID of the role")
     name: str | None = Field(None, description="Name of the role")
     level: int | None = Field(None, description="Level of the role")

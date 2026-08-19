@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iAnnouncementController import IAnnouncementController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -9,7 +10,9 @@ from core.dtos.announcementDtos import AnnouncementResponseDto
 def create_announcement_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/announcements", tags=["User Announcements"])
+    router = APIRouter(
+        prefix="/announcements", tags=["User Announcements"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IAnnouncementController:
         return controller_provider()
@@ -78,7 +81,9 @@ def create_announcement_user_router(
 def create_announcement_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/announcements", tags=["Admin Announcements"])
+    router = APIRouter(
+        prefix="/announcements", tags=["Admin Announcements"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IAnnouncementController:
         return controller_provider()

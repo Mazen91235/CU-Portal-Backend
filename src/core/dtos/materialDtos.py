@@ -7,6 +7,8 @@ if TYPE_CHECKING:
     from .subjectDtos import SubjectResponseDto
     from .userDtos import UserResponseDto
 
+from core.dtos.baseDtos import BaseSearchDto
+
 
 class MaterialCreateDto(BaseModel):
     name: str = Field(
@@ -87,7 +89,7 @@ class MaterialsDeleteDto(BaseModel):
     )
 
 
-class MaterialSearchDto(BaseModel):
+class MaterialSearchDto(BaseSearchDto):
     id: int | None = Field(default=None, description="ID of the material to filter by")
     type: str | None = Field(
         default=None,

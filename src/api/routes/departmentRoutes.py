@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iDepartmentController import IDepartmentController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -10,7 +10,9 @@ from core.dtos.departmentDtos import DepartmentResponseDto
 def create_department_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/departments", tags=["Departments"])
+    router = APIRouter(
+        prefix="/departments", tags=["Departments"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IDepartmentController:
         return controller_provider()

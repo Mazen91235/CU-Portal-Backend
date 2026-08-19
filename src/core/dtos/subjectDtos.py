@@ -5,13 +5,14 @@ from pydantic import BaseModel, Field
 from .userDtos import UserResponseDto
 
 if TYPE_CHECKING:
-    from .baseDtos import BaseSearchDto
     from .facultyDtos import FacultyResponseDto
     from .departmentDtos import DepartmentResponseDto
     from .yearDtos import YearResponseDto
     from .taskDtos import TaskResponseDto
     from .announcementDtos import AnnouncementResponseDto
     from .materialDtos import MaterialResponseDto
+
+from core.dtos.baseDtos import BaseSearchDto
 
 
 class SubjectCreateDto(BaseModel):
@@ -117,7 +118,7 @@ class SubjectUpdateDto(BaseModel):
     )
 
 
-class SubjectSearchDto(BaseSearchDto, BaseModel):
+class SubjectSearchDto(BaseSearchDto):
     id: int | None = Field(default=None, description="ID of Subject to filter by")
     faculty_id: int | None = Field(
         default=None, description="ID of Faculty to filter by"

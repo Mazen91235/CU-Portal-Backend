@@ -913,7 +913,7 @@ class RoleService(IRoleService):
             return BaseResponseDto(
                 success=True,
                 code=200,
-                message=f"Successfully reset permissions for role",
+                message=f"Successfully reset permissions",
             )
         except Exception as ex:
             await self.logger.log(

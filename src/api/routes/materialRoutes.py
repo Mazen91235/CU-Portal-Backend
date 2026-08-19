@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iMaterialController import IMaterialController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -9,7 +10,7 @@ from core.dtos.materialDtos import MaterialResponseDto
 def create_material_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/materials", tags=["Materials"])
+    router = APIRouter(prefix="/materials", tags=["Materials"], route_class=CustomRoute)
 
     def _get_controller() -> IMaterialController:
         return controller_provider()
@@ -23,9 +24,25 @@ def create_material_user_router(
     ):
         return await auth_middleware.is_logged_in(request)
 
+    async def _is_ready(
+        request: Request,
+        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+    ):
+        return await auth_middleware.is_ready(request)
+
+    async def _has_registered_subjects(
+        request: Request,
+        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+    ):
+        return await auth_middleware.has_registered_subjects(request)
+
     @router.get(
         "/{material_id}",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
+        ],
         response_model=BaseResponseDto[MaterialResponseDto],
         status_code=200,
         summary="Get Material",
@@ -38,7 +55,11 @@ def create_material_user_router(
 
     @router.get(
         "/",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
+        ],
         response_model=BaseResponseDto[MaterialResponseDto],
         status_code=200,
         summary="Get Materials",
@@ -51,7 +72,11 @@ def create_material_user_router(
 
     @router.get(
         "/{material_id}/parents",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
+        ],
         response_model=BaseResponseDto[list[MaterialResponseDto]],
         status_code=200,
         summary="Get Material Parents",
@@ -68,7 +93,7 @@ def create_material_user_router(
 def create_material_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/materials", tags=["Materials"])
+    router = APIRouter(prefix="/materials", tags=["Materials"], route_class=CustomRoute)
 
     def _get_controller() -> IMaterialController:
         return controller_provider()
@@ -105,11 +130,25 @@ def create_material_admin_router(
 
         return validate_request
 
+    async def _is_ready(
+        request: Request,
+        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+    ):
+        return await auth_middleware.is_ready(request)
+
+    async def _has_registered_subjects(
+        request: Request,
+        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+    ):
+        return await auth_middleware.has_registered_subjects(request)
+
     @router.get(
         "/{material_id}",
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("View Materials")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
         ],
         response_model=BaseResponseDto[MaterialResponseDto],
         status_code=200,
@@ -126,6 +165,8 @@ def create_material_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("View Materials")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
         ],
         response_model=BaseResponseDto[MaterialResponseDto],
         status_code=200,
@@ -142,6 +183,8 @@ def create_material_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Add Materials")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
             Depends(_validate("name", "type", "subject_id")),
         ],
         response_model=BaseResponseDto[MaterialResponseDto],
@@ -159,6 +202,8 @@ def create_material_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Edit Materials")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
             Depends(_validate("name", "type")),
         ],
         response_model=BaseResponseDto[MaterialResponseDto],
@@ -176,6 +221,8 @@ def create_material_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Delete Materials")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
         ],
         response_model=BaseResponseDto,
         status_code=200,
@@ -192,6 +239,8 @@ def create_material_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Edit Materials")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
             Depends(_validate("material_ids", "destination_id")),
         ],
         response_model=BaseResponseDto,
@@ -209,6 +258,8 @@ def create_material_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Edit Materials")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
             Depends(_validate("material_ids", "destination_id")),
         ],
         response_model=BaseResponseDto,
@@ -226,6 +277,8 @@ def create_material_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Add Materials")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
             Depends(_validate("url", "subject_id")),
         ],
         response_model=BaseResponseDto[bool],

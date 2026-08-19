@@ -5,7 +5,19 @@ from pydantic import BaseModel, EmailStr, Field
 
 if TYPE_CHECKING:
     from core.entities.user import User
-    from .baseDtos import BaseSearchDto
+    from core.dtos.facultyDtos import FacultyResponseDto
+    from core.dtos.departmentDtos import DepartmentResponseDto
+    from core.dtos.yearDtos import YearResponseDto
+    from core.dtos.roleDtos import RoleResponseDto
+    from core.dtos.pendingUserDtos import PendingUserResponseDto
+    from core.dtos.materialDtos import MaterialResponseDto
+    from core.dtos.taskDtos import TaskResponseDto
+    from core.dtos.announcementDtos import AnnouncementResponseDto
+    from core.dtos.notificationDtos import NotificationResponseDto
+    from core.dtos.logDtos import LogResponseDto
+    from core.dtos.subjectDtos import SubjectResponseDto
+
+from core.dtos.baseDtos import BaseSearchDto
 
 
 class UserCreateDto(BaseModel):
@@ -105,7 +117,7 @@ class UserUpdateDto(BaseModel):
     url: str = Field(..., min_length=1, max_length=255, description="URL of User")
 
 
-class UserSearchDto(BaseSearchDto, BaseModel):
+class UserSearchDto(BaseSearchDto):
     id: int | None = Field(default=None, description="ID of User to filter by")
     faculty_id: int | None = Field(
         default=None, description="ID of Faculty to filter by"

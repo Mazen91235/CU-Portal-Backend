@@ -4,20 +4,21 @@ from pydantic import BaseModel, Field
 T = TypeVar("T")
 
 
-class BaseResponseDto(Generic[T]):
-    def __init__(
-        self,
-        success: bool = False,
-        code: int | None = None,
-        message: str | None = None,
-        error: str | None = None,
-        data: T | None = None,
-    ):
-        self.success = success
-        self.code = code
-        self.message = message
-        self.error = error
-        self.data = data
+class BaseResponseDto(BaseModel, Generic[T]):
+    success: bool = Field(..., description="Indicates if the operation was successful")
+    code: int | None = Field(None, description="HTTP status code of the response")
+    message: str | None = Field(
+        None, description="Message providing additional information"
+    )
+    error: str | None = Field(None, description="Error message if the operation failed")
+    data: T | None = Field(
+        None, description="The actual data returned by the operation"
+    )
+
+    model_config = {
+        "from_attributes": True,
+        "arbitrary_types_allowed": True,
+    }
 
 
 class BaseSearchDto(BaseModel):

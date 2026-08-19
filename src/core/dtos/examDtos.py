@@ -2,7 +2,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
-from core.dtos.baseDtos import BaseSearchDto
 
 if TYPE_CHECKING:
     from core.dtos.userDtos import UserResponseDto
@@ -10,6 +9,8 @@ if TYPE_CHECKING:
     from core.dtos.facultyDtos import FacultyResponseDto
     from core.dtos.departmentDtos import DepartmentResponseDto
     from core.dtos.yearDtos import YearResponseDto
+
+from core.dtos.baseDtos import BaseSearchDto
 
 
 class ExamCreateDto(BaseModel):

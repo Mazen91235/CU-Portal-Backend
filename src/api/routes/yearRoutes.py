@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iYearController import IYearController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -10,7 +10,7 @@ from core.dtos.yearDtos import YearResponseDto
 def create_year_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/years", tags=["Years"])
+    router = APIRouter(prefix="/years", tags=["Years"], route_class=CustomRoute)
 
     def _get_controller() -> IYearController:
         return controller_provider()

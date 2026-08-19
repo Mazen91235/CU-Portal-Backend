@@ -81,15 +81,12 @@ class CustomRoute(APIRoute):
 
         async def custom_route_handler(request: Request) -> Response:
             def _get_rate_limit_middleware() -> IRequestLimitMiddleware:
-                return request.app.state.container.request_limit_middleware.provider()
+                return request.app.state.container.request_limit_middleware()
 
             async def _rate_limit(
                 request: Request,
-                rate_middleware: IRequestLimitMiddleware = Depends(
-                    _get_rate_limit_middleware
-                ),
             ):
-                return await rate_middleware.throttle(request)
+                return await _get_rate_limit_middleware().throttle(request)
 
             try:
                 await _rate_limit(request)
