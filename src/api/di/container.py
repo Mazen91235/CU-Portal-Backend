@@ -40,6 +40,7 @@ from api.controllers.facultyController import FacultyController
 from api.controllers.messageController import MessageController
 from api.controllers.materialController import MaterialController
 from api.controllers.subjectController import SubjectController
+from api.controllers.roleController import RoleController
 from api.controllers.announcementController import AnnouncementController
 from api.controllers.taskController import TaskController
 from api.controllers.notificationController import NotificationController
@@ -52,6 +53,7 @@ from business.contextVars.sessionContext import session_context
 from business.services.userService import UserService
 from business.services.taskService import TaskService
 from business.services.subjectService import SubjectService
+from business.services.roleService import RoleService
 from business.services.announcementService import AnnouncementService
 from business.services.notificationService import NotificationService
 from business.services.materialService import MaterialService
@@ -70,6 +72,7 @@ from core.entities.material import Material
 from core.entities.subject import Subject
 from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
+from core.entities.exactRole import ExactRole
 from core.entities.token import Token
 from core.entities.requestLimit import RequestLimit
 from core.entities.subject import Subject
@@ -134,6 +137,12 @@ class Container(containers.DeclarativeContainer):
     )
     role_repository = providers.Factory(
         BaseRepository, session=db_session, model=Role, session_factory=session_factory
+    )
+    exact_role_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=ExactRole,
+        session_factory=session_factory,
     )
     request_limit_repository = providers.Factory(
         BaseRepository,
@@ -259,6 +268,14 @@ class Container(containers.DeclarativeContainer):
         helper_service=helper_service,
     )
 
+    role_service = providers.Factory(
+        RoleService,
+        role_repository=role_repository,
+        logger=logger,
+        helper_service=helper_service,
+        exact_role_repository=exact_role_repository,
+    )
+
     request_limit_service = providers.Factory(
         RequestLimitService,
         request_limit_repository=request_limit_repository,
@@ -369,6 +386,10 @@ class Container(containers.DeclarativeContainer):
         ExamController, exam_service=exam_service, logger=logger
     )
 
+    role_controller = providers.Factory(
+        RoleController, role_service=role_service, logger=logger
+    )
+
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
     main_admin_routes = providers.Factory(create_main_admin_router)
@@ -393,6 +414,12 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    role_admin_routes = providers.Factory(
+        create_role_admin_router,
+        controller_provider=role_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
     exam_user_routes = providers.Factory(
         create_exam_user_router,
         controller_provider=exam_controller.provider,
