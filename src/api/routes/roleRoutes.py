@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, Depends
 
-from core.iControllers.IRoleController import IRoleController
+from core.iControllers.iRoleController import IRoleController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
@@ -37,17 +37,30 @@ def create_role_admin_router(
         return authorize
 
     @router.get(
-        "/permissions/count",
+        "/{role_id}",
         dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Roles"))],
-        response_model=BaseResponseDto[int],
+        response_model=BaseResponseDto[RoleResponseDto],
         status_code=200,
-        summary="Count permissions",
-        description="Count the available exact permissions in the system",
+        summary="Find role by ID",
+        description="Retrieve a single role by its ID",
     )
-    async def count_permissions(
+    async def find_one(
         request: Request, controller: IRoleController = Depends(_get_controller)
     ):
-        return await controller.count_permissions(request)
+        return await controller.find_one(request)
+
+    @router.get(
+        "/",
+        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Roles"))],
+        response_model=BaseResponseDto[list[RoleResponseDto]],
+        status_code=200,
+        summary="Find Roles by Query",
+        description="Retrieve a list of roles based on query parameters",
+    )
+    async def find(
+        request: Request, controller: IRoleController = Depends(_get_controller)
+    ):
+        return await controller.find(request)
 
     @router.post(
         "/",
@@ -89,42 +102,29 @@ def create_role_admin_router(
         return await controller.delete(request)
 
     @router.get(
-        "/",
+        "/permissions/count",
         dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Roles"))],
-        response_model=BaseResponseDto[list[RoleResponseDto]],
+        response_model=BaseResponseDto[int],
         status_code=200,
-        summary="Get all roles",
-        description="Retrieve all roles visible to the current user",
+        summary="Count permissions",
+        description="Count the available exact permissions in the system",
     )
-    async def get_roles(
+    async def count_permissions(
         request: Request, controller: IRoleController = Depends(_get_controller)
     ):
-        return await controller.get_roles(request)
+        return await controller.count_permissions(request)
 
     @router.get(
-        "/{role_id}",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Roles"))],
-        response_model=BaseResponseDto[RoleResponseDto],
+        "/permissions/reset",
+        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("Is Admin"))],
+        response_model=BaseResponseDto,
         status_code=200,
-        summary="Get role by ID",
-        description="Retrieve a single role by its ID",
+        summary="Reset permissions",
+        description="Reset the available permissions in the system",
     )
-    async def get_role(
+    async def reset_permissions(
         request: Request, controller: IRoleController = Depends(_get_controller)
     ):
-        return await controller.get_role(request)
-
-    @router.get(
-        "/search",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Roles"))],
-        response_model=BaseResponseDto[list[RoleResponseDto]],
-        status_code=200,
-        summary="Search roles",
-        description="Search roles by name",
-    )
-    async def search_roles(
-        request: Request, controller: IRoleController = Depends(_get_controller)
-    ):
-        return await controller.search_roles(request)
+        return await controller.reset_permissions(request)
 
     return router

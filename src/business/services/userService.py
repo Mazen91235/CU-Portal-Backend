@@ -2264,6 +2264,56 @@ class UserService(IUserService):
                     data=False,
                     message="Logged in user not found, please log in again.",
                 )
+            logged_in_user_permissions = (
+                await self.helper_service.get_logged_in_user_permissions()
+            )
+            if not logged_in_user_permissions.success:
+                await self.logger.log(
+                    action="UpdateMany",
+                    entity="User",
+                    level="error",
+                    code=logged_in_user_permissions.code or 500,
+                    message=f"Failed to retrieve logged in user permissions for updating users",
+                    details={"error": logged_in_user_permissions.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_permissions.code,
+                    data=False,
+                    message=logged_in_user_permissions.message,
+                )
+            logged_in_user_permissions = logged_in_user_permissions.data
+            if not logged_in_user_permissions:
+                await self.logger.log(
+                    action="UpdateMany",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message=f"Logged in user permissions are None after retrieval for updating users",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="An error occurred while retrieving your permissions, please try again.",
+                )
+            if "Assign Roles" not in logged_in_user_permissions:
+                await self.logger.log(
+                    action="UpdateMany",
+                    entity="User",
+                    level="warning",
+                    code=403,
+                    message=f"Logged in user does not have 'Assign Roles' permission to update user roles",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=False,
+                    message=f"You do not have the 'Assign Roles' permission required to update user roles.",
+                )
             for record in data.data_to_update:
                 user_response = await self.user_repository.find_one(
                     User.id == record.id
@@ -2348,32 +2398,8 @@ class UserService(IUserService):
                         data=False,
                         message=f"Role with ID {record.role_id} not found.",
                     )
-                user_permissions_response = await self.get_user_permissions()
-                if not user_permissions_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=user_permissions_response.code,
-                        data=False,
-                        message=user_permissions_response.message,
-                    )
-                user_permissions = user_permissions_response.data
-                if not user_permissions:
-                    await self.logger.log(
-                        action="UpdateMany",
-                        entity="User",
-                        level="warning",
-                        code=403,
-                        message=f"Logged in user does not have permissions to update user with ID {user.id}",
-                        source="UserService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=403,
-                        data=False,
-                        message=f"You do not have permissions to update user records.",
-                    )
                 role_permissions = [perm.name for perm in role.exact_roles]
-                if not set(role_permissions).issubset(set(user_permissions)):
+                if not set(role_permissions).issubset(set(logged_in_user_permissions)):
                     await self.logger.log(
                         action="UpdateMany",
                         entity="User",

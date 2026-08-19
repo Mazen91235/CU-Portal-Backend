@@ -5,7 +5,6 @@ from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
 from core.utils.parser import Parser
-import json
 
 # Entities & DTOs
 from core.entities.task import Task

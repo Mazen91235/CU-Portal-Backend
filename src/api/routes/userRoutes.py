@@ -153,19 +153,6 @@ def create_user_admin_router(
         return validate_request
 
     @router.get(
-        "/statistics",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
-        response_model=BaseResponseDto[UserStatisticsResponseDto],
-        status_code=200,
-        summary="Get User Statistics",
-        description="Get statistics for the users in the system, including total count, new users this month, percentage increase, active users, and pending users.",
-    )
-    async def get_statistics(
-        request: Request, controller: IUserController = Depends(_get_controller)
-    ):
-        return await controller.get_statistics(request)
-
-    @router.get(
         "/{user_id}",
         dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
         response_model=BaseResponseDto[UserResponseDto],
@@ -190,6 +177,19 @@ def create_user_admin_router(
         request: Request, controller: IUserController = Depends(_get_controller)
     ):
         return await controller.find(request)
+
+    @router.get(
+        "/statistics",
+        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
+        response_model=BaseResponseDto[UserStatisticsResponseDto],
+        status_code=200,
+        summary="Get User Statistics",
+        description="Get statistics for the users in the system, including total count, new users this month, percentage increase, active users, and pending users.",
+    )
+    async def get_statistics(
+        request: Request, controller: IUserController = Depends(_get_controller)
+    ):
+        return await controller.get_statistics(request)
 
     @router.patch(
         "/",
