@@ -14,3 +14,11 @@ class IAuthMiddleware(ABC):
     @abstractmethod
     async def is_authorized(self, request: Request, *permissions) -> None:
         pass
+
+    @abstractmethod
+    async def is_ready(self, request: Request):
+        pass
+
+    @abstractmethod
+    async def has_registered_subjects(self, request: Request):
+        pass

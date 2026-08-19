@@ -2500,26 +2500,29 @@ class UserService(IUserService):
                     data=False,
                     message="Logged in user not found, please log in again.",
                 )
-            should_be_none = ["faculty_id", "department_id", "year_id", "type"]
-            for attr in should_be_none:
-                attr_value = getattr(logged_in_user, attr)
-                if type(attr_value) == str:
-                    attr_value = attr_value.strip().lower()
-                if attr_value:
-                    await self.logger.log(
-                        action="UpdateAcademicData",
-                        entity="User",
-                        level="warning",
-                        code=400,
-                        message=f"User with ID {logged_in_user.id} attempted to update academic data, but their academic data is already set, which is not allowed",
-                        source="UserService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=False,
-                        message=f"User has Set Academic Data already, and cannot update it again.",
-                    )
+            verify_academic_data_response = (
+                await self.helper_service.verify_academic_data(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                )
+            )
+            if not verify_academic_data_response.success:
+                await self.logger.log(
+                    action="UpdateAcademicData",
+                    entity="User",
+                    level="error",
+                    code=verify_academic_data_response.code or 500,
+                    message=f"Failed to verify academic data for updating user : {verify_academic_data_response.message}",
+                    details={"error": verify_academic_data_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=verify_academic_data_response.code,
+                    data=False,
+                    message=verify_academic_data_response.message,
+                )
             logged_in_user.faculty_id = data.faculty_id
             logged_in_user.department_id = data.department_id
             logged_in_user.year_id = data.year_id

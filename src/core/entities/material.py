@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 from .base import (
     Base,
     Integer,
@@ -22,6 +23,8 @@ from .base import (
 if TYPE_CHECKING:
     from .user import User
     from .subject import Subject
+    from .week import Week
+    from .attachment import Attachment
 
 
 class Material(Base):
@@ -75,6 +78,17 @@ class Material(Base):
     )
     children: Mapped[list["Material"]] = relationship(
         "Material", back_populates="parent", cascade="all, delete-orphan"
+    )
+    week_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("weeks.id", ondelete="SET NULL", name="fk_week_material"),
+        nullable=True,
+    )
+    week: Mapped[Optional["Week"]] = relationship(
+        "Week", back_populates="materials", cascade="save-update, merge"
+    )
+    attachment: Mapped[Optional["Attachment"]] = relationship(
+        "Attachment", back_populates="material", cascade="all, delete-orphan"
     )
 
     # Indexes
