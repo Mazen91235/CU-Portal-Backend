@@ -1,5 +1,6 @@
 from __future__ import annotations
 from enum import Enum
+
 from .base import (
     Base,
     Integer,
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
     from .requestLimit import RequestLimit
     from .event import Event
     from .note import Note
+    from .attachment import Attachment
 
 
 class User(Base):
@@ -183,6 +185,9 @@ class User(Base):
     )
     request_limits: Mapped[list["RequestLimit"]] = relationship(
         "RequestLimit", back_populates="user", cascade="all, delete-orphan"
+    )
+    attachments: Mapped[list["Attachment"]] = relationship(
+        "Attachment", back_populates="author", cascade="all, delete-orphan"
     )
 
     # Indexes

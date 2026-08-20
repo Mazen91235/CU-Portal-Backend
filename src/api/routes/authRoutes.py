@@ -4,7 +4,13 @@ from core.iControllers.iUserController import IUserController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.userDtos import UserResponseDto, UserTokenDetailsResponseDto
+from core.dtos.userDtos import (
+    UserCreateDto,
+    UserVerifyEmailDto,
+    UserGetStoredAccessTokenDto,
+    UserTokenDetailsResponseDto,
+)
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_auth_router(
@@ -24,14 +30,16 @@ def create_auth_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     async def _is_logged_out(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_out(request)
+        return await auth_middleware.is_logged_out(request, refresh_token)
 
     def _validate(*keys):
         async def validate_request(
@@ -65,10 +73,12 @@ def create_auth_router(
         summary="Register a new user",
         description="Registers a new user with the provided details. Returns a success message upon successful registration.",
     )
-    async def register(
-        request: Request, controller: IUserController = Depends(_get_controller)
+    async def register_user(
+        data: UserCreateDto,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
     ):
-        return await controller.create(request)
+        return await controller.create(request, data=data)
 
     @router.post(
         "/verify-email",
@@ -82,9 +92,11 @@ def create_auth_router(
         description="Verifies the user's email using the provided verification code. Returns a success message upon successful verification.",
     )
     async def verify_email(
-        request: Request, controller: IUserController = Depends(_get_controller)
+        data: UserVerifyEmailDto,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
     ):
-        return await controller.verify_email(request)
+        return await controller.verify_email(request, data=data)
 
     @router.post(
         "/resend-token",
@@ -126,9 +138,11 @@ def create_auth_router(
         description="Retrieves a google access token for the user from the stored google details token provided from the user. Returns the token if successful.",
     )
     async def google_stored_token(
-        request: Request, controller: IUserController = Depends(_get_controller)
+        data: UserGetStoredAccessTokenDto,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
     ):
-        return await controller.get_google_stored_token(request)
+        return await controller.get_google_stored_token(request, data=data)
 
     @router.get(
         "/google-access-token",

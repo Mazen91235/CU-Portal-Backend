@@ -4,7 +4,14 @@ from core.iControllers.iTaskController import ITaskController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.taskDtos import TaskResponseDto
+from core.dtos.taskDtos import (
+    TaskCreateDto,
+    TaskResponseDto,
+    TaskUpdateDto,
+    TaskSearchDto,
+)
+from core.models.queryModel import QueryModel
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_task_user_router(
@@ -24,8 +31,9 @@ def create_task_user_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     async def _is_ready(
         request: Request,
@@ -51,10 +59,12 @@ def create_task_user_router(
         summary="Find Task",
         description="Find a specific task by its ID if enrolled in the subject",
     )
-    async def find_one(
-        request: Request, controller: ITaskController = Depends(_get_controller)
+    async def find_one_task(
+        task_id: int,
+        request: Request,
+        controller: ITaskController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=task_id)
 
     @router.get(
         "/",
@@ -68,10 +78,12 @@ def create_task_user_router(
         summary="Find Tasks",
         description="Find all tasks for the currently logged-in user based on enrolled subjects",
     )
-    async def find(
-        request: Request, controller: ITaskController = Depends(_get_controller)
+    async def find_tasks(
+        query: QueryModel[TaskSearchDto],
+        request: Request,
+        controller: ITaskController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     return router
 
@@ -93,8 +105,9 @@ def create_task_admin_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     async def _is_ready(
         request: Request,
@@ -141,10 +154,12 @@ def create_task_admin_router(
         summary="Find Task",
         description="Find a task by its ID (Admin View)",
     )
-    async def find_one(
-        request: Request, controller: ITaskController = Depends(_get_controller)
+    async def find_one_task(
+        task_id: int,
+        request: Request,
+        controller: ITaskController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=task_id)
 
     @router.get(
         "/",
@@ -159,10 +174,12 @@ def create_task_admin_router(
         summary="Find Tasks",
         description="Find tasks based on query parameters (Admin View)",
     )
-    async def find(
-        request: Request, controller: ITaskController = Depends(_get_controller)
+    async def find_tasks(
+        query: QueryModel[TaskSearchDto],
+        request: Request,
+        controller: ITaskController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     @router.post(
         "/",
@@ -178,10 +195,12 @@ def create_task_admin_router(
         summary="Create Task",
         description="Create a new task for a specific subject",
     )
-    async def create(
-        request: Request, controller: ITaskController = Depends(_get_controller)
+    async def create_task(
+        data: TaskCreateDto,
+        request: Request,
+        controller: ITaskController = Depends(_get_controller),
     ):
-        return await controller.create(request)
+        return await controller.create(request, data=data)
 
     @router.patch(
         "/{task_id}",
@@ -197,10 +216,13 @@ def create_task_admin_router(
         summary="Update Task",
         description="Update an existing task by its ID",
     )
-    async def update(
-        request: Request, controller: ITaskController = Depends(_get_controller)
+    async def update_task(
+        task_id: int,
+        data: TaskUpdateDto,
+        request: Request,
+        controller: ITaskController = Depends(_get_controller),
     ):
-        return await controller.update(request)
+        return await controller.update(request, id=task_id, data=data)
 
     @router.delete(
         "/{task_id}",
@@ -215,9 +237,11 @@ def create_task_admin_router(
         summary="Delete Task",
         description="Delete a task by its ID",
     )
-    async def delete(
-        request: Request, controller: ITaskController = Depends(_get_controller)
+    async def delete_task(
+        task_id: int,
+        request: Request,
+        controller: ITaskController = Depends(_get_controller),
     ):
-        return await controller.delete(request)
+        return await controller.delete(request, id=task_id)
 
     return router

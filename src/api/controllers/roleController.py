@@ -1,5 +1,4 @@
-from pydantic import ValidationError
-
+from typing import cast
 from core.iControllers.iRoleController import IRoleController
 from core.iServices.iRoleService import IRoleService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -14,7 +13,6 @@ from core.dtos.roleDtos import (
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
-from core.utils.parser import Parser
 from core.utils.responseHandler import ResponseHandler
 from core.models.queryModel import QueryModel
 
@@ -24,18 +22,10 @@ class RoleController(IRoleController):
         self.role_service = role_service
         self.logger = logger
 
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         try:
-            role_id = request.path_params.get("role_id")
-            if not role_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Role ID is required",
-                )
-
             entity_search_dto = Generator[RoleSearchDto].generate(
-                RoleSearchDto, {"id": int(role_id)}
+                RoleSearchDto, {"id": id}
             )
 
             response = await self.role_service.find_one(
@@ -60,7 +50,7 @@ class RoleController(IRoleController):
                     level="info",
                     code=404,
                     message="Role not found",
-                    details={"role_id": role_id},
+                    details={"role_id": id},
                     source="RoleController",
                 )
                 return ResponseHandler.generate_response(
@@ -81,7 +71,7 @@ class RoleController(IRoleController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="RoleController",
             )
             return ResponseHandler.generate_response(
@@ -90,12 +80,8 @@ class RoleController(IRoleController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def find(self, request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[RoleSearchDto],
-            )
             entity_search_dto = Generator[RoleSearchDto].generate_from_query(
                 RoleSearchDto, query
             )
@@ -163,7 +149,7 @@ class RoleController(IRoleController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="RoleController",
             )
             return ResponseHandler.generate_response(
@@ -172,12 +158,9 @@ class RoleController(IRoleController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def create(self, request):
+    async def create(self, request, data):
         try:
             await self.role_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[RoleCreateDto].generate(RoleCreateDto, payload)
-
             response = await self.role_service.create(data)
 
             if not response.success:
@@ -225,7 +208,7 @@ class RoleController(IRoleController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="RoleController",
             )
             return ResponseHandler.generate_response(
@@ -234,24 +217,12 @@ class RoleController(IRoleController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update(self, request):
+    async def update(self, request, id, data):
         try:
             await self.role_service.begin_transaction()
-            role_id = request.path_params.get("role_id")
-
-            if not role_id:
-                await self.role_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Role ID is required",
-                )
-
-            payload = await request.json()
-            payload["id"] = int(role_id)
-            data = Generator[RoleUpdateDto].generate(RoleUpdateDto, payload)
-
-            response = await self.role_service.update(data)
+            role = cast(Role, Mapper[RoleUpdateDto, Role].map(data, Role))
+            role.id = id
+            response = await self.role_service.update(role)
 
             if not response.success:
                 await self.role_service.rollback_transaction()
@@ -298,7 +269,7 @@ class RoleController(IRoleController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="RoleController",
             )
             return ResponseHandler.generate_response(
@@ -307,22 +278,10 @@ class RoleController(IRoleController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def delete(self, request):
+    async def delete(self, request, id):
         try:
             await self.role_service.begin_transaction()
-            role_id = request.path_params.get("role_id")
-
-            if not role_id:
-                await self.role_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Role ID is required",
-                )
-
-            data = Generator[RoleDeleteDto].generate(
-                RoleDeleteDto, {"id": int(role_id)}
-            )
+            data = Generator[RoleDeleteDto].generate(RoleDeleteDto, {"id": id})
             entity = Mapper[RoleDeleteDto, Role].map(data, Role)
 
             response = await self.role_service.delete(entity)
@@ -350,7 +309,7 @@ class RoleController(IRoleController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="RoleController",
             )
             return ResponseHandler.generate_response(
@@ -381,7 +340,7 @@ class RoleController(IRoleController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="RoleController",
             )
             return ResponseHandler.generate_response(
@@ -411,7 +370,7 @@ class RoleController(IRoleController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="RoleController",
             )
             return ResponseHandler.generate_response(

@@ -4,7 +4,15 @@ from core.iControllers.iSubjectController import ISubjectController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.subjectDtos import SubjectResponseDto
+from core.dtos.subjectDtos import (
+    SubjectCreateDto,
+    SubjectResponseDto,
+    SubjectUpdateDto,
+    SubjectSearchDto,
+)
+from core.dtos.userSubjectLinkDtos import UserSubjectLinkActionDto
+from core.models.queryModel import QueryModel
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_subject_user_router(
@@ -24,8 +32,9 @@ def create_subject_user_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     async def _is_ready(
         request: Request,
@@ -52,7 +61,7 @@ def create_subject_user_router(
         summary="Get Available Courses",
         description="Get courses available for the current user to register",
     )
-    async def get_available(
+    async def get_available_subjects(
         request: Request, controller: ISubjectController = Depends(_get_controller)
     ):
         return await controller.get_available(request)
@@ -65,7 +74,7 @@ def create_subject_user_router(
         summary="Get Enrolled Courses",
         description="Get courses the current user is enrolled in",
     )
-    async def get_enrolled(
+    async def get_enrolled_subjects(
         request: Request, controller: ISubjectController = Depends(_get_controller)
     ):
         return await controller.get_enrolled(request)
@@ -78,10 +87,12 @@ def create_subject_user_router(
         summary="Get Enrolled Course",
         description="Get a single enrolled course for the current user",
     )
-    async def get_enrolled_one(
-        request: Request, controller: ISubjectController = Depends(_get_controller)
+    async def get_enrolled_one_subject(
+        subject_id: int,
+        request: Request,
+        controller: ISubjectController = Depends(_get_controller),
     ):
-        return await controller.get_enrolled_one(request)
+        return await controller.get_enrolled_one(request, id=subject_id)
 
     @router.post(
         "/register",
@@ -95,10 +106,12 @@ def create_subject_user_router(
         summary="Register Course",
         description="Register the current user for a course",
     )
-    async def register(
-        request: Request, controller: ISubjectController = Depends(_get_controller)
+    async def register_subject(
+        data: UserSubjectLinkActionDto,
+        request: Request,
+        controller: ISubjectController = Depends(_get_controller),
     ):
-        return await controller.register(request)
+        return await controller.register(request, data=data)
 
     @router.post(
         "/unregister",
@@ -112,10 +125,12 @@ def create_subject_user_router(
         summary="Unregister Course",
         description="Unregister the current user from a course",
     )
-    async def unregister(
-        request: Request, controller: ISubjectController = Depends(_get_controller)
+    async def unregister_subject(
+        data: UserSubjectLinkActionDto,
+        request: Request,
+        controller: ISubjectController = Depends(_get_controller),
     ):
-        return await controller.unregister(request)
+        return await controller.unregister(request, data=data)
 
     return router
 
@@ -137,8 +152,9 @@ def create_subject_admin_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     def _is_authorized(*permissions):
         async def authorize(
@@ -178,10 +194,12 @@ def create_subject_admin_router(
         summary="Find Course",
         description="Get a course by ID",
     )
-    async def find_one(
-        request: Request, controller: ISubjectController = Depends(_get_controller)
+    async def find_one_subject(
+        subject_id: int,
+        request: Request,
+        controller: ISubjectController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=subject_id)
 
     @router.get(
         "/",
@@ -195,10 +213,12 @@ def create_subject_admin_router(
         summary="Find Courses",
         description="Get all courses",
     )
-    async def find(
-        request: Request, controller: ISubjectController = Depends(_get_controller)
+    async def find_subjects(
+        query: QueryModel[SubjectSearchDto],
+        request: Request,
+        controller: ISubjectController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     @router.post(
         "/",
@@ -221,10 +241,12 @@ def create_subject_admin_router(
         summary="Add Course",
         description="Add a new course",
     )
-    async def create(
-        request: Request, controller: ISubjectController = Depends(_get_controller)
+    async def create_subject(
+        data: SubjectCreateDto,
+        request: Request,
+        controller: ISubjectController = Depends(_get_controller),
     ):
-        return await controller.create(request)
+        return await controller.create(request, data=data)
 
     @router.patch(
         "/{subject_id}",
@@ -241,10 +263,13 @@ def create_subject_admin_router(
         summary="Update Course",
         description="Update an existing course",
     )
-    async def update(
-        request: Request, controller: ISubjectController = Depends(_get_controller)
+    async def update_subject(
+        subject_id: int,
+        data: SubjectUpdateDto,
+        request: Request,
+        controller: ISubjectController = Depends(_get_controller),
     ):
-        return await controller.update(request)
+        return await controller.update(request, id=subject_id, data=data)
 
     @router.delete(
         "/{subject_id}",
@@ -258,9 +283,11 @@ def create_subject_admin_router(
         summary="Delete Course",
         description="Delete an existing course",
     )
-    async def delete(
-        request: Request, controller: ISubjectController = Depends(_get_controller)
+    async def delete_subject(
+        subject_id: int,
+        request: Request,
+        controller: ISubjectController = Depends(_get_controller),
     ):
-        return await controller.delete(request)
+        return await controller.delete(request, id=subject_id)
 
     return router

@@ -75,9 +75,7 @@ class Event(Base):
     author_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=False
     )
-    author: Mapped["User"] = relationship(
-        "User", back_populates="events", cascade="all, delete-orphan"
-    )
+    author: Mapped["User"] = relationship("User", back_populates="events")
     faculty_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("faculties.id"), nullable=True
     )
@@ -98,7 +96,7 @@ class Event(Base):
         Integer, ForeignKey("event_organizers.id"), nullable=False
     )
     event_organizer: Mapped["EventOrganizer"] = relationship(
-        "EventOrganizer", back_populates="events", cascade="all, delete-orphan"
+        "EventOrganizer", back_populates="events"
     )
     attendees: Mapped[list["User"]] = relationship(
         "User",
@@ -106,11 +104,19 @@ class Event(Base):
         back_populates="going_events",
         cascade="all, delete",
     )
+    logo_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("attachments.id", ondelete="CASCADE", name="fk_attachment_event"),
+        nullable=False,
+    )
     logo: Mapped[Optional["Attachment"]] = relationship(
-        "Attachment", back_populates="event_logo", cascade="all, delete-orphan"
+        "Attachment", back_populates="event_logo", foreign_keys=[logo_id]
     )
     attachments: Mapped[list["Attachment"]] = relationship(
-        "Attachment", back_populates="event", cascade="all, delete-orphan"
+        "Attachment",
+        back_populates="event",
+        cascade="all, delete-orphan",
+        foreign_keys="Attachment.event_id",
     )
 
     # Indexes

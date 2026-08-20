@@ -65,7 +65,6 @@ class ExamResponseDto(BaseModel):
 
 
 class ExamUpdateDto(BaseModel):
-    id: int = Field(..., description="ID of the exam to update")
     name: str | None = Field(
         None, min_length=1, max_length=60, description="Title of the exam"
     )

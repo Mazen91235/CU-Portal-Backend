@@ -82,7 +82,7 @@ class RoleService(IRoleService):
                 level="error",
                 code=500,
                 message="Error finding role",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="RoleService",
             )
             return BaseResponseDto(
@@ -142,7 +142,7 @@ class RoleService(IRoleService):
                 level="error",
                 code=500,
                 message="An error occurred while finding roles",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="RoleService",
             )
             return BaseResponseDto(
@@ -322,7 +322,7 @@ class RoleService(IRoleService):
                 level="error",
                 code=500,
                 message="An error occurred while creating role",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="RoleService",
             )
             return BaseResponseDto(
@@ -547,7 +547,7 @@ class RoleService(IRoleService):
                 level="error",
                 code=500,
                 message="An error occurred while updating role",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="RoleService",
             )
             return BaseResponseDto(
@@ -668,7 +668,7 @@ class RoleService(IRoleService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting role",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="RoleService",
             )
             return BaseResponseDto(
@@ -703,7 +703,7 @@ class RoleService(IRoleService):
                 level="error",
                 code=500,
                 message="An error occurred while counting permissions",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="RoleService",
             )
             return BaseResponseDto(
@@ -715,7 +715,9 @@ class RoleService(IRoleService):
 
     async def reset_permissions(self):
         try:
-            current_exact_roles_response = await self.exact_role_repository.find(limit=int(math.inf))
+            current_exact_roles_response = await self.exact_role_repository.find(
+                limit=int(math.inf)
+            )
             if not current_exact_roles_response.success:
                 return BaseResponseDto(
                     success=False,
@@ -739,15 +741,17 @@ class RoleService(IRoleService):
                     data=None,
                     message="No exact roles found to reset permissions.",
                 )
-            all_exact_roles = {
-                perm.name: perm for perm in current_exact_roles
-            }
+            all_exact_roles = {perm.name: perm for perm in current_exact_roles}
             current_permission_names = [perm.name for perm in current_exact_roles]
             required_permissions = Role.RoleConfig.ROLES
-            permissions_to_add = set(required_permissions) - set(current_permission_names)
+            permissions_to_add = set(required_permissions) - set(
+                current_permission_names
+            )
             for permission in permissions_to_add:
                 new_exact_role = ExactRole(name=permission)
-                create_response = await self.exact_role_repository.create(new_exact_role)
+                create_response = await self.exact_role_repository.create(
+                    new_exact_role
+                )
                 if not create_response.success:
                     return BaseResponseDto(
                         success=False,
@@ -772,10 +776,14 @@ class RoleService(IRoleService):
                         message=f"An error occurred while creating exact role '{permission}'",
                     )
                 all_exact_roles[permission] = created_exact_role
-            permissions_to_remove = set(current_permission_names) - set(required_permissions)
+            permissions_to_remove = set(current_permission_names) - set(
+                required_permissions
+            )
             for permission in permissions_to_remove:
-                exact_role_to_remove_response = await self.exact_role_repository.find_one(
-                    ExactRole.name == permission
+                exact_role_to_remove_response = (
+                    await self.exact_role_repository.find_one(
+                        ExactRole.name == permission
+                    )
                 )
                 if not exact_role_to_remove_response.success:
                     return BaseResponseDto(
@@ -800,7 +808,9 @@ class RoleService(IRoleService):
                         data=None,
                         message=f"Exact role '{permission}' not found for removal.",
                     )
-                delete_response = await self.exact_role_repository.delete(exact_role_to_remove)
+                delete_response = await self.exact_role_repository.delete(
+                    exact_role_to_remove
+                )
                 if not delete_response.success:
                     return BaseResponseDto(
                         success=False,
@@ -814,7 +824,9 @@ class RoleService(IRoleService):
                 dynamic_includes = self.helper_service.generate_dynamic_includes(
                     Role, ["exact_roles"]
                 )
-                role_response = await self.role_repository.find_one(Role.name == exclusion_role, dynamic_includes)
+                role_response = await self.role_repository.find_one(
+                    Role.name == exclusion_role, dynamic_includes
+                )
                 if not role_response.success:
                     return BaseResponseDto(
                         success=False,
@@ -839,9 +851,15 @@ class RoleService(IRoleService):
                         message=f"Role '{exclusion_role}' not found for exclusion.",
                     )
                 role_current_permissions = [perm.name for perm in role.exact_roles]
-                role_required_permissions = set(required_permissions) - set(excluded_permissions)
-                role_permissions_to_add = set(role_required_permissions) - set(role_current_permissions)
-                role_permissions_to_remove = set(role_current_permissions) - set(role_required_permissions)
+                role_required_permissions = set(required_permissions) - set(
+                    excluded_permissions
+                )
+                role_permissions_to_add = set(role_required_permissions) - set(
+                    role_current_permissions
+                )
+                role_permissions_to_remove = set(role_current_permissions) - set(
+                    role_required_permissions
+                )
                 for permission in role_permissions_to_add:
                     exact_role = all_exact_roles.get(permission)
                     if not exact_role:
@@ -878,7 +896,9 @@ class RoleService(IRoleService):
                             message=f"Exact role '{permission}' not found for removal from role '{exclusion_role}'.",
                         )
                     role.exact_roles.remove(exact_role)
-                update_response = await self.role_repository.update(role, ["exact_roles"])
+                update_response = await self.role_repository.update(
+                    role, ["exact_roles"]
+                )
                 if not update_response.success:
                     return BaseResponseDto(
                         success=False,
@@ -922,7 +942,7 @@ class RoleService(IRoleService):
                 level="error",
                 code=500,
                 message="An error occurred while resetting permissions",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="RoleService",
             )
             return BaseResponseDto(
@@ -965,7 +985,7 @@ class RoleService(IRoleService):
                 level="error",
                 code=500,
                 message="An error occurred while validating permissions",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="RoleService",
             )
             return BaseResponseDto(

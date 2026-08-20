@@ -55,7 +55,6 @@ class FacultyResponseDto(BaseModel):
 
 
 class FacultyUpdateDto(BaseModel):
-    id: int = Field(..., description="ID of the faculty to update")
     name: str = Field(..., min_length=1, max_length=40, description="Name of Faculty")
 
 

@@ -90,7 +90,6 @@ class TaskResponseDto(BaseModel):
 
 
 class TaskUpdateDto(BaseModel):
-    id: int = Field(..., description="ID of the task to update")
     name: str | None = Field(
         default=None,
         min_length=1,

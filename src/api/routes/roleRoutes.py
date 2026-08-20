@@ -4,7 +4,14 @@ from core.iControllers.iRoleController import IRoleController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.roleDtos import RoleResponseDto
+from core.dtos.roleDtos import (
+    RoleCreateDto,
+    RoleResponseDto,
+    RoleUpdateDto,
+    RoleSearchDto,
+)
+from core.models.queryModel import QueryModel
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_role_admin_router(
@@ -24,8 +31,9 @@ def create_role_admin_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     def _is_authorized(*permissions):
         async def authorize(
@@ -58,10 +66,12 @@ def create_role_admin_router(
         summary="Find role by ID",
         description="Retrieve a single role by its ID",
     )
-    async def find_one(
-        request: Request, controller: IRoleController = Depends(_get_controller)
+    async def find_one_role(
+        role_id: int,
+        request: Request,
+        controller: IRoleController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=role_id)
 
     @router.get(
         "/",
@@ -71,10 +81,12 @@ def create_role_admin_router(
         summary="Find Roles by Query",
         description="Retrieve a list of roles based on query parameters",
     )
-    async def find(
-        request: Request, controller: IRoleController = Depends(_get_controller)
+    async def find_roles(
+        query: QueryModel[RoleSearchDto],
+        request: Request,
+        controller: IRoleController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     @router.post(
         "/",
@@ -88,10 +100,12 @@ def create_role_admin_router(
         summary="Create a role",
         description="Create a new role with the provided name and permissions",
     )
-    async def create(
-        request: Request, controller: IRoleController = Depends(_get_controller)
+    async def create_role(
+        data: RoleCreateDto,
+        request: Request,
+        controller: IRoleController = Depends(_get_controller),
     ):
-        return await controller.create(request)
+        return await controller.create(request, data=data)
 
     @router.patch(
         "/{role_id}",
@@ -105,10 +119,13 @@ def create_role_admin_router(
         summary="Update a role",
         description="Update an existing role by its ID",
     )
-    async def update(
-        request: Request, controller: IRoleController = Depends(_get_controller)
+    async def update_role(
+        role_id: int,
+        data: RoleUpdateDto,
+        request: Request,
+        controller: IRoleController = Depends(_get_controller),
     ):
-        return await controller.update(request)
+        return await controller.update(request, id=role_id, data=data)
 
     @router.delete(
         "/{role_id}",
@@ -121,10 +138,12 @@ def create_role_admin_router(
         summary="Delete a role",
         description="Delete an existing role by its ID",
     )
-    async def delete(
-        request: Request, controller: IRoleController = Depends(_get_controller)
+    async def delete_role(
+        role_id: int,
+        request: Request,
+        controller: IRoleController = Depends(_get_controller),
     ):
-        return await controller.delete(request)
+        return await controller.delete(request, id=role_id)
 
     @router.get(
         "/permissions/count",

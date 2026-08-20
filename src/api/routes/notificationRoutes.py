@@ -4,7 +4,10 @@ from core.iControllers.iNotificationController import INotificationController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.notificationDtos import NotificationResponseDto
+from core.dtos.userNotificationDtos import UserNotificationSearchDto
 from core.dtos.baseDtos import BaseResponseDto
+from core.models.queryModel import QueryModel
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_notification_user_router(
@@ -26,8 +29,9 @@ def create_notification_user_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     def _validate(*keys):
         async def validate_request(
@@ -47,10 +51,12 @@ def create_notification_user_router(
         summary="Get Notifications (User)",
         description="Retrieves a paginated list of notifications for the logged-in user.",
     )
-    async def find(
-        request: Request, controller: INotificationController = Depends(_get_controller)
+    async def find_notifications(
+        query: QueryModel[UserNotificationSearchDto],
+        request: Request,
+        controller: INotificationController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     @router.patch(
         "/{notification_id}",
@@ -60,9 +66,10 @@ def create_notification_user_router(
         description="Marks a specific notification as seen for the logged-in user.",
     )
     async def mark_notification_as_seen(
+        notification_id: int,
         request: Request,
         controller: INotificationController = Depends(_get_controller),
     ):
-        return await controller.mark_notification_as_seen(request)
+        return await controller.mark_notification_as_seen(request, id=notification_id)
 
     return router

@@ -1,3 +1,4 @@
+import json
 from business.contextVars.requestContext import request_context
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -27,15 +28,19 @@ class BaseLogger(IBaseLogger):
             request = request_context.get(None)
             route = request.url.path if request else None
 
+            formatted_details = (
+                json.dumps(details, default=str) if details is not None else None
+            )
+
             await self.repository.execute_sql(
-                f"INSERT INTO {EntitiesHandler.TABLES.get('Log')} (action, entity, level, response_code, message, details, source, route, ip, user_id, created_at, updated_at) VALUES (:action, :entity, :level, :code, :message, :details, :source, :route, :ip, :user_id, :created_at, :updated_at)",
+                f"INSERT INTO {EntitiesHandler.TABLES.get('Log')} (action, entity, level, response_code, message, details, source, route, ip, user_id, created_at, updated_at) VALUES (:action, :entity, :level, :response_code, :message, :details, :source, :route, :ip, :user_id, :created_at, :updated_at)",
                 {
                     "action": action,
                     "entity": entity,
                     "level": level,
                     "response_code": code,
                     "message": message,
-                    "details": details,
+                    "details": formatted_details,
                     "source": source,
                     "route": route,
                     "ip": ip_address,
@@ -45,5 +50,5 @@ class BaseLogger(IBaseLogger):
                 },
             )
         except Exception as ex:
-            print(f"Failed to log message: {str(ex)}")
+            print(f"Failed to log message: {repr(ex)}")
             return

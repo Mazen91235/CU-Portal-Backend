@@ -23,11 +23,9 @@ if TYPE_CHECKING:
     from .user import User
     from .department import Department
     from .announcement import Announcement
-
-    # from .roadmap import Roadmap
-    # from .question import Question
     from .task import Task
     from .subject import Subject
+    from .event import Event
     from .week import Week
 
 
@@ -65,20 +63,14 @@ class Faculty(Base):
     announcements: Mapped[list["Announcement"]] = relationship(
         "Announcement", back_populates="faculty", cascade="all, delete-orphan"
     )
-    # roadmaps: Mapped[list["Roadmap"]] = relationship(
-    #     "Roadmap", back_populates="faculty", cascade="all, delete-orphan"
-    # )
-    # questions: Mapped[list["Question"]] = relationship(
-    #     "Question", back_populates="faculty", cascade="all, delete-orphan"
-    # )
-    # timetables: Mapped[list["Timetable"]] = relationship(
-    #     "Timetable", back_populates="faculty", cascade="all, delete-orphan"
-    # )
     tasks: Mapped[list["Task"]] = relationship(
         "Task", back_populates="faculty", cascade="all, delete-orphan"
     )
     subjects: Mapped[list["Subject"]] = relationship(
         "Subject", back_populates="faculty", cascade="all, delete-orphan"
+    )
+    events: Mapped[list["Event"]] = relationship(
+        "Event", back_populates="faculty", cascade="all, delete-orphan"
     )
     weeks: Mapped[list["Week"]] = relationship(
         "Week", back_populates="faculty", cascade="all, delete-orphan"

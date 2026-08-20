@@ -13,7 +13,7 @@ from core.entities.role import Role
 from core.entities.token import Token
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.userDtos import (
-    UserLoginWithGoogleDto,
+    UserLoginWithGoogleResponseDto,
     UserSignUpResponseDto,
     UserLoginResponseDto,
     UserStatisticsResponseDto,
@@ -102,7 +102,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while finding user",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -163,7 +163,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while finding users",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -585,7 +585,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while creating user",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -785,7 +785,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while updating user",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -836,7 +836,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while invalidating tokens",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -934,7 +934,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while logging in user",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1158,7 +1158,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while verifying email",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1223,7 +1223,7 @@ class UserService(IUserService):
                 message="Initiating Google login",
                 source="UserService",
             )
-            response = UserLoginWithGoogleDto(
+            response = UserLoginWithGoogleResponseDto(
                 redirect_response_url=redirect_response_url, state=state, nonce=nonce
             )
             return BaseResponseDto(success=True, code=200, data=response)
@@ -1234,7 +1234,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while logging in",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1452,7 +1452,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while authenticating with Google",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1517,7 +1517,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while logging out",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1639,7 +1639,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while retrieving token details",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1836,7 +1836,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while resending token",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1908,7 +1908,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while refreshing token",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2069,7 +2069,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while retrieving Google stored token",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2162,7 +2162,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while retrieving Google access token",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2219,7 +2219,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while getting user statistics",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2481,7 +2481,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while updating multiple users",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2584,7 +2584,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while updating user academic data",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2671,7 +2671,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while getting current user",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2720,7 +2720,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while getting current user ID",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2805,7 +2805,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while getting user permissions",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2862,7 +2862,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while checking user permissions",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(

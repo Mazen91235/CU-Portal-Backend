@@ -2,13 +2,30 @@ from abc import abstractmethod
 from fastapi import Request, Response
 from core.iControllers.bases.iQueryableController import IQueryableController
 from core.iControllers.bases.iCreatableController import ICreatableController
-from core.iControllers.bases.iUpdatableController import IUpdatableController
+from core.dtos.userDtos import (
+    UserSearchDto,
+    UserCreateDto,
+    UserUpdateDto,
+    UserVerifyEmailDto,
+    UserGetStoredAccessTokenDto,
+    UserUpdateUsersDto,
+    UserUpdateAcademicDataDto,
+    UserHasPermissionsDto,
+)
 
 
-class IUserController(IQueryableController, ICreatableController, IUpdatableController):
+class IUserController(
+    IQueryableController[UserSearchDto], ICreatableController[UserCreateDto]
+):
+    @abstractmethod
+    async def update(self, request: Request, data: UserUpdateDto) -> Response:
+        pass
+
     # Auth Functions
     @abstractmethod
-    async def verify_email(self, request: Request) -> Response:
+    async def verify_email(
+        self, request: Request, data: UserVerifyEmailDto
+    ) -> Response:
         pass
 
     @abstractmethod
@@ -36,7 +53,9 @@ class IUserController(IQueryableController, ICreatableController, IUpdatableCont
         pass
 
     @abstractmethod
-    async def get_google_stored_token(self, request: Request) -> Response:
+    async def get_google_stored_token(
+        self, request: Request, data: UserGetStoredAccessTokenDto
+    ) -> Response:
         pass
 
     @abstractmethod
@@ -49,11 +68,13 @@ class IUserController(IQueryableController, ICreatableController, IUpdatableCont
         pass
 
     @abstractmethod
-    async def update_many(self, request: Request) -> Response:
+    async def update_many(self, request: Request, data: UserUpdateUsersDto) -> Response:
         pass
 
     @abstractmethod
-    async def update_academic_data(self, request: Request) -> Response:
+    async def update_academic_data(
+        self, request: Request, data: UserUpdateAcademicDataDto
+    ) -> Response:
         pass
 
     @abstractmethod
@@ -65,5 +86,7 @@ class IUserController(IQueryableController, ICreatableController, IUpdatableCont
         pass
 
     @abstractmethod
-    async def has_permissions(self, request: Request) -> Response:
+    async def has_permissions(
+        self, request: Request, data: UserHasPermissionsDto
+    ) -> Response:
         pass

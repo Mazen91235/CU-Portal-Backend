@@ -1,4 +1,5 @@
 from fastapi import Request, HTTPException
+from fastapi.security import APIKeyCookie
 from business.contextVars.userContext import user_context
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iServices.iUserService import IUserService
@@ -8,6 +9,8 @@ from core.entities.user import User
 from core.dtos.userDtos import UserSearchDto
 from core.dtos.roleDtos import RoleSearchDto
 from core.utils.timezoneHandler import TimezoneHandler
+
+cookie_scheme = APIKeyCookie(name="token", auto_error=False)
 
 
 class AuthMiddleware(IAuthMiddleware):
@@ -21,10 +24,11 @@ class AuthMiddleware(IAuthMiddleware):
         self.role_service = role_service
         self.logger = logger
 
-    async def is_logged_in(self, request: Request):
+    async def is_logged_in(self, request: Request, refresh_token: str | None = None):
         try:
-            cookies = request.cookies
-            refresh_token = cookies.get("token")
+            print(
+                f"AuthMiddleware: is_logged_in called with refresh_token: {refresh_token}"
+            )
             if not refresh_token:
                 await self.logger.log(
                     action="AuthCheck",
@@ -103,7 +107,7 @@ class AuthMiddleware(IAuthMiddleware):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred during authentication check: {str(ex)}",
+                message=f"An error occurred during authentication check: {repr(ex)}",
                 source="AuthMiddleware",
             )
             raise HTTPException(
@@ -111,10 +115,8 @@ class AuthMiddleware(IAuthMiddleware):
                 detail="Internal Server Error during authentication check",
             )
 
-    async def is_logged_out(self, request: Request):
+    async def is_logged_out(self, request: Request, refresh_token: str | None = None):
         try:
-            cookies = request.cookies
-            refresh_token = cookies.get("token")
             if refresh_token:
                 user_search_entity_dto = UserSearchDto(
                     refresh_token=refresh_token,
@@ -155,7 +157,7 @@ class AuthMiddleware(IAuthMiddleware):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred during authentication check: {str(ex)}",
+                message=f"An error occurred during authentication check: {repr(ex)}",
                 source="AuthMiddleware",
             )
             raise HTTPException(
@@ -220,7 +222,7 @@ class AuthMiddleware(IAuthMiddleware):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred during authorization check: {str(ex)}",
+                message=f"An error occurred during authorization check: {repr(ex)}",
                 source="AuthMiddleware",
             )
             raise HTTPException(
@@ -291,7 +293,7 @@ class AuthMiddleware(IAuthMiddleware):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while validating user readiness: {str(ex)}",
+                message=f"An error occurred while validating user readiness: {repr(ex)}",
                 source="AuthMiddleware",
             )
             raise HTTPException(
@@ -350,7 +352,7 @@ class AuthMiddleware(IAuthMiddleware):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while validating registered subjects: {str(ex)}",
+                message=f"An error occurred while validating registered subjects: {repr(ex)}",
                 source="AuthMiddleware",
             )
             raise HTTPException(

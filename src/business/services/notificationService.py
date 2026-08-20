@@ -163,7 +163,7 @@ class NotificationService(INotificationService):
                 level="error",
                 code=500,
                 message=f"An error occurred while finding notifications",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NotificationService",
             )
             return BaseResponseDto(
@@ -275,7 +275,7 @@ class NotificationService(INotificationService):
                 level="error",
                 code=500,
                 message=f"An error occurred while marking notification as seen",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NotificationService",
             )
             return BaseResponseDto(

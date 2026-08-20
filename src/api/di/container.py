@@ -227,7 +227,7 @@ class Container(containers.DeclarativeContainer):
         user_repository=user_repository,
         token_repository=token_repository,
         role_repository=role_repository,
-        pending_repository=pending_user_repository,
+        pending_user_repository=pending_user_repository,
         logger=logger,
         helper_service=helper_service,
     )

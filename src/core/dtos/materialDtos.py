@@ -73,7 +73,6 @@ class MaterialResponseDto(BaseModel):
 
 
 class MaterialUpdateDto(BaseModel):
-    id: int
     name: str | None = Field(
         None, max_length=200, description="Updated name of the material"
     )

@@ -93,7 +93,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while finding material",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -159,7 +159,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while finding materials",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -471,7 +471,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while creating material",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -844,7 +844,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while updating material",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1018,7 +1018,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while deleting materials",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1053,7 +1053,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while fetching parent materials",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1238,7 +1238,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while moving materials",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1414,7 +1414,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while copying materials",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1701,7 +1701,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while fetching materials from Google Drive",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1766,7 +1766,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while generating unique name for material",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1846,7 +1846,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while removing files",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
 
@@ -1935,7 +1935,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while recursively deleting material with ID {material_id}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1994,7 +1994,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while recursively fetching parent materials for material with ID {material_id}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -2204,7 +2204,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while recursively copying material with ID {material_id}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -2299,7 +2299,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while recursively creating material from Drive with file ID {fetched_data.data.id}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(

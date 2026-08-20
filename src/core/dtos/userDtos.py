@@ -151,9 +151,12 @@ class UserGetStoredAccessTokenDto(BaseModel):
     google_details_token: str = Field(
         ..., description="Google details token for authentication"
     )
+    oauth_state: str = Field(
+        ..., description="OAuth state parameter for authentication"
+    )
 
 
-class UserLoginWithGoogleDto(BaseModel):
+class UserLoginWithGoogleResponseDto(BaseModel):
     redirect_response_url: str = Field(
         ..., description="Redirect URL after Google login"
     )

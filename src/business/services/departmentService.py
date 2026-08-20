@@ -80,7 +80,7 @@ class DepartmentService(IDepartmentService):
                 level="error",
                 code=500,
                 message="An error occurred while finding department",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="DepartmentService",
             )
             return BaseResponseDto(
@@ -140,7 +140,7 @@ class DepartmentService(IDepartmentService):
                 level="error",
                 code=500,
                 message="An error occurred while finding departments",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="DepartmentService",
             )
             return BaseResponseDto(
@@ -354,7 +354,7 @@ class DepartmentService(IDepartmentService):
                 level="error",
                 code=500,
                 message="An error occurred while creating department",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="DepartmentService",
             )
             return BaseResponseDto(
@@ -537,7 +537,7 @@ class DepartmentService(IDepartmentService):
                 level="error",
                 code=500,
                 message="An error occurred while updating department",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="DepartmentService",
             )
             return BaseResponseDto(
@@ -639,7 +639,7 @@ class DepartmentService(IDepartmentService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting department",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="DepartmentService",
             )
             return BaseResponseDto(

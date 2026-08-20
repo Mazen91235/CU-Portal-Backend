@@ -30,7 +30,7 @@ class ValidationMiddleware(IValidationMiddleware):
                 level="error",
                 code=400,
                 message="An error occurred during request validation.",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ValidationMiddleware",
             )
             raise HTTPException(

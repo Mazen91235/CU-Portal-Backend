@@ -4,11 +4,15 @@ from fastapi import Request
 
 class IAuthMiddleware(ABC):
     @abstractmethod
-    async def is_logged_in(self, request: Request) -> None:
+    async def is_logged_in(
+        self, request: Request, refresh_token: str | None = None
+    ) -> None:
         pass
 
     @abstractmethod
-    async def is_logged_out(self, request: Request) -> None:
+    async def is_logged_out(
+        self, request: Request, refresh_token: str | None = None
+    ) -> None:
         pass
 
     @abstractmethod

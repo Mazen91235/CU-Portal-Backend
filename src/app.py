@@ -15,23 +15,25 @@ from api.routes.customRoute import CustomRoute
 from business.contextVars.sessionContext import session_context
 
 # Imports for Model Rebuild and Open-API Schema Generation
-from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.announcementDtos import AnnouncementResponseDto
-from core.dtos.departmentDtos import DepartmentResponseDto
-from core.dtos.examDtos import ExamResponseDto
-from core.dtos.exactRoleDtos import ExactRoleResponseDto
-from core.dtos.facultyDtos import FacultyResponseDto
-from core.dtos.logDtos import LogResponseDto
-from core.dtos.materialDtos import MaterialResponseDto
-from core.dtos.messageDtos import MessageResponseDto
-from core.dtos.notificationDtos import NotificationResponseDto
-from core.dtos.pendingUserDtos import PendingUserResponseDto
-from core.dtos.roleDtos import RoleResponseDto
-from core.dtos.subjectDtos import SubjectResponseDto
-from core.dtos.taskDtos import TaskResponseDto
-from core.dtos.userDtos import UserResponseDto
-from core.dtos.userNotificationDtos import UserNotificationResponseDto
-from core.dtos.yearDtos import YearResponseDto
+from core.dtos.baseDtos import *
+from core.dtos.announcementDtos import *
+from core.dtos.departmentDtos import *
+from core.dtos.exactRoleDtos import *
+from core.dtos.examDtos import *
+from core.dtos.facultyDtos import *
+from core.dtos.logDtos import *
+from core.dtos.materialDtos import *
+from core.dtos.messageDtos import *
+from core.dtos.notificationDtos import *
+from core.dtos.pendingUserDtos import *
+from core.dtos.requestLimitDtos import *
+from core.dtos.roleDtos import *
+from core.dtos.subjectDtos import *
+from core.dtos.taskDtos import *
+from core.dtos.userDtos import *
+from core.dtos.userNotificationDtos import *
+from core.dtos.userSubjectLinkDtos import *
+from core.dtos.yearDtos import *
 from core.entities.department import Department
 from core.entities.faculty import Faculty
 from core.entities.notification import Notification
@@ -45,9 +47,7 @@ load_dotenv()  # Load environment variables from .env file
 
 def rebuild_response_dtos() -> None:
     dto_namespace = {
-        name: value
-        for name, value in globals().items()
-        if name.endswith("ResponseDto") or name == "BaseResponseDto"
+        name: value for name, value in globals().items() if name.endswith("Dto")
     }
     response_dtos = tuple(dto_namespace.values())
     dto_namespace.update(
@@ -124,7 +124,6 @@ def create_app() -> FastAPI:
     main_admin_routes.include_router(exam_admin_routes)
     main_admin_routes.include_router(material_admin_routes)
     main_admin_routes.include_router(message_admin_routes)
-    main_admin_routes.include_router(faculty_admin_routes)
     main_admin_routes.include_router(subject_admin_routes)
     app.include_router(main_user_routes)
     app.include_router(main_admin_routes)

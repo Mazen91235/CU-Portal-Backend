@@ -42,7 +42,6 @@ class YearResponseDto(BaseModel):
 
 
 class YearUpdateDto(BaseModel):
-    id: int = Field(..., description="ID of the year to update")
     year: int = Field(
         ..., ge=1900, le=3000, description="Academic year (positive 4-digit number)"
     )

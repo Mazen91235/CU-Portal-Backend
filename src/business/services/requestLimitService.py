@@ -58,7 +58,7 @@ class RequestLimitService(IRequestLimitService):
                 level="error",
                 code=500,
                 message=f"An error occurred while counting request limits",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="RequestLimitService",
             )
             return BaseResponseDto(
@@ -94,7 +94,7 @@ class RequestLimitService(IRequestLimitService):
                 level="error",
                 code=500,
                 message=f"An error occurred while creating a request limit",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="RequestLimitService",
             )
             return BaseResponseDto(

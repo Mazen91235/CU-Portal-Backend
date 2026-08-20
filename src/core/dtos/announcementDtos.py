@@ -92,7 +92,6 @@ class AnnouncementResponseDto(BaseModel):
 
 
 class AnnouncementUpdateDto(BaseModel):
-    id: int = Field(..., description="ID of the announcement to update")
     title: str | None = Field(
         default=None,
         min_length=1,

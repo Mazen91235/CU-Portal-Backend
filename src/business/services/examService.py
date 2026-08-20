@@ -85,7 +85,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="Error finding exam",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(
@@ -145,7 +145,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="An error occurred while finding exams",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(
@@ -344,7 +344,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="An error occurred while creating exam",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(
@@ -634,7 +634,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="An error occurred while updating exam",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(
@@ -812,7 +812,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting exam",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(

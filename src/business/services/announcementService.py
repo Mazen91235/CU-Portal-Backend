@@ -86,7 +86,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while finding announcement",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(
@@ -151,7 +151,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while finding announcements",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(
@@ -408,7 +408,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while creating announcement",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(
@@ -783,7 +783,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while updating announcement",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(
@@ -963,7 +963,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting announcement",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(

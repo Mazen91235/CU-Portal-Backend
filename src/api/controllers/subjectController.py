@@ -1,3 +1,4 @@
+from typing import cast
 from core.iControllers.iSubjectController import ISubjectController
 from core.iServices.iSubjectService import ISubjectService
 from core.iServices.iHelperService import IHelperService
@@ -5,7 +6,6 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
-from core.utils.parser import Parser
 from business.contextVars.userContext import user_context
 
 # Entities & DTOs
@@ -17,7 +17,6 @@ from core.dtos.subjectDtos import (
     SubjectResponseDto,
 )
 
-from core.dtos.userSubjectLinkDtos import UserSubjectLinkActionDto
 from core.models.queryModel import QueryModel
 
 
@@ -33,18 +32,10 @@ class SubjectController(ISubjectController):
         self.logger = logger
 
     # CRUD Functions
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         try:
-            subject_id = request.path_params.get("subject_id")
-            if not subject_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Subject ID is required",
-                )
-
             entity_search_dto = Generator[SubjectSearchDto].generate(
-                SubjectSearchDto, {"id": int(subject_id)}
+                SubjectSearchDto, {"id": id}
             )
             response = await self.subject_service.find_one(
                 entity_search_dto, includes=["faculty", "department", "year", "users"]
@@ -85,7 +76,7 @@ class SubjectController(ISubjectController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="SubjectController",
             )
             return ResponseHandler.generate_response(
@@ -94,12 +85,8 @@ class SubjectController(ISubjectController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def find(self, request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[SubjectSearchDto],
-            )
             entity_search_dto = Generator[SubjectSearchDto].generate_from_query(
                 SubjectSearchDto, query
             )
@@ -162,7 +149,7 @@ class SubjectController(ISubjectController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="SubjectController",
             )
             return ResponseHandler.generate_response(
@@ -171,15 +158,9 @@ class SubjectController(ISubjectController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def create(self, request):
+    async def create(self, request, data):
         try:
             await self.subject_service.begin_transaction()
-            payload = await request.json()
-            payload["details"] = {
-                "description": payload.get("description"),
-                "max_students": payload.get("max_students"),
-            }
-            data = Generator[SubjectCreateDto].generate(SubjectCreateDto, payload)
             subject = Mapper[SubjectCreateDto, Subject].map(data, Subject)
             response = await self.subject_service.create(subject)
             if not response.success:
@@ -225,7 +206,7 @@ class SubjectController(ISubjectController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="SubjectController",
             )
             return ResponseHandler.generate_response(
@@ -234,24 +215,13 @@ class SubjectController(ISubjectController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update(self, request):
+    async def update(self, request, id, data):
         try:
             await self.subject_service.begin_transaction()
-            subject_id = request.path_params.get("subject_id")
-            if not subject_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Subject ID is required",
-                )
-            payload = await request.json()
-            payload["id"] = int(subject_id)
-            payload["details"] = {
-                "description": payload.get("description"),
-                "max_students": payload.get("max_students"),
-            }
-            data = Generator[SubjectUpdateDto].generate(SubjectUpdateDto, payload)
-            subject = Mapper[SubjectUpdateDto, Subject].map(data, Subject)
+            subject = cast(
+                Subject, Mapper[SubjectUpdateDto, Subject].map(data, Subject)
+            )
+            subject.id = id
             response = await self.subject_service.update(subject)
             if not response.success:
                 await self.subject_service.rollback_transaction()
@@ -292,7 +262,7 @@ class SubjectController(ISubjectController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="SubjectController",
             )
             return ResponseHandler.generate_response(
@@ -301,17 +271,10 @@ class SubjectController(ISubjectController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def delete(self, request):
+    async def delete(self, request, id):
         try:
             await self.subject_service.begin_transaction()
-            subject_id = request.path_params.get("subject_id")
-            if not subject_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Subject ID is required",
-                )
-            subject = Generator[Subject].generate(Subject, {"id": int(subject_id)})
+            subject = Generator[Subject].generate(Subject, {"id": id})
             response = await self.subject_service.delete(subject)
             if not response.success:
                 await self.subject_service.rollback_transaction()
@@ -330,7 +293,7 @@ class SubjectController(ISubjectController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="SubjectController",
             )
             return ResponseHandler.generate_response(
@@ -379,7 +342,7 @@ class SubjectController(ISubjectController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="SubjectController",
             )
             return ResponseHandler.generate_response(
@@ -427,7 +390,7 @@ class SubjectController(ISubjectController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="SubjectController",
             )
             return ResponseHandler.generate_response(
@@ -436,16 +399,9 @@ class SubjectController(ISubjectController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def get_enrolled_one(self, request):
+    async def get_enrolled_one(self, request, id):
         try:
-            subject_id = request.path_params.get("subject_id")
-            if not subject_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Subject ID is required",
-                )
-            response = await self.subject_service.get_enrolled_one(int(subject_id))
+            response = await self.subject_service.get_enrolled_one(id)
             if not response.success:
                 return ResponseHandler.generate_response(
                     success=False, code=response.code, message=response.message
@@ -459,7 +415,7 @@ class SubjectController(ISubjectController):
                     level="warning",
                     code=404,
                     message="Enrolled course not found",
-                    details={"subject_id": subject_id},
+                    details={"subject_id": id},
                     source="SubjectController",
                 )
                 return ResponseHandler.generate_response(
@@ -482,7 +438,7 @@ class SubjectController(ISubjectController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="SubjectController",
             )
             return ResponseHandler.generate_response(
@@ -491,14 +447,9 @@ class SubjectController(ISubjectController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def register(self, request):
+    async def register(self, request, data):
         try:
             await self.subject_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserSubjectLinkActionDto].generate(
-                UserSubjectLinkActionDto, payload
-            )
-
             response = await self.subject_service.register(data.subject_id)
             if not response.success:
                 await self.subject_service.rollback_transaction()
@@ -520,7 +471,7 @@ class SubjectController(ISubjectController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="SubjectController",
             )
             return ResponseHandler.generate_response(
@@ -529,14 +480,9 @@ class SubjectController(ISubjectController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def unregister(self, request):
+    async def unregister(self, request, data):
         try:
             await self.subject_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserSubjectLinkActionDto].generate(
-                UserSubjectLinkActionDto, payload
-            )
-
             response = await self.subject_service.unregister(data.subject_id)
             if not response.success:
                 await self.subject_service.rollback_transaction()
@@ -558,7 +504,7 @@ class SubjectController(ISubjectController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="SubjectController",
             )
             return ResponseHandler.generate_response(

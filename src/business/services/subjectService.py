@@ -79,7 +79,7 @@ class SubjectService(ISubjectService):
                 level="error",
                 code=500,
                 message="An error occurred while finding subject",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="SubjectService",
             )
             return BaseResponseDto(
@@ -136,7 +136,7 @@ class SubjectService(ISubjectService):
                 level="error",
                 code=500,
                 message="An error occurred while finding subjects",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="SubjectService",
             )
             return BaseResponseDto(
@@ -270,7 +270,7 @@ class SubjectService(ISubjectService):
                 level="error",
                 code=500,
                 message="An error occurred while creating subject",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="SubjectService",
             )
             return BaseResponseDto(
@@ -451,7 +451,7 @@ class SubjectService(ISubjectService):
                 level="error",
                 code=500,
                 message="An error occurred while updating subject",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="SubjectService",
             )
             return BaseResponseDto(
@@ -538,7 +538,7 @@ class SubjectService(ISubjectService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting subject",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="SubjectService",
             )
             return BaseResponseDto(
@@ -633,7 +633,7 @@ class SubjectService(ISubjectService):
                 level="error",
                 code=500,
                 message="An error occurred while getting available courses",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="SubjectService",
             )
             return BaseResponseDto(
@@ -728,7 +728,7 @@ class SubjectService(ISubjectService):
                 level="error",
                 code=500,
                 message="An error occurred while getting enrolled courses",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="SubjectService",
             )
             return BaseResponseDto(
@@ -829,7 +829,7 @@ class SubjectService(ISubjectService):
                 level="error",
                 code=500,
                 message="An error occurred while getting enrolled course",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="SubjectService",
             )
             return BaseResponseDto(
@@ -1037,7 +1037,7 @@ class SubjectService(ISubjectService):
                 level="error",
                 code=500,
                 message="An error occurred while registering for subject",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="SubjectService",
             )
             return BaseResponseDto(
@@ -1140,7 +1140,7 @@ class SubjectService(ISubjectService):
                 level="error",
                 code=500,
                 message="An error occurred while unregistering from subject",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="SubjectService",
             )
             return BaseResponseDto(

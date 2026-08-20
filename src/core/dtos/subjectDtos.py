@@ -90,7 +90,6 @@ class SubjectResponseDto(BaseModel):
 
 
 class SubjectUpdateDto(BaseModel):
-    id: int = Field(..., gt=0, description="ID of the subject to update")
     name: str = Field(
         ..., min_length=1, max_length=50, description="Name of the subject"
     )

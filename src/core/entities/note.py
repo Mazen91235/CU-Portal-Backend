@@ -54,9 +54,7 @@ class Note(Base):
         ForeignKey("users.id", ondelete="CASCADE", name="fk_user_note"),
         nullable=False,
     )
-    author: Mapped["User"] = relationship(
-        "User", back_populates="notes", cascade="all, delete-orphan"
-    )
+    author: Mapped["User"] = relationship("User", back_populates="notes")
 
     # Indexes
     __table_args__ = (

@@ -76,7 +76,7 @@ class YearService(IYearService):
                 level="error",
                 code=500,
                 message="An error occurred while finding academic year",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="YearService",
             )
             return BaseResponseDto(
@@ -136,7 +136,7 @@ class YearService(IYearService):
                 level="error",
                 code=500,
                 message="An error occurred while finding academic years",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="YearService",
             )
             return BaseResponseDto(
@@ -218,7 +218,7 @@ class YearService(IYearService):
                 level="error",
                 code=500,
                 message="An error occurred while creating academic year",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="YearService",
             )
             return BaseResponseDto(
@@ -330,7 +330,7 @@ class YearService(IYearService):
                 level="error",
                 code=500,
                 message="An error occurred while updating academic year",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="YearService",
             )
             return BaseResponseDto(
@@ -416,7 +416,7 @@ class YearService(IYearService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting academic year",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="YearService",
             )
             return BaseResponseDto(

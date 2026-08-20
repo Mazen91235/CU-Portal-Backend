@@ -4,7 +4,14 @@ from core.iControllers.iDepartmentController import IDepartmentController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.departmentDtos import DepartmentResponseDto
+from core.dtos.departmentDtos import (
+    DepartmentCreateDto,
+    DepartmentResponseDto,
+    DepartmentUpdateDto,
+    DepartmentSearchDto,
+)
+from core.models.queryModel import QueryModel
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_department_admin_router(
@@ -26,8 +33,9 @@ def create_department_admin_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     def _is_authorized(*permissions):
         async def authorize(
@@ -59,10 +67,12 @@ def create_department_admin_router(
         summary="Find Department",
         description="Find a department by its ID, returning details and summary metrics",
     )
-    async def find_one(
-        request: Request, controller: IDepartmentController = Depends(_get_controller)
+    async def find_one_department(
+        department_id: int,
+        request: Request,
+        controller: IDepartmentController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=department_id)
 
     @router.get(
         "/",
@@ -75,10 +85,12 @@ def create_department_admin_router(
         summary="Find Departments",
         description="Find departments based on query parameters",
     )
-    async def find(
-        request: Request, controller: IDepartmentController = Depends(_get_controller)
+    async def find_departments(
+        query: QueryModel[DepartmentSearchDto],
+        request: Request,
+        controller: IDepartmentController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     @router.post(
         "/",
@@ -92,10 +104,12 @@ def create_department_admin_router(
         summary="Create Department",
         description="Create a new department",
     )
-    async def create(
-        request: Request, controller: IDepartmentController = Depends(_get_controller)
+    async def create_department(
+        data: DepartmentCreateDto,
+        request: Request,
+        controller: IDepartmentController = Depends(_get_controller),
     ):
-        return await controller.create(request)
+        return await controller.create(request, data=data)
 
     @router.patch(
         "/{department_id}",
@@ -109,10 +123,13 @@ def create_department_admin_router(
         summary="Update Department",
         description="Update an existing department by its ID",
     )
-    async def update(
-        request: Request, controller: IDepartmentController = Depends(_get_controller)
+    async def update_department(
+        department_id: int,
+        data: DepartmentUpdateDto,
+        request: Request,
+        controller: IDepartmentController = Depends(_get_controller),
     ):
-        return await controller.update(request)
+        return await controller.update(request, id=department_id, data=data)
 
     @router.delete(
         "/{department_id}",
@@ -125,9 +142,11 @@ def create_department_admin_router(
         summary="Delete Department",
         description="Delete a department by its ID",
     )
-    async def delete(
-        request: Request, controller: IDepartmentController = Depends(_get_controller)
+    async def delete_department(
+        department_id: int,
+        request: Request,
+        controller: IDepartmentController = Depends(_get_controller),
     ):
-        return await controller.delete(request)
+        return await controller.delete(request, id=department_id)
 
     return router

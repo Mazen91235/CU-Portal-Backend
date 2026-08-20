@@ -59,13 +59,21 @@ class EventOrganizer(Base):
     events: Mapped[list["Event"]] = relationship(
         "Event", back_populates="event_organizer", cascade="all, delete-orphan"
     )
+    logo_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey(
+            "attachments.id", ondelete="CASCADE", name="fk_attachment_event_organizer"
+        ),
+        nullable=False,
+    )
     logo: Mapped[Optional["Attachment"]] = relationship(
-        "Attachment",
-        back_populates="event_organizer_logo",
-        cascade="all, delete-orphan",
+        "Attachment", back_populates="event_organizer_logo", foreign_keys=[logo_id]
     )
     attachments: Mapped[list["Attachment"]] = relationship(
-        "Attachment", back_populates="event_organizer", cascade="all, delete-orphan"
+        "Attachment",
+        back_populates="event_organizer",
+        cascade="all, delete-orphan",
+        foreign_keys="Attachment.event_organizer_id",
     )
 
     # Indexes

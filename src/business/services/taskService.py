@@ -86,7 +86,7 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="Error finding task",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(
@@ -146,7 +146,7 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="An error occurred while finding tasks",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(
@@ -418,7 +418,7 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="An error occurred while creating task",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(
@@ -800,7 +800,7 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="An error occurred while updating task",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(
@@ -978,7 +978,7 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting task",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(

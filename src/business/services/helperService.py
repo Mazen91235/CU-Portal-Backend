@@ -86,7 +86,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while fetching IP address",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def get_logged_in_user(self):
@@ -107,7 +107,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while fetching logged-in user",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def get_logged_in_user_permissions(self):
@@ -159,7 +159,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while fetching logged-in user permissions",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def verify_restricted_access(
@@ -374,7 +374,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=False,
                 message="An error occurred while verifying restricted access",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def verify_academic_data(
@@ -502,7 +502,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=False,
                 message="An error occurred while verifying academic data",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def send_email(self, to_email, subject, body):
@@ -534,7 +534,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=False,
                 message="An error occurred while sending the email",
-                error=str(ex),
+                error=repr(ex),
             )
 
     def generate_dynamic_includes(self, cls, includes):
@@ -744,7 +744,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=False,
                 message="An error occurred while sending the notification",
-                error=str(ex),
+                error=repr(ex),
             )
 
     # File Functions
@@ -807,7 +807,7 @@ class HelperService(IHelperService[U]):
                             message="Request successful",
                         )
             except Exception as ex:
-                errors.append(str(ex))
+                errors.append(repr(ex))
                 await asyncio.sleep(2**attempt)  # Exponential backoff
                 continue
         return BaseResponseDto(
@@ -1024,7 +1024,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while verifying file existence on Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def remove_files_from_drive(self, files):
@@ -1101,7 +1101,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=False,
                 message="An error occurred while removing files from Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def fetch_from_drive(
@@ -1288,7 +1288,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while fetching the file from Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def get_google_access_token(
@@ -1357,7 +1357,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while fetching Connecting with Google API, please try again later",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def download_file_from_drive(
@@ -1442,7 +1442,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while downloading the file from Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def set_file_public_on_drive(
@@ -1516,7 +1516,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while setting the file public on Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def upload_file_to_drive(
@@ -1617,7 +1617,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while uploading the file to Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def delete_file_from_drive(
@@ -1665,7 +1665,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while deleting the file from Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def copy_file_on_drive(
@@ -1741,5 +1741,5 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while copying the file on Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )

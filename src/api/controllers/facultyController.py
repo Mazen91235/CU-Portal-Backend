@@ -1,10 +1,10 @@
+from typing import cast
 from core.iControllers.iFacultyController import IFacultyController
 from core.iServices.iFacultyService import IFacultyService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
-from core.utils.parser import Parser
 
 # Entities & DTOs
 from core.entities.faculty import Faculty
@@ -24,17 +24,10 @@ class FacultyController(IFacultyController):
         self.logger = logger
 
     # CRUD Functions
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         try:
-            faculty_id = request.path_params.get("faculty_id")
-            if not faculty_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Faculty ID is required",
-                )
             entity_search_dto = Generator[FacultySearchDto].generate(
-                FacultySearchDto, {"id": faculty_id}
+                FacultySearchDto, {"id": id}
             )
             response = await self.faculty_service.find_one(entity_search_dto)
             if not response.success:
@@ -73,7 +66,7 @@ class FacultyController(IFacultyController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="FacultyController",
             )
             return ResponseHandler.generate_response(
@@ -82,12 +75,8 @@ class FacultyController(IFacultyController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def find(self, request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[FacultySearchDto],
-            )
             entity_search_dto = Generator[FacultySearchDto].generate_from_query(
                 FacultySearchDto, query
             )
@@ -153,7 +142,7 @@ class FacultyController(IFacultyController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="FacultyController",
             )
             return ResponseHandler.generate_response(
@@ -162,11 +151,9 @@ class FacultyController(IFacultyController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def create(self, request):
+    async def create(self, request, data):
         try:
             await self.faculty_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[FacultyCreateDto].generate(FacultyCreateDto, payload)
             faculty = Mapper[FacultyCreateDto, Faculty].map(data, Faculty)
             response = await self.faculty_service.create(faculty)
             if not response.success:
@@ -211,7 +198,7 @@ class FacultyController(IFacultyController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="FacultyController",
             )
             return ResponseHandler.generate_response(
@@ -220,22 +207,14 @@ class FacultyController(IFacultyController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update(self, request):
+    async def update(self, request, id, data):
         try:
             await self.faculty_service.begin_transaction()
-            faculty_id = request.path_params.get("faculty_id")
-            if not faculty_id:
-                await self.faculty_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Faculty ID is required",
-                )
-
-            payload = await request.json()
-            payload["id"] = int(faculty_id)
-            data = Generator[FacultyUpdateDto].generate(FacultyUpdateDto, payload)
-            faculty = Mapper[FacultyUpdateDto, Faculty].map(data, Faculty)
+            faculty = cast(
+                Faculty,
+                Mapper[FacultyUpdateDto, Faculty].map(data, Faculty),
+            )
+            faculty.id = id
 
             response = await self.faculty_service.update(faculty)
             if not response.success:
@@ -280,7 +259,7 @@ class FacultyController(IFacultyController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="FacultyController",
             )
             return ResponseHandler.generate_response(
@@ -289,21 +268,10 @@ class FacultyController(IFacultyController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def delete(self, request):
+    async def delete(self, request, id):
         try:
             await self.faculty_service.begin_transaction()
-            faculty_id = request.path_params.get("faculty_id")
-            if not faculty_id:
-                await self.faculty_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Faculty ID is required",
-                )
-
-            data = Generator[FacultyDeleteDto].generate(
-                FacultyDeleteDto, {"id": int(faculty_id)}
-            )
+            data = Generator[FacultyDeleteDto].generate(FacultyDeleteDto, {"id": id})
             entity = Mapper[FacultyDeleteDto, Faculty].map(data, Faculty)
             response = await self.faculty_service.delete(entity)
             if not response.success:
@@ -328,7 +296,7 @@ class FacultyController(IFacultyController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="FacultyController",
             )
             return ResponseHandler.generate_response(

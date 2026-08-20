@@ -36,7 +36,6 @@ class RoleResponseDto(BaseModel):
 
 
 class RoleUpdateDto(BaseModel):
-    id: int | None = Field(None, description="ID of the role to update")
     name: str | None = Field(
         None, min_length=1, max_length=60, description="Name of Role"
     )
@@ -50,18 +49,18 @@ class RoleDeleteDto(BaseModel):
 
 
 class RoleSearchDto(BaseSearchDto):
-    id: int | None = Field(None, description="ID of the role")
-    name: str | None = Field(None, description="Name of the role")
-    level: int | None = Field(None, description="Level of the role")
+    id: int | None = Field(default=None, description="ID of the role")
+    name: str | None = Field(default=None, description="Name of the role")
+    level: int | None = Field(default=None, description="Level of the role")
     created_at_from: datetime | None = Field(
-        None, description="Filter roles created after this timestamp"
+        default=None, description="Filter roles created after this timestamp"
     )
     created_at_to: datetime | None = Field(
-        None, description="Filter roles created before this timestamp"
+        default=None, description="Filter roles created before this timestamp"
     )
     updated_at_from: datetime | None = Field(
-        None, description="Filter roles updated after this timestamp"
+        default=None, description="Filter roles updated after this timestamp"
     )
     updated_at_to: datetime | None = Field(
-        None, description="Filter roles updated before this timestamp"
+        default=None, description="Filter roles updated before this timestamp"
     )
