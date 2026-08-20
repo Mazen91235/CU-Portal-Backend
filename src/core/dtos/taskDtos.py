@@ -39,10 +39,11 @@ class TaskCreateDto(BaseModel):
         default_factory=list, description="List of Google Drive file URLs"
     )
     links: list[dict[str, str]] = Field(
-        default_factory=list, description="List of external links objects"
+        default_factory=list, description="List of external links"
     )
     details: dict = Field(
-        default_factory=dict, description="Additional details about the task (stored as JSON)"
+        default_factory=dict,
+        description="Additional details about the task (stored as JSON)",
     )
 
 
@@ -54,14 +55,20 @@ class TaskResponseDto(BaseModel):
     )
     url: str | None = Field(default=None, description="Submission URL for the task")
     urls: list[str] | None = Field(default=None, description="List of file URLs")
-    links: list[dict] | None = Field(default=None, description="List of external links")
+    links: list[dict[str, str]] | None = Field(
+        default=None, description="List of external links"
+    )
     details: dict | None = Field(
         default=None,
         description="Additional details about the task including description and files",
     )
-    deadline: datetime | None = Field(default=None, description="Deadline datetime of the task")
+    deadline: datetime | None = Field(
+        default=None, description="Deadline datetime of the task"
+    )
     due_date: datetime | None = Field(default=None, description="Due date of the task")
-    created_at: datetime | None = Field(default=None, description="Creation Date of the task")
+    created_at: datetime | None = Field(
+        default=None, description="Creation Date of the task"
+    )
     updated_at: datetime | None = Field(
         default=None, description="Last Update Date of the task"
     )
@@ -101,9 +108,7 @@ class TaskUpdateDto(BaseModel):
         max_length=100,
         description="URL where the task should be submitted",
     )
-    deadline: datetime = Field(
-        ..., description="Datetime for the task deadline"
-    )
+    deadline: datetime = Field(..., description="Datetime for the task deadline")
     subject_id: int = Field(
         ..., gt=0, description="ID of the subject this task belongs to"
     )
@@ -119,8 +124,8 @@ class TaskUpdateDto(BaseModel):
     urls: list[str] = Field(
         default_factory=list, description="List of Google Drive file URLs"
     )
-    links: list[str] = Field(
-        default_factory=list, description="List of external links objects"
+    links: list[dict[str, str]] = Field(
+        default_factory=list, description="List of external links"
     )
     details: dict = Field(
         default_factory=dict, description="Additional details about the task"

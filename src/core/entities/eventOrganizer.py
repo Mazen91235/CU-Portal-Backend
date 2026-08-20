@@ -8,6 +8,7 @@ from .base import (
     datetime,
     JSON,
     MutableDict,
+    MutableList,
     ForeignKey,
     Index,
     Mapped,
@@ -33,10 +34,10 @@ class EventOrganizer(Base):
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     url: Mapped[str] = mapped_column(String(255), nullable=False)
     urls: Mapped[list] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True, default=list
+        MutableList.as_mutable(JSON), nullable=True, default=list
     )
-    links: Mapped[dict[str, str]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True, default=dict
+    links: Mapped[list[dict[str, str]]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=True, default=list
     )
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict

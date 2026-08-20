@@ -11,6 +11,7 @@ from core.dtos.roleDtos import (
     RoleSearchDto,
 )
 from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
 
 
@@ -82,8 +83,10 @@ def create_role_admin_router(
         description="Retrieve a list of roles based on query parameters",
     )
     async def find_roles(
-        query: QueryModel[RoleSearchDto],
         request: Request,
+        query: QueryModel[RoleSearchDto] = Depends(
+            Parser.parse_query(QueryModel[RoleSearchDto])
+        ),
         controller: IRoleController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)

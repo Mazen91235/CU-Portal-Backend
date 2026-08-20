@@ -11,7 +11,9 @@ from core.dtos.announcementDtos import (
     AnnouncementSearchDto,
 )
 from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
+
 
 def create_announcement_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
@@ -80,8 +82,10 @@ def create_announcement_user_router(
         description="Find all announcements for the currently logged in user based on enrolled subjects",
     )
     async def find_announcements(
-        query: QueryModel[AnnouncementSearchDto],
         request: Request,
+        query: QueryModel[AnnouncementSearchDto] = Depends(
+            Parser.parse_query(QueryModel[AnnouncementSearchDto])
+        ),
         controller: IAnnouncementController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)
@@ -178,8 +182,10 @@ def create_announcement_admin_router(
         description="Find announcements based on query parameters (Admin View)",
     )
     async def find_announcements(
-        query: QueryModel[AnnouncementSearchDto],
         request: Request,
+        query: QueryModel[AnnouncementSearchDto] = Depends(
+            Parser.parse_query(QueryModel[AnnouncementSearchDto])
+        ),
         controller: IAnnouncementController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)

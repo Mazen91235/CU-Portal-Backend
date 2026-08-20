@@ -11,6 +11,7 @@ from core.dtos.yearDtos import (
     YearSearchDto,
 )
 from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
 
 
@@ -79,8 +80,10 @@ def create_year_admin_router(
         description="Find academic years based on query parameters",
     )
     async def find_years(
-        query: QueryModel[YearSearchDto],
         request: Request,
+        query: QueryModel[YearSearchDto] = Depends(
+            Parser.parse_query(QueryModel[YearSearchDto])
+        ),
         controller: IYearController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)

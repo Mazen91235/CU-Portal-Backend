@@ -11,6 +11,7 @@ from core.dtos.taskDtos import (
     TaskSearchDto,
 )
 from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
 
 
@@ -79,8 +80,10 @@ def create_task_user_router(
         description="Find all tasks for the currently logged-in user based on enrolled subjects",
     )
     async def find_tasks(
-        query: QueryModel[TaskSearchDto],
         request: Request,
+        query: QueryModel[TaskSearchDto] = Depends(
+            Parser.parse_query(QueryModel[TaskSearchDto])
+        ),
         controller: ITaskController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)
@@ -175,8 +178,10 @@ def create_task_admin_router(
         description="Find tasks based on query parameters (Admin View)",
     )
     async def find_tasks(
-        query: QueryModel[TaskSearchDto],
         request: Request,
+        query: QueryModel[TaskSearchDto] = Depends(
+            Parser.parse_query(QueryModel[TaskSearchDto])
+        ),
         controller: ITaskController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)

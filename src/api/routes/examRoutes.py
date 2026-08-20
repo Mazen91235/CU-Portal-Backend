@@ -11,6 +11,7 @@ from core.dtos.examDtos import (
     ExamSearchDto,
 )
 from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
 
 
@@ -81,8 +82,10 @@ def create_exam_user_router(
         description="Find all exams for the currently logged-in user based on enrolled subjects",
     )
     async def find_exams(
-        query: QueryModel[ExamSearchDto],
         request: Request,
+        query: QueryModel[ExamSearchDto] = Depends(
+            Parser.parse_query(QueryModel[ExamSearchDto])
+        ),
         controller: IExamController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)
@@ -177,8 +180,10 @@ def create_exam_admin_router(
         description="Find exams based on query parameters (Admin View)",
     )
     async def find_exams(
-        query: QueryModel[ExamSearchDto],
         request: Request,
+        query: QueryModel[ExamSearchDto] = Depends(
+            Parser.parse_query(QueryModel[ExamSearchDto])
+        ),
         controller: IExamController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)

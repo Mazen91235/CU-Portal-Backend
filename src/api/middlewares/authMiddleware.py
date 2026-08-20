@@ -317,7 +317,7 @@ class AuthMiddleware(IAuthMiddleware):
 
             user_response = await self.user_service.find_one(
                 UserSearchDto(id=user.id),
-                ["subjects"],
+                ["user_subject_links.subject"],
             )
             if not user_response.success:
                 raise HTTPException(

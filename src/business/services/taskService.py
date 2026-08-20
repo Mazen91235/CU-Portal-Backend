@@ -259,7 +259,9 @@ class TaskService(ITaskService):
                         message="Failed to fetch file data from Google Drive",
                     )
                 files.append(file_data.model_dump(mode="json"))
-            for link_name, link_url in (data.links).items():
+            for link in data.links:
+                link_name = link.get("name", "")
+                link_url = link.get("url", "")
                 if not Validator.is_valid_external_url(link_url):
                     await self.logger.log(
                         action="Create",
@@ -681,7 +683,9 @@ class TaskService(ITaskService):
                         message="An error occurred while updating task",
                     )
                 files.append(file_data.model_dump(mode="json"))
-            for link_name, link_url in (data.links).items():
+            for link in data.links:
+                link_name = link.get("name", "")
+                link_url = link.get("url", "")
                 if not Validator.is_valid_external_url(link_url):
                     await self.logger.log(
                         action="Update",

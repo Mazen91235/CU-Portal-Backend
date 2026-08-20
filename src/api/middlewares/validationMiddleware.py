@@ -7,7 +7,7 @@ class ValidationMiddleware(IValidationMiddleware):
     def __init__(self, logger: IBaseLogger):
         self.logger = logger
 
-    async def handle(self, request, *keys):
+    async def validate(self, request, *keys):
         try:
             data = await request.json()
             for key in keys:

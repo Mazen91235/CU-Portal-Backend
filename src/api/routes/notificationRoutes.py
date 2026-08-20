@@ -7,6 +7,7 @@ from core.dtos.notificationDtos import NotificationResponseDto
 from core.dtos.userNotificationDtos import UserNotificationSearchDto
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
 
 
@@ -52,8 +53,10 @@ def create_notification_user_router(
         description="Retrieves a paginated list of notifications for the logged-in user.",
     )
     async def find_notifications(
-        query: QueryModel[UserNotificationSearchDto],
         request: Request,
+        query: QueryModel[UserNotificationSearchDto] = Depends(
+            Parser.parse_query(QueryModel[UserNotificationSearchDto])
+        ),
         controller: INotificationController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)

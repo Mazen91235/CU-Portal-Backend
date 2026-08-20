@@ -11,6 +11,7 @@ from core.dtos.facultyDtos import (
     FacultySearchDto,
 )
 from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
 
 
@@ -85,8 +86,10 @@ def create_faculty_admin_router(
         description="Get all faculties matching optional filter criteria",
     )
     async def find_faculties(
-        query: QueryModel[FacultySearchDto],
         request: Request,
+        query: QueryModel[FacultySearchDto] = Depends(
+            Parser.parse_query(QueryModel[FacultySearchDto])
+        ),
         controller: IFacultyController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)

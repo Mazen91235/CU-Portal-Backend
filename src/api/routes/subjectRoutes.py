@@ -12,6 +12,7 @@ from core.dtos.subjectDtos import (
 )
 from core.dtos.userSubjectLinkDtos import UserSubjectLinkActionDto
 from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
 
 
@@ -214,8 +215,10 @@ def create_subject_admin_router(
         description="Get all courses",
     )
     async def find_subjects(
-        query: QueryModel[SubjectSearchDto],
         request: Request,
+        query: QueryModel[SubjectSearchDto] = Depends(
+            Parser.parse_query(QueryModel[SubjectSearchDto])
+        ),
         controller: ISubjectController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)

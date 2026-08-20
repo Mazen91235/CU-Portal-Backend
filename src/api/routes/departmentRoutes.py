@@ -11,6 +11,7 @@ from core.dtos.departmentDtos import (
     DepartmentSearchDto,
 )
 from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
 
 
@@ -86,8 +87,10 @@ def create_department_admin_router(
         description="Find departments based on query parameters",
     )
     async def find_departments(
-        query: QueryModel[DepartmentSearchDto],
         request: Request,
+        query: QueryModel[DepartmentSearchDto] = Depends(
+            Parser.parse_query(QueryModel[DepartmentSearchDto])
+        ),
         controller: IDepartmentController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)

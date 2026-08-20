@@ -84,7 +84,7 @@ def create_user_user_router(
         "/has-permissions",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_validate("permissions", "is_and")),
+            Depends(_validate("required_permissions", "is_and")),
         ],
         response_model=BaseResponseDto[bool],
         status_code=200,
@@ -199,8 +199,10 @@ def create_user_admin_router(
         description="Find users based on query parameters",
     )
     async def find_users(
-        query: QueryModel[UserSearchDto],
         request: Request,
+        query: QueryModel[UserSearchDto] = Depends(
+            Parser.parse_query(QueryModel[UserSearchDto])
+        ),
         controller: IUserController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)

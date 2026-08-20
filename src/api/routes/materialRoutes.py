@@ -13,6 +13,7 @@ from core.dtos.materialDtos import (
     MaterialsFetchFromDriveDto,
 )
 from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
 
 
@@ -78,8 +79,10 @@ def create_material_user_router(
         description="Get a list of all materials",
     )
     async def find_materials(
-        query: QueryModel[MaterialSearchDto],
         request: Request,
+        query: QueryModel[MaterialSearchDto] = Depends(
+            Parser.parse_query(QueryModel[MaterialSearchDto])
+        ),
         controller: IMaterialController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)
@@ -193,8 +196,10 @@ def create_material_admin_router(
         description="Get a list of all materials",
     )
     async def find_materials(
-        query: QueryModel[MaterialSearchDto],
         request: Request,
+        query: QueryModel[MaterialSearchDto] = Depends(
+            Parser.parse_query(QueryModel[MaterialSearchDto])
+        ),
         controller: IMaterialController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)

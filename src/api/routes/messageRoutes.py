@@ -6,6 +6,7 @@ from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.messageDtos import MessageCreateDto, MessageResponseDto, MessageSearchDto
 from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
 
 
@@ -112,8 +113,10 @@ def create_message_admin_router(
         description="Find contact-us messages based on query parameters",
     )
     async def find_messages(
-        query: QueryModel[MessageSearchDto],
         request: Request,
+        query: QueryModel[MessageSearchDto] = Depends(
+            Parser.parse_query(QueryModel[MessageSearchDto])
+        ),
         controller: IMessageController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)
