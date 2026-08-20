@@ -46,11 +46,11 @@ class AnnouncementCreateDto(BaseModel):
 
 
 class AnnouncementResponseDto(BaseModel):
-    id: int | None = Field(None, description="ID of the announcement")
-    title: str | None = Field(None, description="Title of the announcement")
-    content: str | None = Field(None, description="Content of the announcement")
+    id: int | None = Field(default=None, description="ID of the announcement")
+    title: str | None = Field(default=None, description="Title of the announcement")
+    content: str | None = Field(default=None, description="Content of the announcement")
     date: datetime | None = Field(
-        None, description="Scheduled date of the announcement"
+        default=None, description="Scheduled date of the announcement"
     )
     urls: list[str] | None = Field(
         default_factory=list, description="List of attached file URLs"
@@ -62,27 +62,27 @@ class AnnouncementResponseDto(BaseModel):
         default_factory=dict, description="Additional details (e.g., files_data)"
     )
     created_at: datetime | None = Field(
-        None, description="Creation date of the announcement"
+        default=None, description="Creation date of the announcement"
     )
     modified_at: datetime | None = Field(
-        None, description="Last update date of the announcement"
+        default=None, description="Last update date of the announcement"
     )
 
     # Relationships
     author: UserResponseDto | None = Field(
-        None, description="Author who created the announcement"
+        default=None, description="Author who created the announcement"
     )
     subject: SubjectResponseDto | None = Field(
-        None, description="Subject associated with the announcement"
+        default=None, description="Subject associated with the announcement"
     )
     faculty: FacultyResponseDto | None = Field(
-        None, description="Faculty associated with the announcement"
+        default=None, description="Faculty associated with the announcement"
     )
     department: DepartmentResponseDto | None = Field(
-        None, description="Department associated with the announcement"
+        default=None, description="Department associated with the announcement"
     )
     year: YearResponseDto | None = Field(
-        None, description="Academic year associated with the announcement"
+        default=None, description="Academic year associated with the announcement"
     )
 
     # Pydantic Configuration
@@ -92,14 +92,14 @@ class AnnouncementResponseDto(BaseModel):
 
 
 class AnnouncementUpdateDto(BaseModel):
-    title: str | None = Field(
-        default=None,
+    title: str = Field(
+        ...,
         min_length=1,
         max_length=255,
         description="Title of the announcement",
     )
-    content: str | None = Field(
-        default=None,
+    content: str = Field(
+        ...,
         min_length=1,
         max_length=1000,
         description="Content of the announcement",
@@ -107,8 +107,8 @@ class AnnouncementUpdateDto(BaseModel):
     date: str | None = Field(
         default=None, description="ISO formatted date string for the announcement"
     )
-    subject_id: int | None = Field(
-        default=None, gt=0, description="ID of the subject this announcement belongs to"
+    subject_id: int = Field(
+        ..., gt=0, description="ID of the subject this announcement belongs to"
     )
     faculty_id: int | None = Field(default=None, gt=0, description="ID of the faculty")
     department_id: int | None = Field(

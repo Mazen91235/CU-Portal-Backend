@@ -918,12 +918,8 @@ class UserController(IUserController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def get_current_user(self, request):
+    async def get_current_user(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[UserSearchDto],
-            )
             includes = query.includes
             response = await self.user_service.get_current_user(includes)
             if not response.success:

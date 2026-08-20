@@ -8,34 +8,40 @@ if TYPE_CHECKING:
 
 
 class LogResponseDto(BaseModel):
-    id: int | None = Field(None, description="ID of the user")
-    action: str | None = Field(None, description="Action performed by the user")
+    id: int | None = Field(default=None, description="ID of the user")
+    action: str | None = Field(default=None, description="Action performed by the user")
     entity: str | None = Field(
-        None, description="Entity on which the action was performed"
+        default=None, description="Entity on which the action was performed"
     )
     level: str | None = Field(
-        None, description="Level of the log (e.g, info, warning, error)"
+        default=None, description="Level of the log (e.g, info, warning, error)"
     )
     response_code: int | None = Field(
-        None, description="Response code associated with the log"
+        default=None, description="Response code associated with the log"
     )
-    message: str | None = Field(None, description="Message associated with the log")
+    message: str | None = Field(
+        default=None, description="Message associated with the log"
+    )
     details: dict | None = Field(
-        None, description="Additional details associated with the log"
+        default=None, description="Additional details associated with the log"
     )
-    source: str | None = Field(None, description="Source of the log (e.g, LogService)")
-    route: str | None = Field(None, description="Route associated with the log")
-    ip: str | None = Field(None, description="IP address associated with the log")
+    source: str | None = Field(
+        default=None, description="Source of the log (e.g, LogService)"
+    )
+    route: str | None = Field(default=None, description="Route associated with the log")
+    ip: str | None = Field(
+        default=None, description="IP address associated with the log"
+    )
     created_at: datetime | None = Field(
-        None, description="Timestamp when the log was created"
+        default=None, description="Timestamp when the log was created"
     )
     updated_at: datetime | None = Field(
-        None, description="Timestamp when the log was last updated"
+        default=None, description="Timestamp when the log was last updated"
     )
 
     # Relationships
     user: UserResponseDto | None = Field(
-        None, description="User associated with the log"
+        default=None, description="User associated with the log"
     )
 
     # Pydantic Configuration

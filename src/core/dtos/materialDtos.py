@@ -21,49 +21,51 @@ class MaterialCreateDto(BaseModel):
         description="Type of the material (file, folder, youtube, drive, external.)",
     )
     url: str | None = Field(
-        None, max_length=255, description="Drive URL of the material"
+        default=None, max_length=255, description="Drive URL of the material"
     )
-    subject_id: int | None = Field(
-        default=None, description="ID of the associated subject"
-    )
+    subject_id: int = Field(..., description="ID of the associated subject")
     parent_id: int | None = Field(
         default=None, description="ID of the parent material (for hierarchy)"
     )
 
 
 class MaterialResponseDto(BaseModel):
-    id: int = Field(..., description="ID of the material")
-    name: str | None = Field(None, max_length=200, description="Name of the material")
-    type: str = Field(
-        ...,
+    id: int | None = Field(default=None, description="ID of the material")
+    name: str | None = Field(
+        default=None, max_length=200, description="Name of the material"
+    )
+    type: str | None = Field(
+        default=None,
         max_length=30,
         description="Type of the material (file, folder, youtube, drive, external.)",
     )
     url: str | None = Field(
-        None, max_length=255, description="Drive URL of the material"
+        default=None, max_length=255, description="Drive URL of the material"
     )
     details: dict | None = Field(
         default=None, description="Additional metadata about the material"
     )
 
-    created_at: datetime | None = Field(None, description="Creation timestamp")
+    created_at: datetime | None = Field(default=None, description="Creation timestamp")
     modified_at: datetime | None = Field(
-        None, description="Last modification timestamp"
+        default=None, description="Last modification timestamp"
     )
 
     # Relationships
-    author: UserResponseDto | None = Field(None, description="Author of the material")
+    author: UserResponseDto | None = Field(
+        default=None, description="Author of the material"
+    )
 
     subject: SubjectResponseDto | None = Field(
-        None, description="Subject associated with the material"
+        default=None, description="Subject associated with the material"
     )
 
     parent_id: int | None = Field(
-        None, description="Parent material ID (for hierarchy)"
+        default=None, description="Parent material ID (for hierarchy)"
     )
 
     children: list[MaterialResponseDto] | None = Field(
-        None, description="List of child materials (for hierarchy)"
+        default=None, description="List of child materials (for hierarchy)"
     )
 
     # Pydantic Configuration
@@ -73,13 +75,9 @@ class MaterialResponseDto(BaseModel):
 
 
 class MaterialUpdateDto(BaseModel):
-    name: str | None = Field(
-        None, max_length=200, description="Updated name of the material"
-    )
-    description: str | None = Field(
-        None, max_length=500, description="Updated description"
-    )
-    url: str | None = Field(None, max_length=255, description="Updated URL")
+    name: str = Field(..., max_length=200, description="Updated name of the material")
+    type: str = Field(..., max_length=30, description="Updated type of the material")
+    url: str | None = Field(default=None, max_length=255, description="Updated URL")
 
 
 class MaterialsDeleteDto(BaseModel):

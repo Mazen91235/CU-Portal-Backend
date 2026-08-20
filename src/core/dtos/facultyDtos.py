@@ -18,35 +18,35 @@ class FacultyCreateDto(BaseModel):
 
 
 class FacultyResponseDto(BaseModel):
-    id: int | None = Field(None, description="ID of the faculty")
-    name: str = Field(..., description="Name of Faculty")
+    id: int | None = Field(default=None, description="ID of the faculty")
+    name: str | None = Field(default=None, description="Name of Faculty")
     details: dict | None = Field(
-        None, description="Additional details about the faculty"
+        default=None, description="Additional details about the faculty"
     )
     created_at: datetime | None = Field(
-        None, description="Creation Date of the faculty"
+        default=None, description="Creation Date of the faculty"
     )
     updated_at: datetime | None = Field(
-        None, description="Last Update Date of the faculty"
+        default=None, description="Last Update Date of the faculty"
     )
     # Relationships
     users: list[UserResponseDto] | None = Field(
-        None, description="List of users associated with the faculty"
+        default=None, description="List of users associated with the faculty"
     )
     departments: list[DepartmentResponseDto] | None = Field(
-        None, description="List of departments associated with the faculty"
+        default=None, description="List of departments associated with the faculty"
     )
     announcements: list[AnnouncementResponseDto] | None = Field(
-        None, description="List of announcements associated with the faculty"
+        default=None, description="List of announcements associated with the faculty"
     )
     tasks: list[TaskResponseDto] | None = Field(
-        None, description="List of tasks associated with the faculty"
+        default=None, description="List of tasks associated with the faculty"
     )
     subjects: list[SubjectResponseDto] | None = Field(
-        None, description="List of subjects associated with the faculty"
+        default=None, description="List of subjects associated with the faculty"
     )
     weeks: list[dict] | None = Field(
-        None, description="List of weeks associated with the faculty"
+        default=None, description="List of weeks associated with the faculty"
     )
     # Pydantic Configuration
     model_config = {

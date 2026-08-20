@@ -12,6 +12,7 @@ if SRC_DIR not in sys.path:
 
 from api.di.container import Container
 from api.routes.customRoute import CustomRoute
+from business.contextVars.requestContext import request_context
 from business.contextVars.sessionContext import session_context
 
 # Imports for Model Rebuild and Open-API Schema Generation
@@ -65,7 +66,10 @@ def rebuild_response_dtos() -> None:
 
 def create_app() -> FastAPI:
     rebuild_response_dtos()
-    app = FastAPI(title="CU - Portal", version="1.0.0")
+    app = FastAPI(
+        title="CU - Portal",
+        version="1.0.0",
+    )
     container = Container()
     app.state.container = container
     app.router.route_class = CustomRoute
@@ -75,11 +79,13 @@ def create_app() -> FastAPI:
         # Create one DB session per request and store it in ContextVar.
         session = container.session_factory()()
         session_token = session_context.set(session)
+        request_token = request_context.set(request)
         try:
             response = await call_next(request)
             return response
         finally:
             session_context.reset(session_token)
+            request_context.reset(request_token)
             await session.close()
 
     # We resolve the router here at startup.
@@ -132,9 +138,14 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=[
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://localhost:8000",
+        ],
         allow_methods=["*"],
         allow_headers=["*"],
+        allow_credentials=True,
     )
 
     return app

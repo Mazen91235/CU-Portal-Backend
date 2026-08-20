@@ -96,7 +96,11 @@ class Mapper(Generic[T, U]):
                 setattr(dest, attr, mapped_value)
 
         if to_dict:
-            return dest.model_dump() if isinstance(dest, BaseModel) else dest.__dict__
+            return (
+                dest.model_dump(mode="json")
+                if isinstance(dest, BaseModel)
+                else dest.__dict__
+            )
 
         return dest
 

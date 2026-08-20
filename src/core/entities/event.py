@@ -15,6 +15,8 @@ from .base import (
     Optional,
     TimezoneHandler,
     TypedDict,
+    AssociationProxy,
+    association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
@@ -22,6 +24,7 @@ from .base import (
 
 if TYPE_CHECKING:
     from .user import User
+    from .userEvent import UserEvent
     from .faculty import Faculty
     from .department import Department
     from .year import Year
@@ -98,11 +101,14 @@ class Event(Base):
     event_organizer: Mapped["EventOrganizer"] = relationship(
         "EventOrganizer", back_populates="events"
     )
-    attendees: Mapped[list["User"]] = relationship(
-        "User",
-        secondary="user_events",
-        back_populates="going_events",
-        cascade="all, delete",
+    attendees: AssociationProxy[list["User"]] = association_proxy(
+        "user_events",
+        "user",
+    )
+    user_events: Mapped[list["UserEvent"]] = relationship(
+        "UserEvent",
+        back_populates="event",
+        cascade="all, delete-orphan",
     )
     logo_id: Mapped[Optional[int]] = mapped_column(
         Integer,

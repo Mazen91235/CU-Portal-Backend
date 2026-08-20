@@ -264,7 +264,7 @@ class AnnouncementService(IAnnouncementService):
                         data=None,
                         message="Failed to fetch file data from Google Drive",
                     )
-                files.append(file_data.model_dump())
+                files.append(file_data.model_dump(mode="json"))
             for link_name, link_url in (data.links).items():
                 if not Validator.is_valid_external_url(link_url):
                     await self.logger.log(
@@ -668,7 +668,7 @@ class AnnouncementService(IAnnouncementService):
                         data=None,
                         message="An error occurred while updating announcement",
                     )
-                files.append(file_data.model_dump())
+                files.append(file_data.model_dump(mode="json"))
             for link_name, link_url in (data.links).items():
                 if not Validator.is_valid_external_url(link_url):
                     await self.logger.log(

@@ -15,6 +15,8 @@ from .base import (
     Optional,
     TimezoneHandler,
     TypedDict,
+    AssociationProxy,
+    association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
@@ -22,6 +24,7 @@ from .base import (
 
 if TYPE_CHECKING:
     from .user import User
+    from .userSubjectLink import UserSubjectLink
     from .year import Year
     from .department import Department
     from .faculty import Faculty
@@ -109,12 +112,15 @@ class Subject(Base):
     # questions: Mapped[list["Question"]] = relationship(
     #     "Question", back_populates="subject", cascade="all, delete-orphan"
     # )
-    users: Mapped[list["User"]] = relationship(
-        "User", secondary="user_subject_links", back_populates="subjects"
+    users: AssociationProxy[list["User"]] = association_proxy(
+        "user_subject_links",
+        "user",
     )
-    # roadmap_courses: Mapped[list["RoadmapCourse"]] = relationship(
-    #     "RoadmapCourse", back_populates="subject", cascade="all, delete-orphan"
-    # )
+    user_subject_links: Mapped[list["UserSubjectLink"]] = relationship(
+        "UserSubjectLink",
+        back_populates="subject",
+        cascade="all, delete-orphan",
+    )
 
     # Indexes
     __table_args__ = (

@@ -31,31 +31,33 @@ class DepartmentCreateDto(BaseModel):
 
 
 class DepartmentResponseDto(BaseModel):
-    id: int = Field(..., description="ID of the department")
-    name: str = Field(..., description="Name of the department")
-    code: str | None = Field(None, description="Code of the department")
+    id: int | None = Field(default=None, description="ID of the department")
+    name: str | None = Field(default=None, description="Name of the department")
+    code: str | None = Field(default=None, description="Code of the department")
     details: dict | None = Field(default=None, description="Additional details")
     study_type: Department.StudyType | None = Field(
-        None, description="Study type of the department"
+        default=None, description="Study type of the department"
     )
-    created_at: datetime | None = Field(None, description="Creation timestamp")
-    updated_at: datetime | None = Field(None, description="Last update timestamp")
+    created_at: datetime | None = Field(default=None, description="Creation timestamp")
+    updated_at: datetime | None = Field(
+        default=None, description="Last update timestamp"
+    )
 
     # Relationships
     faculty: FacultyResponseDto | None = Field(
-        None, description="Faculty associated with the department"
+        default=None, description="Faculty associated with the department"
     )
     users: list[UserResponseDto] | None = Field(
-        None, description="Users in this department"
+        default=None, description="Users in this department"
     )
     subjects: list[SubjectResponseDto] | None = Field(
-        None, description="Subjects in this department"
+        default=None, description="Subjects in this department"
     )
     tasks: list[TaskResponseDto] | None = Field(
-        None, description="Tasks in this department"
+        default=None, description="Tasks in this department"
     )
     announcements: list[AnnouncementResponseDto] | None = Field(
-        None, description="Announcements in this department"
+        default=None, description="Announcements in this department"
     )
 
     model_config = {

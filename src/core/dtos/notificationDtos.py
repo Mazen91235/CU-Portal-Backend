@@ -8,14 +8,14 @@ if TYPE_CHECKING:
 
 
 class NotificationResponseDto(BaseModel):
-    id: int | None = Field(None, description="ID of the notification")
-    content: str | None = Field(None, description="Content of the notification")
+    id: int | None = Field(default=None, description="ID of the notification")
+    content: str | None = Field(default=None, description="Content of the notification")
     type: Notification.Type | None = Field(
-        None, description="Type of the notification (e.g., task, announcement)"
+        default=None, description="Type of the notification (e.g., task, announcement)"
     )
-    parent_id: int | None = Field(None, description="ID of the related parent entity")
-    url: str | None = Field(None, description="URL to redirect to")
-    created_at: datetime | None = Field(None, description="Creation timestamp")
+    parent_id: int | None = Field(default=None, description="ID of the related parent entity")
+    url: str | None = Field(default=None, description="URL to redirect to")
+    created_at: datetime | None = Field(default=None, description="Creation timestamp")
 
     model_config = {
         "from_attributes": True,

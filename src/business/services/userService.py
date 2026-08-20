@@ -496,7 +496,7 @@ class UserService(IUserService):
             data.google_email = google_user_details.get("google_email")
             data.google_avatar = google_user_details.get("google_avatar")
             data.google_refresh_token = google_user_details.get("google_refresh_token")
-            json_user_data = data.model_dump()
+            json_user_data = data.model_dump(mode="json")
             encoded_json_user_data_response = JWTHandler.encode_jwt(
                 json_user_data,
                 os.environ.get("USER_TOKEN_SECRET_KEY"),
@@ -2765,8 +2765,11 @@ class UserService(IUserService):
                     data=None,
                     message="Logged in user not found, please log in again.",
                 )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Role, ["role_links.exact_role"]
+            )
             role_response = await self.role_repository.find_one(
-                Role.id == logged_in_user.role_id, ["exact_roles"]
+                Role.id == logged_in_user.role_id, dynamic_includes
             )
             if not role_response.success:
                 return BaseResponseDto(

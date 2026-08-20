@@ -397,7 +397,7 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"File not found on Google Drive for the provided URL.",
                     )
-                data.details["file_data"] = file_data.model_dump()
+                data.details["file_data"] = file_data.model_dump(mode="json")
             unique_name_response = await self._generate_unique_name(
                 data.name, subject_id, parent_id
             )
@@ -763,7 +763,7 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"File not found on Google Drive for the provided URL.",
                     )
-                data.details["file_data"] = file_data.model_dump()
+                data.details["file_data"] = file_data.model_dump(mode="json")
                 to_be_removed = (
                     existing_material.url
                     if not existing_material.details.get("fetched")
@@ -2140,7 +2140,7 @@ class MaterialService(IMaterialService):
                     copied_file.id
                 )
                 new_material.details["fetched"] = False
-                new_material.details["file_data"] = copied_file.model_dump()
+                new_material.details["file_data"] = copied_file.model_dump(mode="json")
             create_response = await self.material_repository.create(new_material)
             if not create_response.success:
                 return BaseResponseDto(
@@ -2237,7 +2237,7 @@ class MaterialService(IMaterialService):
                 )
                 new_material.details = {
                     "fetched": True,
-                    "file_data": fetched_file.model_dump(),
+                    "file_data": fetched_file.model_dump(mode="json"),
                 }
             unique_name_response = await self._generate_unique_name(
                 new_material.name, new_material.subject_id, new_material.parent_id

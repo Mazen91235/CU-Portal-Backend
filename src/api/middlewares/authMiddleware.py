@@ -26,9 +26,6 @@ class AuthMiddleware(IAuthMiddleware):
 
     async def is_logged_in(self, request: Request, refresh_token: str | None = None):
         try:
-            print(
-                f"AuthMiddleware: is_logged_in called with refresh_token: {refresh_token}"
-            )
             if not refresh_token:
                 await self.logger.log(
                     action="AuthCheck",
@@ -45,7 +42,7 @@ class AuthMiddleware(IAuthMiddleware):
 
             user_search_dto = UserSearchDto(
                 refresh_token=refresh_token,
-                refresh_expire_at_from=TimezoneHandler.now("UTC"),
+                # refresh_expire_at_from=TimezoneHandler.now("UTC"),
             )
 
             user_response = await self.user_service.find_one(

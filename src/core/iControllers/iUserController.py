@@ -12,6 +12,7 @@ from core.dtos.userDtos import (
     UserUpdateAcademicDataDto,
     UserHasPermissionsDto,
 )
+from core.models.queryModel import QueryModel
 
 
 class IUserController(
@@ -78,7 +79,9 @@ class IUserController(
         pass
 
     @abstractmethod
-    async def get_current_user(self, request: Request) -> Response:
+    async def get_current_user(
+        self, request: Request, query: QueryModel[UserSearchDto]
+    ) -> Response:
         pass
 
     @abstractmethod

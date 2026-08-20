@@ -20,20 +20,26 @@ class YearCreateDto(BaseModel):
 
 
 class YearResponseDto(BaseModel):
-    id: int = Field(..., description="ID of the year")
-    year: int = Field(..., description="Academic year value")
+    id: int | None = Field(default=None, description="ID of the year")
+    year: int | None = Field(default=None, description="Academic year value")
     details: dict | None = Field(default=None, description="Additional details")
-    created_at: datetime | None = Field(None, description="Creation timestamp")
-    updated_at: datetime | None = Field(None, description="Last update timestamp")
+    created_at: datetime | None = Field(default=None, description="Creation timestamp")
+    updated_at: datetime | None = Field(
+        default=None, description="Last update timestamp"
+    )
 
     # Relationships
-    users: list[UserResponseDto] | None = Field(None, description="Users in this year")
-    subjects: list[SubjectResponseDto] | None = Field(
-        None, description="Subjects in this year"
+    users: list[UserResponseDto] | None = Field(
+        default=None, description="Users in this year"
     )
-    tasks: list[TaskResponseDto] | None = Field(None, description="Tasks in this year")
+    subjects: list[SubjectResponseDto] | None = Field(
+        default=None, description="Subjects in this year"
+    )
+    tasks: list[TaskResponseDto] | None = Field(
+        default=None, description="Tasks in this year"
+    )
     announcements: list[AnnouncementResponseDto] | None = Field(
-        None, description="Announcements in this year"
+        default=None, description="Announcements in this year"
     )
 
     model_config = {

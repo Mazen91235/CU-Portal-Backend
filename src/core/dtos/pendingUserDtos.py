@@ -8,18 +8,18 @@ if TYPE_CHECKING:
 
 
 class PendingUserResponseDto(BaseModel):
-    id: int | None = Field(None, description="ID of the user")
-    url: str = Field(..., description="URL of the user approval image")
+    id: int | None = Field(default=None, description="ID of the user")
+    url: str | None = Field(default=None, description="URL of the user approval image")
     created_at: datetime | None = Field(
-        None, description="Timestamp when the pending user was created"
+        default=None, description="Timestamp when the pending user was created"
     )
     updated_at: datetime | None = Field(
-        None, description="Timestamp when the pending user was last updated"
+        default=None, description="Timestamp when the pending user was last updated"
     )
 
     # Relationships
     user: UserResponseDto | None = Field(
-        None, description="The user associated with this pending user"
+        default=None, description="The user associated with this pending user"
     )
 
     # Pydantic Configuration

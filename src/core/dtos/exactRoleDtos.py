@@ -8,15 +8,15 @@ if TYPE_CHECKING:
 
 
 class ExactRoleResponseDto(BaseModel):
-    id: int | None = Field(None, description="ID of the role")
-    name: str = Field(..., description="Name of Role")
+    id: int | None = Field(default=None, description="ID of the role")
+    name: str | None = Field(default=None, description="Name of Role")
     created_at: datetime | None = Field(
-        None, description="Timestamp when the role was created"
+        default=None, description="Timestamp when the role was created"
     )
     updated_at: datetime | None = Field(
-        None, description="Timestamp when the role was last updated"
+        default=None, description="Timestamp when the role was last updated"
     )
     # Relationships
     roles: list[RoleResponseDto] | None = Field(
-        None, description="List of roles associated with the exact role"
+        default=None, description="List of roles associated with the exact role"
     )

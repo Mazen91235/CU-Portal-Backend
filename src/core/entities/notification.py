@@ -12,6 +12,8 @@ from .base import (
     TimezoneHandler,
     TypedDict,
     Literal,
+    AssociationProxy,
+    association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
@@ -19,6 +21,7 @@ from .base import (
 
 if TYPE_CHECKING:
     from .user import User
+    from .userNotification import UserNotification
 
 
 class Notification(Base):
@@ -48,8 +51,14 @@ class Notification(Base):
     )
 
     # Relationships
-    users: Mapped[list["User"]] = relationship(
-        "User", secondary="user_notifications", back_populates="notifications"
+    users: AssociationProxy[list["User"]] = association_proxy(
+        "user_notifications",
+        "user",
+    )
+    user_notifications: Mapped[list["UserNotification"]] = relationship(
+        "UserNotification",
+        back_populates="notification",
+        cascade="all, delete-orphan",
     )
 
     # Attributes

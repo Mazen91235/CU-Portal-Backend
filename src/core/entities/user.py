@@ -17,6 +17,8 @@ from .base import (
     Optional,
     TimezoneHandler,
     TypedDict,
+    AssociationProxy,
+    association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
@@ -33,10 +35,13 @@ if TYPE_CHECKING:
     from .task import Task
     from .announcement import Announcement
     from .notification import Notification
+    from .userNotification import UserNotification
     from .log import Log
     from .subject import Subject
+    from .userSubjectLink import UserSubjectLink
     from .requestLimit import RequestLimit
     from .event import Event
+    from .userEvent import UserEvent
     from .note import Note
     from .attachment import Attachment
 
@@ -156,20 +161,26 @@ class User(Base):
     announcements: Mapped[list["Announcement"]] = relationship(
         "Announcement", back_populates="author", cascade="all, delete-orphan"
     )
-    notifications: Mapped[list["Notification"]] = relationship(
-        "Notification",
-        secondary="user_notifications",
-        back_populates="users",
-        cascade="all, delete",
+    notifications: AssociationProxy[list["Notification"]] = association_proxy(
+        "user_notifications",
+        "notification",
+    )
+    user_notifications: Mapped[list["UserNotification"]] = relationship(
+        "UserNotification",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
     events: Mapped[list["Event"]] = relationship(
         "Event", back_populates="author", cascade="all, delete-orphan"
     )
-    going_events: Mapped[list["Event"]] = relationship(
-        "Event",
-        secondary="user_events",
-        back_populates="attendees",
-        cascade="all, delete",
+    going_events: AssociationProxy[list["Event"]] = association_proxy(
+        "user_events",
+        "event",
+    )
+    user_events: Mapped[list["UserEvent"]] = relationship(
+        "UserEvent",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
     notes: Mapped[list["Note"]] = relationship(
         "Note", back_populates="author", cascade="all, delete-orphan"
@@ -177,11 +188,14 @@ class User(Base):
     logs: Mapped[list["Log"]] = relationship(
         "Log", back_populates="user", cascade="all, delete-orphan"
     )
-    subjects: Mapped[list["Subject"]] = relationship(
-        "Subject",
-        secondary="user_subject_links",
-        back_populates="users",
-        cascade="all, delete",
+    subjects: AssociationProxy[list["Subject"]] = association_proxy(
+        "user_subject_links",
+        "subject",
+    )
+    user_subject_links: Mapped[list["UserSubjectLink"]] = relationship(
+        "UserSubjectLink",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
     request_limits: Mapped[list["RequestLimit"]] = relationship(
         "RequestLimit", back_populates="user", cascade="all, delete-orphan"

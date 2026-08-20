@@ -14,6 +14,7 @@ from core.dtos.userDtos import (
     UserStatisticsResponseDto,
 )
 from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
 
 
@@ -58,9 +59,13 @@ def create_user_user_router(
         description="Get the currently logged in user",
     )
     async def get_current_user(
-        request: Request, controller: IUserController = Depends(_get_controller)
+        request: Request,
+        query: QueryModel[UserSearchDto] = Depends(
+            Parser.parse_query(QueryModel[UserSearchDto])
+        ),
+        controller: IUserController = Depends(_get_controller),
     ):
-        return await controller.get_current_user(request)
+        return await controller.get_current_user(request, query=query)
 
     @router.get(
         "/permissions",
@@ -95,7 +100,7 @@ def create_user_user_router(
 
     @router.patch(
         "/",
-        dependencies=[Depends(_is_logged_in), Depends(_validate("name", "url"))],
+        dependencies=[Depends(_is_logged_in), Depends(_validate("name"))],
         response_model=BaseResponseDto[UserResponseDto],
         status_code=200,
         summary="Update User",

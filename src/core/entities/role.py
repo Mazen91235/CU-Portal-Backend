@@ -11,6 +11,8 @@ from .base import (
     Optional,
     TimezoneHandler,
     TypedDict,
+    AssociationProxy,
+    association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
@@ -19,6 +21,7 @@ from .base import (
 if TYPE_CHECKING:
     from .user import User
     from .exactRole import ExactRole
+    from .roleLink import RoleLink
 
 
 class Role(Base):
@@ -45,8 +48,12 @@ class Role(Base):
 
     # Relationships
     users: Mapped[list["User"]] = relationship("User", back_populates="role")
-    exact_roles: Mapped[list["ExactRole"]] = relationship(
-        "ExactRole", secondary="role_links", back_populates="roles"
+    exact_roles: AssociationProxy[list["ExactRole"]] = association_proxy(
+        "role_links",
+        "exact_role",
+    )
+    role_links: Mapped[list["RoleLink"]] = relationship(
+        "RoleLink", back_populates="role", cascade="all, delete-orphan"
     )
 
     # Indexes
