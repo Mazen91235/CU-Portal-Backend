@@ -19,7 +19,9 @@ from core.utils.cookieHandler import cookie_scheme
 def create_subject_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/courses", tags=["Courses"], route_class=CustomRoute)
+    router = APIRouter(
+        prefix="/courses", tags=["User Courses"], route_class=CustomRoute
+    )
 
     def _get_controller() -> ISubjectController:
         return controller_provider()
@@ -139,7 +141,9 @@ def create_subject_user_router(
 def create_subject_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/courses", tags=["Courses"], route_class=CustomRoute)
+    router = APIRouter(
+        prefix="/courses", tags=["Admin Courses"], route_class=CustomRoute
+    )
 
     def _get_controller() -> ISubjectController:
         return controller_provider()

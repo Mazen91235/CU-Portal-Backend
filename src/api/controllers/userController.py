@@ -798,12 +798,8 @@ class UserController(IUserController):
             )
 
     # User Functions
-    async def get_statistics(self, request):
+    async def get_statistics(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[UserSearchDto],
-            )
             entity_search_dto = Generator[UserSearchDto].generate_from_query(
                 UserSearchDto, query
             )

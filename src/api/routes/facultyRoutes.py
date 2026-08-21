@@ -18,7 +18,9 @@ from core.utils.cookieHandler import cookie_scheme
 def create_faculty_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/faculties", tags=["Faculties"], route_class=CustomRoute)
+    router = APIRouter(
+        prefix="/faculties", tags=["Admin Faculties"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IFacultyController:
         return controller_provider()

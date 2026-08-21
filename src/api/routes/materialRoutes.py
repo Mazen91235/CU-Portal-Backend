@@ -20,7 +20,9 @@ from core.utils.cookieHandler import cookie_scheme
 def create_material_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/materials", tags=["Materials"], route_class=CustomRoute)
+    router = APIRouter(
+        prefix="/materials", tags=["User Materials"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IMaterialController:
         return controller_provider()
@@ -112,7 +114,9 @@ def create_material_user_router(
 def create_material_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/materials", tags=["Materials"], route_class=CustomRoute)
+    router = APIRouter(
+        prefix="/materials", tags=["Admin Materials"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IMaterialController:
         return controller_provider()

@@ -332,13 +332,13 @@ class RoleService(IRoleService):
                 message="An error occurred while creating role",
             )
 
-    async def update(self, data):
+    async def update(self, id, data):
         try:
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Role, ["exact_roles"]
+                Role, ["role_links.exact_role"]
             )
             target_role_response = await self.role_repository.find_one(
-                Role.id == data.id, dynamic_includes
+                Role.id == id, dynamic_includes
             )
             if not target_role_response.success:
                 return BaseResponseDto(
@@ -374,7 +374,7 @@ class RoleService(IRoleService):
                     message=existing_role_response.message,
                 )
             existing_role = existing_role_response.data
-            if existing_role and existing_role.id != data.id:
+            if existing_role and existing_role.id != id:
                 await self.logger.log(
                     action="Update",
                     entity="Role",
@@ -501,7 +501,7 @@ class RoleService(IRoleService):
             target_role.name = data.name or ""
             target_role.exact_roles = exact_roles
             update_response = await self.role_repository.update(
-                target_role, ["name", "exact_roles"]
+                target_role, ["name", "role_links.exact_role"]
             )
             if not update_response.success:
                 return BaseResponseDto(
@@ -560,7 +560,7 @@ class RoleService(IRoleService):
     async def delete(self, data):
         try:
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Role, ["exact_roles"]
+                Role, ["role_links.exact_role"]
             )
             target_role_response = await self.role_repository.find_one(
                 Role.id == data.id, dynamic_includes
@@ -822,7 +822,7 @@ class RoleService(IRoleService):
             exclusions = Role.RoleConfig.EXCLUSIONS
             for exclusion_role, excluded_permissions in exclusions.items():
                 dynamic_includes = self.helper_service.generate_dynamic_includes(
-                    Role, ["exact_roles"]
+                    Role, ["role_links.exact_role"]
                 )
                 role_response = await self.role_repository.find_one(
                     Role.name == exclusion_role, dynamic_includes
@@ -897,7 +897,7 @@ class RoleService(IRoleService):
                         )
                     role.exact_roles.remove(exact_role)
                 update_response = await self.role_repository.update(
-                    role, ["exact_roles"]
+                    role, ["role_links.exact_role"]
                 )
                 if not update_response.success:
                     return BaseResponseDto(

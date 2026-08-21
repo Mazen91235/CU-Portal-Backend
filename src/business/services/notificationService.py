@@ -22,7 +22,16 @@ class NotificationService(INotificationService):
         self.logger = logger
         self.helper_service = helper_service
 
-    # Generic Methods
+    async def begin_transaction(self):
+        await self.notification_repository.begin_transaction()
+
+    async def commit_transaction(self):
+        await self.notification_repository.commit_transaction()
+
+    async def rollback_transaction(self):
+        await self.notification_repository.rollback_transaction()
+
+    # CRUD Functions
     async def find_one(
         self,
         data=None,

@@ -555,6 +555,21 @@ class UserService(IUserService):
                     message=created_token_response.message,
                 )
             created_token = created_token_response.data
+            if not created_token:
+                await self.logger.log(
+                    action="Create",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to create verification token, no token returned after creation",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while creating verification token, please try again.",
+                )
             message = f"Please use the following code to verify your email: {token_str}. This code will expire in {User.VerificationToken.EXPIRE_HOURS} hour({f"s" if User.VerificationToken.EXPIRE_HOURS > 1 else ''})."
             email_response = await self.helper_service.send_email(
                 to_email=data.email,
@@ -2373,7 +2388,7 @@ class UserService(IUserService):
                     )
                 user.status = record.approved
                 role_response = await self.role_repository.find_one(
-                    Role.id == record.role_id, ["exact_roles"]
+                    Role.id == record.role_id, ["role_links.exact_role"]
                 )
                 if not role_response.success:
                     return BaseResponseDto(

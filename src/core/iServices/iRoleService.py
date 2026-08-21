@@ -12,7 +12,7 @@ class IRoleService(IQueryableService[Role, RoleSearchDto], IDeletableService[Rol
         pass
 
     @abstractmethod
-    async def update(self, data: RoleUpdateDto) -> BaseResponseDto[Role]:
+    async def update(self, id: int, data: RoleUpdateDto) -> BaseResponseDto[Role]:
         pass
 
     @abstractmethod

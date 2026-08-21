@@ -24,6 +24,7 @@ from api.routes.subjectRoutes import (
     create_subject_user_router,
 )
 from api.routes.notificationRoutes import create_notification_user_router
+from api.routes.logRoutes import create_log_admin_router
 from api.routes.materialRoutes import (
     create_material_user_router,
     create_material_admin_router,
@@ -40,6 +41,7 @@ from api.controllers.roleController import RoleController
 from api.controllers.examController import ExamController
 from api.controllers.facultyController import FacultyController
 from api.controllers.messageController import MessageController
+from api.controllers.logController import LogController
 from api.controllers.materialController import MaterialController
 from api.controllers.subjectController import SubjectController
 from api.controllers.announcementController import AnnouncementController
@@ -57,6 +59,7 @@ from business.services.taskService import TaskService
 from business.services.subjectService import SubjectService
 from business.services.announcementService import AnnouncementService
 from business.services.notificationService import NotificationService
+from business.services.logService import LogService
 from business.services.materialService import MaterialService
 from business.services.messageService import MessageService
 from business.services.facultyService import FacultyService
@@ -238,6 +241,12 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
+    log_service = providers.Factory(
+        LogService,
+        log_repository=log_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
     material_service = providers.Factory(
         MaterialService,
         material_repository=material_repository,
@@ -323,7 +332,7 @@ class Container(containers.DeclarativeContainer):
     auth_middleware = providers.Factory(
         AuthMiddleware,
         user_service=user_service,
-        role_service=None,  # Until Created
+        role_service=role_service,
         logger=logger,
     )
 
@@ -353,6 +362,10 @@ class Container(containers.DeclarativeContainer):
     )
     notification_controller = providers.Factory(
         NotificationController, notification_service=notification_service, logger=logger
+    )
+
+    log_controller = providers.Factory(
+        LogController, log_service=log_service, logger=logger
     )
 
     material_controller = providers.Factory(
@@ -451,6 +464,13 @@ class Container(containers.DeclarativeContainer):
     notification_user_routes = providers.Factory(
         create_notification_user_router,
         controller_provider=notification_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    log_admin_routes = providers.Factory(
+        create_log_admin_router,
+        controller_provider=log_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )

@@ -171,7 +171,7 @@ class AuthMiddleware(IAuthMiddleware):
                 )
             role_search_dto = RoleSearchDto(id=user.role_id)
             user_role_response = await self.role_service.find_one(
-                role_search_dto, ["exact_roles"]
+                role_search_dto, ["role_links.exact_role"]
             )
             if not user_role_response.success:
                 raise HTTPException(

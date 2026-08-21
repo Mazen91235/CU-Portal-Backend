@@ -11,7 +11,9 @@ from core.utils.cookieHandler import cookie_scheme
 
 
 def create_message_public_router(controller_provider, validation_middleware_provider):
-    router = APIRouter(prefix="/messages", tags=["Messages"], route_class=CustomRoute)
+    router = APIRouter(
+        prefix="/messages", tags=["Public Messages"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IMessageController:
         return controller_provider()
@@ -51,7 +53,9 @@ def create_message_public_router(controller_provider, validation_middleware_prov
 def create_message_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/messages", tags=["Messages"], route_class=CustomRoute)
+    router = APIRouter(
+        prefix="/messages", tags=["Admin Messages"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IMessageController:
         return controller_provider()

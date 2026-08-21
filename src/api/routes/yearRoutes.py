@@ -18,7 +18,7 @@ from core.utils.cookieHandler import cookie_scheme
 def create_year_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/years", tags=["Years"], route_class=CustomRoute)
+    router = APIRouter(prefix="/years", tags=["Admin Years"], route_class=CustomRoute)
 
     def _get_controller() -> IYearController:
         return controller_provider()

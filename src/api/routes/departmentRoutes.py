@@ -19,7 +19,7 @@ def create_department_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
     router = APIRouter(
-        prefix="/departments", tags=["Departments"], route_class=CustomRoute
+        prefix="/departments", tags=["Admin Departments"], route_class=CustomRoute
     )
 
     def _get_controller() -> IDepartmentController:

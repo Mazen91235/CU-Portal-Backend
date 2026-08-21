@@ -65,7 +65,9 @@ class IUserController(
 
     # User Functions
     @abstractmethod
-    async def get_statistics(self, request: Request) -> Response:
+    async def get_statistics(
+        self, request: Request, query: QueryModel[UserSearchDto]
+    ) -> Response:
         pass
 
     @abstractmethod

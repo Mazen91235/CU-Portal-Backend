@@ -31,7 +31,7 @@ class RoleController(IRoleController):
             response = await self.role_service.find_one(
                 entity_search_dto,
                 [
-                    "exact_roles",
+                    "role_links.exact_role",
                     "users",
                 ],
             )
@@ -220,9 +220,7 @@ class RoleController(IRoleController):
     async def update(self, request, id, data):
         try:
             await self.role_service.begin_transaction()
-            role = cast(Role, Mapper[RoleUpdateDto, Role].map(data, Role))
-            role.id = id
-            response = await self.role_service.update(role)
+            response = await self.role_service.update(id, data)
 
             if not response.success:
                 await self.role_service.rollback_transaction()

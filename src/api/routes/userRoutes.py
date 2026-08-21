@@ -21,7 +21,7 @@ from core.utils.cookieHandler import cookie_scheme
 def create_user_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="", tags=[], route_class=CustomRoute)
+    router = APIRouter(prefix="", tags=["User"], route_class=CustomRoute)
 
     def _get_controller() -> IUserController:
         return controller_provider()
@@ -137,7 +137,7 @@ def create_user_user_router(
 def create_user_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/users", tags=["Users"], route_class=CustomRoute)
+    router = APIRouter(prefix="/users", tags=["Admin Users"], route_class=CustomRoute)
 
     def _get_controller() -> IUserController:
         return controller_provider()
@@ -208,7 +208,7 @@ def create_user_admin_router(
         return await controller.find(request, query=query)
 
     @router.get(
-        "/statistics",
+        "/system/statistics",
         dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
         response_model=BaseResponseDto[UserStatisticsResponseDto],
         status_code=200,
@@ -216,9 +216,13 @@ def create_user_admin_router(
         description="Get statistics for the users in the system, including total count, new users this month, percentage increase, active users, and pending users.",
     )
     async def get_user_statistics(
-        request: Request, controller: IUserController = Depends(_get_controller)
+        request: Request,
+        query: QueryModel[UserSearchDto] = Depends(
+            Parser.parse_query(QueryModel[UserSearchDto])
+        ),
+        controller: IUserController = Depends(_get_controller),
     ):
-        return await controller.get_statistics(request)
+        return await controller.get_statistics(request, query=query)
 
     @router.patch(
         "/",

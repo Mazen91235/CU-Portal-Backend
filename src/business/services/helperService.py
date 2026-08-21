@@ -128,7 +128,9 @@ class HelperService(IHelperService[U]):
                     data=None,
                     message="No logged-in user found",
                 )
-            dynamic_includes = self.generate_dynamic_includes(Role, ["exact_roles"])
+            dynamic_includes = self.generate_dynamic_includes(
+                Role, ["role_links.exact_role"]
+            )
             role_response = await self.role_repository.find_one(
                 Role.id == user.role_id, dynamic_includes
             )
