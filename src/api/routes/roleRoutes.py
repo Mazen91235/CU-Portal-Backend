@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, set_timeout
 from core.iControllers.iRoleController import IRoleController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -163,7 +163,11 @@ def create_role_admin_router(
 
     @router.get(
         "/permissions/reset",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("Is Admin"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Is Admin")),
+            Depends(set_timeout(120)),
+        ],
         response_model=BaseResponseDto,
         status_code=200,
         summary="Reset permissions",

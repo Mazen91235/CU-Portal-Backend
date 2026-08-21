@@ -115,6 +115,9 @@ class Subject(Base):
     users: AssociationProxy[list["User"]] = association_proxy(
         "user_subject_links",
         "user",
+        creator=lambda user: __import__(
+            "core.entities.userSubjectLink", fromlist=["UserSubjectLink"]
+        ).UserSubjectLink(user=user),
     )
     user_subject_links: Mapped[list["UserSubjectLink"]] = relationship(
         "UserSubjectLink",

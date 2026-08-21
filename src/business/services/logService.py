@@ -29,6 +29,51 @@ class LogService(ILogService):
         await self.log_repository.rollback_transaction()
 
     # CRUD Functions
+    async def count(
+        self,
+        data=None,
+        is_and=False,
+        starts_with=True,
+        is_exact=True,
+    ):
+        try:
+            predicate = self.helper_service.generate_dynamic_predicate(
+                Log,
+                data,
+                ["action", "entity", "message"],
+                is_and,
+                starts_with,
+                is_exact,
+            )
+            result = await self.log_repository.count(
+                predicate,
+            )
+            if not result.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=result.code,
+                    data=None,
+                    message=result.message,
+                )
+            log_count = result.data
+            return BaseResponseDto(success=True, data=log_count)
+        except Exception as ex:
+            await self.logger.log(
+                action="Count",
+                entity="Log",
+                level="error",
+                code=500,
+                message=f"An error occurred while counting logs",
+                details={"error": repr(ex)},
+                source="LogService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while counting logs",
+            )
+
     async def find_one(
         self,
         data=None,
@@ -155,4 +200,71 @@ class LogService(ILogService):
                 code=500,
                 data=None,
                 message="An error occurred while finding logs",
+            )
+
+    async def delete(self, logs_count):
+        try:
+            logs_response = await self.log_repository.find(
+                order_by=["created_at"],
+                page=1,
+                limit=logs_count,
+            )
+            if not logs_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=logs_response.code,
+                    data=None,
+                    message=logs_response.message,
+                )
+            logs = logs_response.data
+            if not logs:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Log",
+                    level="info",
+                    code=404,
+                    message="No logs found to delete",
+                    details={},
+                    source="LogService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="No logs found to delete",
+                )
+            for log in logs:
+                delete_response = await self.log_repository.delete(log)
+                if not delete_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=delete_response.code,
+                        data=None,
+                        message=delete_response.message,
+                    )
+            await self.logger.log(
+                action="Delete",
+                entity="Log",
+                level="info",
+                code=200,
+                message=f"Successfully deleted {logs_count} logs",
+                details={},
+                source="LogService",
+            )
+            return BaseResponseDto(success=True, code=200, data=True)
+        except Exception as ex:
+            await self.logger.log(
+                action="Delete",
+                entity="Log",
+                level="error",
+                code=500,
+                message="An error occurred while deleting logs",
+                details={"error": repr(ex)},
+                source="LogService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while deleting logs",
             )

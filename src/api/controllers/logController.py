@@ -21,6 +21,48 @@ class LogController(ILogController):
         self.logger = logger
 
     # CRUD Functions
+    async def count(self, request, query):
+        try:
+            entity_search_dto = Generator[LogSearchDto].generate_from_query(
+                LogSearchDto, query
+            )
+            is_and = query.is_and
+            starts_with = query.starts_with
+            is_exact = query.is_exact
+
+            response = await self.log_service.count(
+                entity_search_dto, is_and, starts_with, is_exact
+            )
+
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+
+            log_count = response.data
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=log_count,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="Count",
+                entity="Log",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="LogController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
     async def find_one(self, request, id):
         try:
             entity_search_dto = Generator[LogSearchDto].generate(
@@ -133,6 +175,64 @@ class LogController(ILogController):
         except Exception as e:
             await self.logger.log(
                 action="Find",
+                entity="Log",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="LogController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def delete(self, request, logs_count):
+        try:
+            await self.log_service.begin_transaction()
+            response = await self.log_service.delete(logs_count)
+            if not response.success:
+                await self.log_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            response_data = response.data
+            if not response_data:
+                await self.log_service.rollback_transaction()
+                await self.logger.log(
+                    action="Delete",
+                    entity="Log",
+                    level="info",
+                    code=404,
+                    message="No logs found to delete",
+                    source="LogController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=404,
+                    message="No logs found to delete",
+                )
+            await self.log_service.commit_transaction()
+            await self.logger.log(
+                action="Delete",
+                entity="Log",
+                level="info",
+                code=200,
+                message=f"Successfully deleted {logs_count} logs",
+                source="LogController",
+            )
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=True,
+            )
+        except Exception as e:
+            await self.log_service.rollback_transaction()
+            await self.logger.log(
+                action="Delete",
                 entity="Log",
                 level="error",
                 code=500,

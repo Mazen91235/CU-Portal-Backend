@@ -716,7 +716,7 @@ class RoleService(IRoleService):
     async def reset_permissions(self):
         try:
             current_exact_roles_response = await self.exact_role_repository.find(
-                limit=int(math.inf)
+                limit=math.floor(1e6)
             )
             if not current_exact_roles_response.success:
                 return BaseResponseDto(
@@ -897,7 +897,7 @@ class RoleService(IRoleService):
                         )
                     role.exact_roles.remove(exact_role)
                 update_response = await self.role_repository.update(
-                    role, ["role_links.exact_role"]
+                    role, ["role_links", "exact_roles"]
                 )
                 if not update_response.success:
                     return BaseResponseDto(

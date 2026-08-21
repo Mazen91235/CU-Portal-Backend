@@ -54,6 +54,9 @@ class Notification(Base):
     users: AssociationProxy[list["User"]] = association_proxy(
         "user_notifications",
         "user",
+        creator=lambda user: __import__(
+            "core.entities.userNotification", fromlist=["UserNotification"]
+        ).UserNotification(user=user),
     )
     user_notifications: Mapped[list["UserNotification"]] = relationship(
         "UserNotification",

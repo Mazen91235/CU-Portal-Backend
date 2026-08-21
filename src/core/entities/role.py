@@ -51,6 +51,9 @@ class Role(Base):
     exact_roles: AssociationProxy[list["ExactRole"]] = association_proxy(
         "role_links",
         "exact_role",
+        creator=lambda exact_role: __import__(
+            "core.entities.roleLink", fromlist=["RoleLink"]
+        ).RoleLink(exact_role=exact_role),
     )
     role_links: Mapped[list["RoleLink"]] = relationship(
         "RoleLink", back_populates="role", cascade="all, delete-orphan"
@@ -122,6 +125,7 @@ class Role(Base):
             "Delete Announcements",
             "Manage All Announcements",
             "View Logs",
+            "Delete Logs",
             "View Messages",
         ]
         EXCLUSIONS = {

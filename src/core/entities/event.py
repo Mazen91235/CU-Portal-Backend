@@ -105,6 +105,9 @@ class Event(Base):
     attendees: AssociationProxy[list["User"]] = association_proxy(
         "user_events",
         "user",
+        creator=lambda user: __import__(
+            "core.entities.userEvent", fromlist=["UserEvent"]
+        ).UserEvent(user=user),
     )
     user_events: Mapped[list["UserEvent"]] = relationship(
         "UserEvent",

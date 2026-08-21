@@ -1,6 +1,14 @@
+from abc import abstractmethod
+from fastapi import Request, Response
+from core.iControllers.bases.iCountableController import ICountableController
 from core.iControllers.bases.iQueryableController import IQueryableController
 from core.dtos.logDtos import LogSearchDto
 
 
-class ILogController(IQueryableController[LogSearchDto]):
-    pass
+class ILogController(
+    ICountableController[LogSearchDto],
+    IQueryableController[LogSearchDto],
+):
+    @abstractmethod
+    async def delete(self, request: Request, logs_count: int) -> Response:
+        pass

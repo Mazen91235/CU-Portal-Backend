@@ -48,6 +48,9 @@ class ExactRole(Base):
     roles: AssociationProxy[list["Role"]] = association_proxy(
         "role_links",
         "role",
+        creator=lambda role: __import__(
+            "core.entities.roleLink", fromlist=["RoleLink"]
+        ).RoleLink(role=role),
     )
     role_links: Mapped[list["RoleLink"]] = relationship(
         "RoleLink", back_populates="exact_role", cascade="all, delete-orphan"

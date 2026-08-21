@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, set_timeout
 from core.iControllers.iLogController import ILogController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -55,6 +55,26 @@ def create_log_admin_router(
         return validate_request
 
     @router.get(
+        "/count",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Logs")),
+        ],
+        response_model=BaseResponseDto[int],
+        status_code=200,
+        summary="Get Logs Count",
+        description="Get the total count of logs based on optional filter criteria",
+    )
+    async def count_logs(
+        request: Request,
+        query: QueryModel[LogSearchDto] = Depends(
+            Parser.parse_query(QueryModel[LogSearchDto])
+        ),
+        controller: ILogController = Depends(_get_controller),
+    ):
+        return await controller.count(request, query=query)
+
+    @router.get(
         "/{log_id}",
         dependencies=[
             Depends(_is_logged_in),
@@ -91,5 +111,24 @@ def create_log_admin_router(
         controller: ILogController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)
+
+    @router.delete(
+        "/",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Delete Logs")),
+            Depends(set_timeout(120)),
+        ],
+        response_model=BaseResponseDto[bool],
+        status_code=200,
+        summary="Delete Logs",
+        description="Delete logs based on optional filter criteria",
+    )
+    async def delete_logs(
+        logs_count: int,
+        request: Request,
+        controller: ILogController = Depends(_get_controller),
+    ):
+        return await controller.delete(request, logs_count=logs_count)
 
     return router

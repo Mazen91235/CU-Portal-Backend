@@ -164,6 +164,9 @@ class User(Base):
     notifications: AssociationProxy[list["Notification"]] = association_proxy(
         "user_notifications",
         "notification",
+        creator=lambda notification: __import__(
+            "core.entities.userNotification", fromlist=["UserNotification"]
+        ).UserNotification(notification=notification),
     )
     user_notifications: Mapped[list["UserNotification"]] = relationship(
         "UserNotification",
@@ -176,6 +179,9 @@ class User(Base):
     going_events: AssociationProxy[list["Event"]] = association_proxy(
         "user_events",
         "event",
+        creator=lambda event: __import__(
+            "core.entities.userEvent", fromlist=["UserEvent"]
+        ).UserEvent(event=event),
     )
     user_events: Mapped[list["UserEvent"]] = relationship(
         "UserEvent",
@@ -191,6 +197,9 @@ class User(Base):
     subjects: AssociationProxy[list["Subject"]] = association_proxy(
         "user_subject_links",
         "subject",
+        creator=lambda subject: __import__(
+            "core.entities.userSubjectLink", fromlist=["UserSubjectLink"]
+        ).UserSubjectLink(subject=subject),
     )
     user_subject_links: Mapped[list["UserSubjectLink"]] = relationship(
         "UserSubjectLink",

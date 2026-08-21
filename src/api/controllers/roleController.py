@@ -349,19 +349,23 @@ class RoleController(IRoleController):
 
     async def reset_permissions(self, request):
         try:
+            await self.role_service.begin_transaction()
             response = await self.role_service.reset_permissions()
             if not response.success:
+                await self.role_service.rollback_transaction()
                 return ResponseHandler.generate_response(
                     success=False,
                     code=response.code,
                     message=response.message,
                 )
+            await self.role_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 message="Permissions reset successfully",
             )
         except Exception as e:
+            await self.role_service.rollback_transaction()
             await self.logger.log(
                 action="ResetPermissions",
                 entity="Role",
