@@ -1,16 +1,27 @@
 from fastapi import APIRouter, Request, Depends
-from customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iUserController import IUserController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.userDtos import UserResponseDto, UserStatisticsResponseDto
+from core.dtos.userDtos import (
+    UserUpdateDto,
+    UserResponseDto,
+    UserSearchDto,
+    UserUpdateUsersDto,
+    UserHasPermissionsDto,
+    UserUpdateAcademicDataDto,
+    UserStatisticsResponseDto,
+)
+from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_user_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="", tags=[], route_class=CustomRoute)
+    router = APIRouter(prefix="", tags=["User"], route_class=CustomRoute)
 
     def _get_controller() -> IUserController:
         return controller_provider()
@@ -24,8 +35,9 @@ def create_user_user_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     def _validate(*keys):
         async def validate_request(
@@ -47,9 +59,13 @@ def create_user_user_router(
         description="Get the currently logged in user",
     )
     async def get_current_user(
-        request: Request, controller: IUserController = Depends(_get_controller)
+        request: Request,
+        query: QueryModel[UserSearchDto] = Depends(
+            Parser.parse_query(QueryModel[UserSearchDto])
+        ),
+        controller: IUserController = Depends(_get_controller),
     ):
-        return await controller.get_current_user(request)
+        return await controller.get_current_user(request, query=query)
 
     @router.get(
         "/permissions",
@@ -68,7 +84,7 @@ def create_user_user_router(
         "/has-permissions",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_validate("permissions", "is_and")),
+            Depends(_validate("required_permissions", "is_and")),
         ],
         response_model=BaseResponseDto[bool],
         status_code=200,
@@ -76,22 +92,26 @@ def create_user_user_router(
         description="Check if the currently logged in user has the specified permissions",
     )
     async def has_permissions(
-        request: Request, controller: IUserController = Depends(_get_controller)
+        data: UserHasPermissionsDto,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
     ):
-        return await controller.has_permissions(request)
+        return await controller.has_permissions(request, data=data)
 
     @router.patch(
         "/",
-        dependencies=[Depends(_is_logged_in), Depends(_validate("name", "url"))],
+        dependencies=[Depends(_is_logged_in), Depends(_validate("name"))],
         response_model=BaseResponseDto[UserResponseDto],
         status_code=200,
         summary="Update User",
         description="Update the currently logged in user",
     )
-    async def update(
-        request: Request, controller: IUserController = Depends(_get_controller)
+    async def update_user(
+        data: UserUpdateDto,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
     ):
-        return await controller.update(request)
+        return await controller.update(request, data=data)
 
     @router.patch(
         "/academic-data",
@@ -105,9 +125,11 @@ def create_user_user_router(
         description="Update the academic data of the currently logged in user",
     )
     async def update_academic_data(
-        request: Request, controller: IUserController = Depends(_get_controller)
+        data: UserUpdateAcademicDataDto,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
     ):
-        return await controller.update_academic_data(request)
+        return await controller.update_academic_data(request, data=data)
 
     return router
 
@@ -115,7 +137,7 @@ def create_user_user_router(
 def create_user_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/users", tags=["Users"], route_class=CustomRoute)
+    router = APIRouter(prefix="/users", tags=["Admin Users"], route_class=CustomRoute)
 
     def _get_controller() -> IUserController:
         return controller_provider()
@@ -129,8 +151,9 @@ def create_user_admin_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     def _is_authorized(*permissions):
         async def authorize(
@@ -153,19 +176,6 @@ def create_user_admin_router(
         return validate_request
 
     @router.get(
-        "/statistics",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
-        response_model=BaseResponseDto[UserStatisticsResponseDto],
-        status_code=200,
-        summary="Get User Statistics",
-        description="Get statistics for the users in the system, including total count, new users this month, percentage increase, active users, and pending users.",
-    )
-    async def get_statistics(
-        request: Request, controller: IUserController = Depends(_get_controller)
-    ):
-        return await controller.get_statistics(request)
-
-    @router.get(
         "/{user_id}",
         dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
         response_model=BaseResponseDto[UserResponseDto],
@@ -173,10 +183,12 @@ def create_user_admin_router(
         summary="Find User",
         description="Find a user by their ID",
     )
-    async def find_one(
-        request: Request, controller: IUserController = Depends(_get_controller)
+    async def find_one_user(
+        user_id: int,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=user_id)
 
     @router.get(
         "/",
@@ -186,10 +198,31 @@ def create_user_admin_router(
         summary="Find Users",
         description="Find users based on query parameters",
     )
-    async def find(
-        request: Request, controller: IUserController = Depends(_get_controller)
+    async def find_users(
+        request: Request,
+        query: QueryModel[UserSearchDto] = Depends(
+            Parser.parse_query(QueryModel[UserSearchDto])
+        ),
+        controller: IUserController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
+
+    @router.get(
+        "/system/statistics",
+        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
+        response_model=BaseResponseDto[UserStatisticsResponseDto],
+        status_code=200,
+        summary="Get User Statistics",
+        description="Get statistics for the users in the system, including total count, new users this month, percentage increase, active users, and pending users.",
+    )
+    async def get_user_statistics(
+        request: Request,
+        query: QueryModel[UserSearchDto] = Depends(
+            Parser.parse_query(QueryModel[UserSearchDto])
+        ),
+        controller: IUserController = Depends(_get_controller),
+    ):
+        return await controller.get_statistics(request, query=query)
 
     @router.patch(
         "/",
@@ -203,9 +236,11 @@ def create_user_admin_router(
         summary="Update Multiple Users",
         description="Update multiple users at once, including their approval status and role",
     )
-    async def update_many(
-        request: Request, controller: IUserController = Depends(_get_controller)
+    async def update_many_users(
+        data: UserUpdateUsersDto,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
     ):
-        return await controller.update_many(request)
+        return await controller.update_many(request, data=data)
 
     return router

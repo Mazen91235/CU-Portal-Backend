@@ -39,6 +39,16 @@ class IHelperService(ABC, Generic[U]):
         pass
 
     @abstractmethod
+    async def verify_academic_data(
+        self,
+        faculty_id: int | None = None,
+        department_id: int | None = None,
+        year_id: int | None = None,
+        subject_id: int | None = None,
+    ) -> BaseResponseDto[bool]:
+        pass
+
+    @abstractmethod
     async def send_email(
         self, to_email: str, subject: str, body: str
     ) -> BaseResponseDto[bool]:
@@ -78,7 +88,7 @@ class IHelperService(ABC, Generic[U]):
     @abstractmethod
     async def send_notification(
         self,
-        notification_type: Notification.Type,
+        notification_type: Notification.NotificationType,
         parent_id: int,
         user_ids: list[int] | None,
         content: str,

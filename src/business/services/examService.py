@@ -85,7 +85,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="Error finding exam",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(
@@ -145,7 +145,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="An error occurred while finding exams",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(
@@ -160,7 +160,7 @@ class ExamService(IExamService):
             existing_exam_response = await self.task_repository.find_one(
                 and_(
                     Task.name == data.name,
-                    Task.type == "exam",
+                    Task.task_type == "exam",
                     Task.subject_id == data.subject_id,
                 )
             )
@@ -307,7 +307,7 @@ class ExamService(IExamService):
                 )
             share_link = f"/users/exams/{created_exam.id}"
             notification_response = await self.helper_service.send_notification(
-                Notification.Type.EXAM,
+                Notification.NotificationType.EXAM,
                 created_exam.id,
                 user_ids,
                 f"New exam '{created_exam.title}' has been created for subject {subject.name}.",
@@ -344,7 +344,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="An error occurred while creating exam",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(
@@ -357,7 +357,7 @@ class ExamService(IExamService):
     async def update(self, data):
         try:
             target_exam_response = await self.task_repository.find_one(
-                and_(Task.id == data.id, Task.type == "exam")
+                and_(Task.id == data.id, Task.task_type == "exam")
             )
             if not target_exam_response.success:
                 return BaseResponseDto(
@@ -385,7 +385,7 @@ class ExamService(IExamService):
             existing_exam_response = await self.task_repository.find_one(
                 and_(
                     Task.name == data.name,
-                    Task.type == "exam",
+                    Task.task_type == "exam",
                     Task.subject_id == data.subject_id,
                 )
             )
@@ -597,7 +597,7 @@ class ExamService(IExamService):
                 )
             share_link = f"/users/exams/{updated_exam.id}"
             notification_response = await self.helper_service.send_notification(
-                Notification.Type.EXAM,
+                Notification.NotificationType.EXAM,
                 updated_exam.id,
                 user_ids,
                 f"Exam '{updated_exam.title}' has been updated for subject {subject.name}.",
@@ -634,7 +634,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="An error occurred while updating exam",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(
@@ -647,7 +647,7 @@ class ExamService(IExamService):
     async def delete(self, data):
         try:
             target_exam_response = await self.task_repository.find_one(
-                and_(Task.id == data.id, Task.type == "exam")
+                and_(Task.id == data.id, Task.task_type == "exam")
             )
             if not target_exam_response.success:
                 return BaseResponseDto(
@@ -812,7 +812,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting exam",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(

@@ -29,6 +29,7 @@ class Note(Base):
 
     # Columns
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(100), nullable=False)
     content: Mapped[str] = mapped_column(String(500), nullable=False)
     date: Mapped[Optional[datetime]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
@@ -53,9 +54,7 @@ class Note(Base):
         ForeignKey("users.id", ondelete="CASCADE", name="fk_user_note"),
         nullable=False,
     )
-    author: Mapped["User"] = relationship(
-        "User", back_populates="notes", cascade="all, delete-orphan"
-    )
+    author: Mapped["User"] = relationship("User", back_populates="notes")
 
     # Indexes
     __table_args__ = (

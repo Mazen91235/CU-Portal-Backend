@@ -1,16 +1,26 @@
 from fastapi import APIRouter, Request, Depends
-from customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iFacultyController import IFacultyController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.facultyDtos import FacultyResponseDto
+from core.dtos.facultyDtos import (
+    FacultyCreateDto,
+    FacultyResponseDto,
+    FacultyUpdateDto,
+    FacultySearchDto,
+)
+from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_faculty_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/faculties", tags=["Faculties"], route_class=CustomRoute)
+    router = APIRouter(
+        prefix="/faculties", tags=["Admin Faculties"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IFacultyController:
         return controller_provider()
@@ -24,8 +34,9 @@ def create_faculty_admin_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     def _is_authorized(*permissions):
         async def authorize(
@@ -58,10 +69,12 @@ def create_faculty_admin_router(
         summary="Find Faculty",
         description="Get a single faculty by its ID",
     )
-    async def find_one(
-        request: Request, controller: IFacultyController = Depends(_get_controller)
+    async def find_one_faculty(
+        faculty_id: int,
+        request: Request,
+        controller: IFacultyController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=faculty_id)
 
     @router.get(
         "/",
@@ -74,10 +87,14 @@ def create_faculty_admin_router(
         summary="Find Faculties",
         description="Get all faculties matching optional filter criteria",
     )
-    async def find(
-        request: Request, controller: IFacultyController = Depends(_get_controller)
+    async def find_faculties(
+        request: Request,
+        query: QueryModel[FacultySearchDto] = Depends(
+            Parser.parse_query(QueryModel[FacultySearchDto])
+        ),
+        controller: IFacultyController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     @router.post(
         "/",
@@ -91,10 +108,12 @@ def create_faculty_admin_router(
         summary="Create Faculty",
         description="Create a new faculty",
     )
-    async def create(
-        request: Request, controller: IFacultyController = Depends(_get_controller)
+    async def create_faculty(
+        data: FacultyCreateDto,
+        request: Request,
+        controller: IFacultyController = Depends(_get_controller),
     ):
-        return await controller.create(request)
+        return await controller.create(request, data=data)
 
     @router.patch(
         "/{faculty_id}",
@@ -108,10 +127,13 @@ def create_faculty_admin_router(
         summary="Update Faculty",
         description="Update an existing faculty",
     )
-    async def update(
-        request: Request, controller: IFacultyController = Depends(_get_controller)
+    async def update_faculty(
+        faculty_id: int,
+        data: FacultyUpdateDto,
+        request: Request,
+        controller: IFacultyController = Depends(_get_controller),
     ):
-        return await controller.update(request)
+        return await controller.update(request, id=faculty_id, data=data)
 
     @router.delete(
         "/{faculty_id}",
@@ -124,9 +146,11 @@ def create_faculty_admin_router(
         summary="Delete Faculty",
         description="Delete an existing faculty",
     )
-    async def delete(
-        request: Request, controller: IFacultyController = Depends(_get_controller)
+    async def delete_faculty(
+        faculty_id: int,
+        request: Request,
+        controller: IFacultyController = Depends(_get_controller),
     ):
-        return await controller.delete(request)
+        return await controller.delete(request, id=faculty_id)
 
     return router

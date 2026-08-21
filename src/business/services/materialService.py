@@ -93,7 +93,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while finding material",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -159,7 +159,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while finding materials",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -171,13 +171,13 @@ class MaterialService(IMaterialService):
 
     async def create(self, data):
         try:
-            if not Validator.is_allowed_type(data.type):
+            if not Validator.is_allowed_type(data.material_type):
                 await self.logger.log(
                     action="Create",
                     entity="Material",
                     level="error",
                     code=400,
-                    message=f"Invalid material type: {data.type}",
+                    message=f"Invalid material type: {data.material_type}",
                     details={"error": "Invalid material type"},
                     source="MaterialService",
                 )
@@ -185,15 +185,15 @@ class MaterialService(IMaterialService):
                     success=False,
                     code=400,
                     data=None,
-                    message=f"Invalid material type: {data.type}",
+                    message=f"Invalid material type: {data.material_type}",
                 )
-            if data.type != "folder" and not data.url:
+            if data.material_type != "folder" and not data.url:
                 await self.logger.log(
                     action="Create",
                     entity="Material",
                     level="error",
                     code=400,
-                    message=f"URL is required for material type: {data.type}",
+                    message=f"URL is required for material type: {data.material_type}",
                     details={"error": "URL is required for non-folder materials"},
                     source="MaterialService",
                 )
@@ -201,17 +201,17 @@ class MaterialService(IMaterialService):
                     success=False,
                     code=400,
                     data=None,
-                    message=f"URL is required for material type: {data.type}",
+                    message=f"URL is required for material type: {data.material_type}",
                 )
-            if data.type != "folder" and not Validator.is_valid_url_based_on_type(
-                data.url or "", data.type
+            if data.material_type != "folder" and not Validator.is_valid_url_based_on_type(
+                data.url or "", data.material_type
             ):
                 await self.logger.log(
                     action="Create",
                     entity="Material",
                     level="error",
                     code=400,
-                    message=f"Invalid URL for material type: {data.type}",
+                    message=f"Invalid URL for material type: {data.material_type}",
                     details={"error": "Invalid URL for the specified material type"},
                     source="MaterialService",
                 )
@@ -219,7 +219,7 @@ class MaterialService(IMaterialService):
                     success=False,
                     code=400,
                     data=None,
-                    message=f"Invalid URL for material type: {data.type}",
+                    message=f"Invalid URL for material type: {data.material_type}",
                 )
             parent_id = None
             if data.parent_id:
@@ -358,7 +358,7 @@ class MaterialService(IMaterialService):
             data.author_id = logged_in_user.id
             data.details = data.details or {}
             data.details["fetched"] = False
-            if data.type == "file":
+            if data.material_type == "file":
                 file_exists_response = (
                     await self.helper_service.verify_file_exists_on_drive(
                         data.url or ""
@@ -397,7 +397,7 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"File not found on Google Drive for the provided URL.",
                     )
-                data.details["file_data"] = file_data.model_dump()
+                data.details["file_data"] = file_data.model_dump(mode="json")
             unique_name_response = await self._generate_unique_name(
                 data.name, subject_id, parent_id
             )
@@ -437,12 +437,12 @@ class MaterialService(IMaterialService):
             share_link = f"/user/materials/{subject_id}"
             if parent_id:
                 share_link += f"/{parent_id}"
-            if data.type == "file":
+            if data.material_type == "file":
                 share_link += f"?material_id={created_material.id}"
-            elif data.type != "folder":
+            elif data.material_type != "folder":
                 share_link = created_material.url
             notification_response = await self.helper_service.send_notification(
-                Notification.Type.MATERIAL,
+                Notification.NotificationType.MATERIAL,
                 created_material.id,
                 user_ids,
                 f"New material '{created_material.name}' has been created for subject {subject.name}.",
@@ -471,7 +471,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while creating material",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -483,13 +483,13 @@ class MaterialService(IMaterialService):
 
     async def update(self, data):
         try:
-            if not Validator.is_allowed_type(data.type):
+            if not Validator.is_allowed_type(data.material_type):
                 await self.logger.log(
                     action="Update",
                     entity="Material",
                     level="error",
                     code=400,
-                    message=f"Invalid material type: {data.type}",
+                    message=f"Invalid material type: {data.material_type}",
                     details={"error": "Invalid material type"},
                     source="MaterialService",
                 )
@@ -497,15 +497,15 @@ class MaterialService(IMaterialService):
                     success=False,
                     code=400,
                     data=None,
-                    message=f"Invalid material type: {data.type}",
+                    message=f"Invalid material type: {data.material_type}",
                 )
-            if data.type != "folder" and not data.url:
+            if data.material_type != "folder" and not data.url:
                 await self.logger.log(
                     action="Update",
                     entity="Material",
                     level="error",
                     code=400,
-                    message=f"URL is required for material type: {data.type}",
+                    message=f"URL is required for material type: {data.material_type}",
                     details={"error": "URL is required for non-folder materials"},
                     source="MaterialService",
                 )
@@ -513,17 +513,17 @@ class MaterialService(IMaterialService):
                     success=False,
                     code=400,
                     data=None,
-                    message=f"URL is required for material type: {data.type}",
+                    message=f"URL is required for material type: {data.material_type}",
                 )
-            if data.type != "folder" and not Validator.is_valid_url_based_on_type(
-                data.url or "", data.type
+            if data.material_type != "folder" and not Validator.is_valid_url_based_on_type(
+                data.url or "", data.material_type
             ):
                 await self.logger.log(
                     action="Update",
                     entity="Material",
                     level="error",
                     code=400,
-                    message=f"Invalid URL for material type: {data.type}",
+                    message=f"Invalid URL for material type: {data.material_type}",
                     details={"error": "Invalid URL for the specified material type"},
                     source="MaterialService",
                 )
@@ -531,7 +531,7 @@ class MaterialService(IMaterialService):
                     success=False,
                     code=400,
                     data=None,
-                    message=f"Invalid URL for material type: {data.type}",
+                    message=f"Invalid URL for material type: {data.material_type}",
                 )
             existing_material_response = await self.material_repository.find_one(
                 Material.id == data.id
@@ -721,8 +721,8 @@ class MaterialService(IMaterialService):
             data.details = data.details or {}
             data.details["fetched"] = False
             if (
-                data.type == "file"
-                and existing_material.type == "file"
+                data.material_type == "file"
+                and existing_material.material_type == "file"
                 and data.url != existing_material.url
             ):
                 file_exists_response = (
@@ -763,7 +763,7 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"File not found on Google Drive for the provided URL.",
                     )
-                data.details["file_data"] = file_data.model_dump()
+                data.details["file_data"] = file_data.model_dump(mode="json")
                 to_be_removed = (
                     existing_material.url
                     if not existing_material.details.get("fetched")
@@ -810,12 +810,12 @@ class MaterialService(IMaterialService):
             share_link = f"/user/materials/{updated_material.subject_id}"
             if updated_material.parent_id:
                 share_link += f"/{updated_material.parent_id}"
-            if updated_material.type == "file":
+            if updated_material.material_type == "file":
                 share_link += f"?material_id={updated_material.id}"
-            elif updated_material.type != "folder":
+            elif updated_material.material_type != "folder":
                 share_link = updated_material.url
             notification_response = await self.helper_service.send_notification(
-                Notification.Type.MATERIAL,
+                Notification.NotificationType.MATERIAL,
                 updated_material.id,
                 user_ids,
                 f"Material '{updated_material.name}' has been updated for subject {subject.name}.",
@@ -844,7 +844,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while updating material",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1018,7 +1018,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while deleting materials",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1053,7 +1053,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while fetching parent materials",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1094,7 +1094,7 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Destination material with ID {destination_id} not found",
                 )
-            if destination_material.type != "folder":
+            if destination_material.material_type != "folder":
                 await self.logger.log(
                     action="MoveMany",
                     entity="Material",
@@ -1238,7 +1238,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while moving materials",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1279,7 +1279,7 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Destination material with ID {destination_id} not found",
                 )
-            if destination_material.type != "folder":
+            if destination_material.material_type != "folder":
                 await self.logger.log(
                     action="CopyMany",
                     entity="Material",
@@ -1414,7 +1414,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while copying materials",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1663,7 +1663,7 @@ class MaterialService(IMaterialService):
             if len(fetched_data.children) == 0:
                 share_link += f"?material_id={created_data.id}"
             notification_response = await self.helper_service.send_notification(
-                notification_type=Notification.Type.MATERIAL,
+                notification_type=Notification.NotificationType.MATERIAL,
                 parent_id=created_data.id,
                 user_ids=user_ids,
                 content=f"New material '{created_data.name}' has been fetched from drive to subject '{subject.name}'",
@@ -1701,7 +1701,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while fetching materials from Google Drive",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1766,7 +1766,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while generating unique name for material",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1846,7 +1846,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while removing files",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
 
@@ -1881,7 +1881,7 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Material with ID {material_id} not found",
                 )
-            if existing_material.type == "file" and not existing_material.details.get(
+            if existing_material.material_type == "file" and not existing_material.details.get(
                 "fetched"
             ):
                 files.append(
@@ -1935,7 +1935,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while recursively deleting material with ID {material_id}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -1994,7 +1994,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while recursively fetching parent materials for material with ID {material_id}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -2062,7 +2062,7 @@ class MaterialService(IMaterialService):
                 )
             new_material = Material(
                 name=existing_material.name,
-                type=existing_material.type,
+                material_type=existing_material.material_type,
                 url=existing_material.url,
                 details=existing_material.details,
                 subject_id=existing_material.subject_id,
@@ -2080,7 +2080,7 @@ class MaterialService(IMaterialService):
                     message=unique_name_response.message,
                 )
             new_material.name = unique_name_response.data
-            if existing_material.type == "file":
+            if existing_material.material_type == "file":
                 file_id = self.helper_service.get_file_id_from_url(
                     existing_material.url or ""
                 )
@@ -2140,7 +2140,7 @@ class MaterialService(IMaterialService):
                     copied_file.id
                 )
                 new_material.details["fetched"] = False
-                new_material.details["file_data"] = copied_file.model_dump()
+                new_material.details["file_data"] = copied_file.model_dump(mode="json")
             create_response = await self.material_repository.create(new_material)
             if not create_response.success:
                 return BaseResponseDto(
@@ -2204,7 +2204,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while recursively copying material with ID {material_id}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(
@@ -2226,7 +2226,7 @@ class MaterialService(IMaterialService):
             fetched_file_type = "file" if len(fetched_data.children) < 1 else "folder"
             new_material = Material(
                 name=fetched_file.name,
-                type=fetched_file_type,
+                material_type=fetched_file_type,
                 subject_id=subject_id,
                 parent_id=parent_id,
                 author_id=author_id,
@@ -2237,7 +2237,7 @@ class MaterialService(IMaterialService):
                 )
                 new_material.details = {
                     "fetched": True,
-                    "file_data": fetched_file.model_dump(),
+                    "file_data": fetched_file.model_dump(mode="json"),
                 }
             unique_name_response = await self._generate_unique_name(
                 new_material.name, new_material.subject_id, new_material.parent_id
@@ -2299,7 +2299,7 @@ class MaterialService(IMaterialService):
                 level="error",
                 code=500,
                 message=f"An error occurred while recursively creating material from Drive with file ID {fetched_data.data.id}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MaterialService",
             )
             return BaseResponseDto(

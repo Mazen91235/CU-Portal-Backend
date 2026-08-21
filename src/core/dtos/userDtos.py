@@ -5,7 +5,19 @@ from pydantic import BaseModel, EmailStr, Field
 
 if TYPE_CHECKING:
     from core.entities.user import User
-    from .baseDtos import BaseSearchDto
+    from core.dtos.facultyDtos import FacultyResponseDto
+    from core.dtos.departmentDtos import DepartmentResponseDto
+    from core.dtos.yearDtos import YearResponseDto
+    from core.dtos.roleDtos import RoleResponseDto
+    from core.dtos.pendingUserDtos import PendingUserResponseDto
+    from core.dtos.materialDtos import MaterialResponseDto
+    from core.dtos.taskDtos import TaskResponseDto
+    from core.dtos.announcementDtos import AnnouncementResponseDto
+    from core.dtos.notificationDtos import NotificationResponseDto
+    from core.dtos.logDtos import LogResponseDto
+    from core.dtos.subjectDtos import SubjectResponseDto
+
+from core.dtos.baseDtos import BaseSearchDto
 
 
 class UserCreateDto(BaseModel):
@@ -32,66 +44,80 @@ class UserCreateDto(BaseModel):
         max_length=255,
         description="Google details token for authentication",
     )
+    details: dict = Field(
+        default_factory=dict,
+        description="Additional details about the user (stored as JSON)",
+    )
 
 
 class UserResponseDto(BaseModel):
-    id: int | None = Field(None, description="ID of the user")
-    name: str = Field(..., description="Name of User")
-    email: EmailStr = Field(..., description="Email of User")
-    phone: str = Field(..., description="Phone number of User")
-    gender: str = Field(..., description="Gender of User")
-    type: User.Type = Field(..., description="Type of User")
-    section: int | None = Field(None, description="Section ID of the user")
-    status: bool | None = Field(None, description="Status of the user")
+    id: int | None = Field(default=None, description="ID of the user")
+    name: str | None = Field(default=None, description="Name of User")
+    email: EmailStr | None = Field(default=None, description="Email of User")
+    phone: str | None = Field(default=None, description="Phone number of User")
+    gender: str | None = Field(default=None, description="Gender of User")
+    study_type: User.StudyType | None = Field(
+        default=None, description="Study type of User"
+    )
+    section: int | None = Field(default=None, description="Section ID of the user")
+    status: bool | None = Field(default=None, description="Status of the user")
     is_early_access: bool | None = Field(
-        None, description="Whether the user is an early access user"
+        default=None, description="Whether the user is an early access user"
     )
     manages: dict | None = Field(
-        None, description="Dictionary of items managed by this user"
+        default=None, description="Dictionary of items managed by this user"
     )
-    details: dict | None = Field(None, description="Additional details about the user")
-    google_id: str = Field("", description="Google ID of the user")
-    google_name: str = Field("", description="Google name of the user")
-    google_email: EmailStr = Field("", description="Google email of the user")
-    google_avatar: str = Field("", description="Google avatar URL of the user")
-    created_at: datetime | None = Field(None, description="Creation Date of the user")
+    details: dict | None = Field(
+        default=None, description="Additional details about the user"
+    )
+    google_id: str | None = Field(default=None, description="Google ID of the user")
+    google_name: str | None = Field(default=None, description="Google name of the user")
+    google_email: EmailStr | None = Field(
+        default=None, description="Google email of the user"
+    )
+    google_avatar: str | None = Field(
+        default=None, description="Google avatar URL of the user"
+    )
+    created_at: datetime | None = Field(
+        default=None, description="Creation Date of the user"
+    )
     updated_at: datetime | None = Field(
-        None, description="Last Update Date of the user"
+        default=None, description="Last Update Date of the user"
     )
 
     # Relationships
     year: YearResponseDto | None = Field(
-        None, description="Year associated with the user"
+        default=None, description="Year associated with the user"
     )
     department: DepartmentResponseDto | None = Field(
-        None, description="Department associated with the user"
+        default=None, description="Department associated with the user"
     )
     faculty: FacultyResponseDto | None = Field(
-        None, description="Faculty associated with the user"
+        default=None, description="Faculty associated with the user"
     )
     role: RoleResponseDto | None = Field(
-        None, description="Role associated with the user"
+        default=None, description="Role associated with the user"
     )
     pending_user: PendingUserResponseDto | None = Field(
-        None, description="Pending user associated with the user (if any)"
+        default=None, description="Pending user associated with the user (if any)"
     )
     materials: list[MaterialResponseDto] | None = Field(
-        None, description="Materials associated with the user"
+        default=None, description="Materials associated with the user"
     )
     tasks: list[TaskResponseDto] | None = Field(
-        None, description="Tasks associated with the user"
+        default=None, description="Tasks associated with the user"
     )
     announcements: list[AnnouncementResponseDto] | None = Field(
-        None, description="Announcements associated with the user"
+        default=None, description="Announcements associated with the user"
     )
     notifications: list[NotificationResponseDto] | None = Field(
-        None, description="Notifications associated with the user"
+        default=None, description="Notifications associated with the user"
     )
     logs: list[LogResponseDto] | None = Field(
-        None, description="Logs associated with the user"
+        default=None, description="Logs associated with the user"
     )
     subjects: list[SubjectResponseDto] | None = Field(
-        None, description="Subjects associated with the user"
+        default=None, description="Subjects associated with the user"
     )
 
     # Pydantic Configuration
@@ -102,10 +128,14 @@ class UserResponseDto(BaseModel):
 
 class UserUpdateDto(BaseModel):
     name: str = Field(..., min_length=1, max_length=60, description="Name of User")
-    url: str = Field(..., min_length=1, max_length=255, description="URL of User")
+    details: dict = Field(
+        default_factory=dict,
+        description="Additional details about the user (stored as JSON)",
+    )
 
 
-class UserSearchDto(BaseSearchDto, BaseModel):
+class UserSearchDto(BaseSearchDto):
+    id: int | None = Field(default=None, description="ID of User to filter by")
     faculty_id: int | None = Field(
         default=None, description="ID of Faculty to filter by"
     )
@@ -119,6 +149,9 @@ class UserSearchDto(BaseSearchDto, BaseModel):
     )
     refresh_expire_at_from: datetime | None = Field(
         default=None, description="Refresh token expiration date to filter by (>=)"
+    )
+    refresh_expire_at_to: datetime | None = Field(
+        default=None, description="Refresh token expiration date to filter by (<=)"
     )
 
 
@@ -135,9 +168,12 @@ class UserGetStoredAccessTokenDto(BaseModel):
     google_details_token: str = Field(
         ..., description="Google details token for authentication"
     )
+    oauth_state: str = Field(
+        ..., description="OAuth state parameter for authentication"
+    )
 
 
-class UserLoginWithGoogleDto(BaseModel):
+class UserLoginWithGoogleResponseDto(BaseModel):
     redirect_response_url: str = Field(
         ..., description="Redirect URL after Google login"
     )
@@ -146,9 +182,7 @@ class UserLoginWithGoogleDto(BaseModel):
 
 
 class UserLoginResponseDto(BaseModel):
-    user: UserResponseDto | None = Field(
-        default=None, description="Logged in user details"
-    )
+    user: User | None = Field(default=None, description="Logged in user details")
     token: str = Field(..., description="Authentication token for the user")
     state: str | None = Field(
         default=None, description="State parameter for google authentication"
@@ -159,6 +193,10 @@ class UserLoginResponseDto(BaseModel):
     redirect_url: str | None = Field(
         default=None, description="Redirect URL after successful login"
     )
+    model_config = {
+        "from_attributes": True,
+        "arbitrary_types_allowed": True,
+    }
 
 
 class UserTokenDetailsResponseDto(BaseModel):
@@ -168,6 +206,10 @@ class UserTokenDetailsResponseDto(BaseModel):
         default=None,
         description="Time in seconds after which the user can resend the token",
     )
+
+
+class UserResendTokenResponseDto(BaseModel):
+    token: str = Field(..., description="New verification token for the user")
 
 
 class UserUpdateUsersRecordDto(BaseModel):
@@ -200,7 +242,7 @@ class UserUpdateAcademicDataDto(BaseModel):
         None, description="ID of the new department for the user"
     )
     year_id: int | None = Field(None, description="ID of the new year for the user")
-    study_type: User.Type | None = Field(
+    study_type: User.StudyType | None = Field(
         None,
         description="New study type for the user (e.g., 'Mainstream', 'Credit')",
     )

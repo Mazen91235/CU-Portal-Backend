@@ -26,13 +26,11 @@ class RequestLimitMiddleware(IRequestLimitMiddleware):
             ip = request.client.host if request.client else None
             route = request.url.path if request.url else None
             logged_in_user_response = await self.helper_service.get_logged_in_user()
-            if not logged_in_user_response.success:
-                raise HTTPException(
-                    status_code=logged_in_user_response.code or 500,
-                    detail=logged_in_user_response.message,
-                )
-            logged_in_user = logged_in_user_response.data
-            user_id = logged_in_user.id if logged_in_user else None
+            if logged_in_user_response.success and logged_in_user_response.data:
+                logged_in_user = logged_in_user_response.data
+                user_id = logged_in_user.id
+            else:
+                user_id = None
             request_limit_search_dto = RequestLimitSearchDto(
                 ip=ip,
                 route=route,
@@ -70,6 +68,8 @@ class RequestLimitMiddleware(IRequestLimitMiddleware):
                     detail=create_request_limit_response.message,
                 )
             return None  # Allow the request to proceed if under the limit
+        except HTTPException as http_ex:
+            raise http_ex
         except Exception as ex:
             await self.logger.log(
                 action="ThrottleError",
@@ -77,7 +77,7 @@ class RequestLimitMiddleware(IRequestLimitMiddleware):
                 level="error",
                 code=500,
                 message="An error occurred during request throttling.",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="RequestLimitMiddleware",
             )
             raise HTTPException(

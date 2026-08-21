@@ -1,11 +1,10 @@
+from typing import cast
 from core.iControllers.iExamController import IExamController
 from core.iServices.iExamService import IExamService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
-from core.utils.parser import Parser
-import json
 
 # Entities & DTOs
 from core.entities.task import Task
@@ -25,18 +24,10 @@ class ExamController(IExamController):
         self.logger = logger
 
     # CRUD Functions
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         try:
-            exam_id = request.path_params.get("exam_id")
-            if not exam_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Exam ID is required",
-                )
-
             entity_search_dto = Generator[ExamSearchDto].generate(
-                ExamSearchDto, {"id": int(exam_id)}
+                ExamSearchDto, {"id": id}
             )
 
             response = await self.exam_service.find_one(
@@ -89,7 +80,7 @@ class ExamController(IExamController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="ExamController",
             )
             return ResponseHandler.generate_response(
@@ -98,12 +89,8 @@ class ExamController(IExamController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def find(self, request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[ExamSearchDto],
-            )
             entity_search_dto = Generator[ExamSearchDto].generate_from_query(
                 ExamSearchDto, query
             )
@@ -172,7 +159,7 @@ class ExamController(IExamController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="ExamController",
             )
             return ResponseHandler.generate_response(
@@ -181,11 +168,9 @@ class ExamController(IExamController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def create(self, request):
+    async def create(self, request, data):
         try:
             await self.exam_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[ExamCreateDto].generate(ExamCreateDto, payload)
             exam = Mapper[ExamCreateDto, Task].map(data, Task)
 
             response = await self.exam_service.create(exam)
@@ -236,7 +221,7 @@ class ExamController(IExamController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="ExamController",
             )
             return ResponseHandler.generate_response(
@@ -245,23 +230,14 @@ class ExamController(IExamController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update(self, request):
+    async def update(self, request, id, data):
         try:
             await self.exam_service.begin_transaction()
-            exam_id = request.path_params.get("exam_id")
-
-            if not exam_id:
-                await self.exam_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Exam ID is required",
-                )
-
-            payload = await request.json()
-            payload["id"] = int(exam_id)
-            data = Generator[ExamUpdateDto].generate(ExamUpdateDto, payload)
-            exam = Mapper[ExamUpdateDto, Task].map(data, Task)
+            exam = cast(
+                Task,
+                Mapper[ExamUpdateDto, Task].map(data, Task),
+            )
+            exam.id = id
 
             response = await self.exam_service.update(exam)
 
@@ -310,7 +286,7 @@ class ExamController(IExamController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="ExamController",
             )
             return ResponseHandler.generate_response(
@@ -319,23 +295,10 @@ class ExamController(IExamController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def delete(self, request):
+    async def delete(self, request, id):
         try:
             await self.exam_service.begin_transaction()
-
-            exam_id = request.path_params.get("exam_id")
-
-            if not exam_id:
-                await self.exam_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Exam ID is required",
-                )
-
-            data = Generator[ExamDeleteDto].generate(
-                ExamDeleteDto, {"id": int(exam_id)}
-            )
+            data = Generator[ExamDeleteDto].generate(ExamDeleteDto, {"id": id})
             entity = Mapper[ExamDeleteDto, Task].map(data, Task)
 
             response = await self.exam_service.delete(entity)
@@ -363,7 +326,7 @@ class ExamController(IExamController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="ExamController",
             )
             return ResponseHandler.generate_response(

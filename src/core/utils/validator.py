@@ -39,7 +39,7 @@ class Validator:
                 code=400,
                 data="",
                 message="Invalid email address provided",
-                error=str(ex),
+                error=repr(ex),
             )
         except Exception as ex:
             return BaseResponseDto(
@@ -47,7 +47,7 @@ class Validator:
                 code=500,
                 data="",
                 message="An error occurred while validating the email address.",
-                error=str(ex),
+                error=repr(ex),
             )
 
     @staticmethod

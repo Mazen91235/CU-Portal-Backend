@@ -1,14 +1,19 @@
 from fastapi import APIRouter, Request, Depends
-from customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iMessageController import IMessageController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.messageDtos import MessageResponseDto
+from core.dtos.messageDtos import MessageCreateDto, MessageResponseDto, MessageSearchDto
+from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_message_public_router(controller_provider, validation_middleware_provider):
-    router = APIRouter(prefix="/messages", tags=["Messages"], route_class=CustomRoute)
+    router = APIRouter(
+        prefix="/messages", tags=["Public Messages"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IMessageController:
         return controller_provider()
@@ -35,10 +40,12 @@ def create_message_public_router(controller_provider, validation_middleware_prov
         summary="Create Message",
         description="Submit a contact-us message",
     )
-    async def create(
-        request: Request, controller: IMessageController = Depends(_get_controller)
+    async def create_message(
+        data: MessageCreateDto,
+        request: Request,
+        controller: IMessageController = Depends(_get_controller),
     ):
-        return await controller.create(request)
+        return await controller.create(request, data=data)
 
     return router
 
@@ -46,7 +53,9 @@ def create_message_public_router(controller_provider, validation_middleware_prov
 def create_message_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/messages", tags=["Messages"], route_class=CustomRoute)
+    router = APIRouter(
+        prefix="/messages", tags=["Admin Messages"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IMessageController:
         return controller_provider()
@@ -60,8 +69,9 @@ def create_message_admin_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     def _is_authorized(*permissions):
         async def authorize(
@@ -91,10 +101,12 @@ def create_message_admin_router(
         summary="Find Message",
         description="Find a contact-us message by id",
     )
-    async def find_one(
-        request: Request, controller: IMessageController = Depends(_get_controller)
+    async def find_one_message(
+        message_id: int,
+        request: Request,
+        controller: IMessageController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=message_id)
 
     @router.get(
         "/",
@@ -104,9 +116,13 @@ def create_message_admin_router(
         summary="Find Messages",
         description="Find contact-us messages based on query parameters",
     )
-    async def find(
-        request: Request, controller: IMessageController = Depends(_get_controller)
+    async def find_messages(
+        request: Request,
+        query: QueryModel[MessageSearchDto] = Depends(
+            Parser.parse_query(QueryModel[MessageSearchDto])
+        ),
+        controller: IMessageController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     return router

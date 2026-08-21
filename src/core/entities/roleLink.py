@@ -47,7 +47,7 @@ class RoleLink(Base):
         ForeignKey("roles.id", ondelete="CASCADE", name="fk_role_role_link"),
         nullable=False,
     )
-    role: Mapped["Role"] = relationship("Role", backref="role_links_associations")
+    role: Mapped["Role"] = relationship("Role", back_populates="role_links")
     exact_role_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey(
@@ -56,7 +56,7 @@ class RoleLink(Base):
         nullable=False,
     )
     exact_role: Mapped["ExactRole"] = relationship(
-        "ExactRole", backref="role_links_associations"
+        "ExactRole", back_populates="role_links"
     )
 
     # Indexes

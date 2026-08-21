@@ -33,7 +33,7 @@ class Log(Base):
     entity: Mapped[str] = mapped_column(String(30), nullable=True)
     level: Mapped[str] = mapped_column(String(10), nullable=False)
     response_code: Mapped[int] = mapped_column(Integer, nullable=False)
-    message: Mapped[str] = mapped_column(String(100), nullable=True)
+    message: Mapped[str] = mapped_column(String(250), nullable=True)
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
     )

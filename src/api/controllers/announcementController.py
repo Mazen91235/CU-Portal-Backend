@@ -1,3 +1,4 @@
+from typing import cast
 from core.iControllers.iAnnouncementController import IAnnouncementController
 from core.iServices.iAnnouncementService import IAnnouncementService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -11,10 +12,10 @@ import json
 from core.entities.announcement import Announcement
 from core.dtos.announcementDtos import (
     AnnouncementCreateDto,
-    AnnouncementUpdateDto,
     AnnouncementResponseDto,
-    AnnouncementSearchDto,
+    AnnouncementUpdateDto,
     AnnouncementDeleteDto,
+    AnnouncementSearchDto,
 )
 from core.models.queryModel import QueryModel
 
@@ -25,20 +26,12 @@ class AnnouncementController(IAnnouncementController):
         self.logger = logger
 
     # CRUD Functions
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         try:
-            announcement_id = request.path_params.get("announcement_id")
-            if not announcement_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Announcement ID is required",
-                )
-                
             entity_search_dto = Generator[AnnouncementSearchDto].generate(
-                AnnouncementSearchDto, {"id": int(announcement_id)}
+                AnnouncementSearchDto, {"id": id}
             )
-            
+
             response = await self.announcement_service.find_one(
                 entity_search_dto,
                 [
@@ -49,14 +42,14 @@ class AnnouncementController(IAnnouncementController):
                     "year",
                 ],
             )
-            
+
             if not response.success:
                 return ResponseHandler.generate_response(
                     success=False,
                     code=response.code,
                     message=response.message,
                 )
-                
+
             announcement = response.data
             if not announcement:
                 await self.logger.log(
@@ -75,7 +68,7 @@ class AnnouncementController(IAnnouncementController):
             announcement_mapped = Mapper[Announcement, AnnouncementResponseDto].map(
                 announcement, AnnouncementResponseDto, True
             )
-            
+
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
@@ -88,7 +81,7 @@ class AnnouncementController(IAnnouncementController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="AnnouncementController",
             )
             return ResponseHandler.generate_response(
@@ -97,12 +90,8 @@ class AnnouncementController(IAnnouncementController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def find(self, request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[AnnouncementSearchDto],
-            )
             entity_search_dto = Generator[AnnouncementSearchDto].generate_from_query(
                 AnnouncementSearchDto, query
             )
@@ -153,9 +142,9 @@ class AnnouncementController(IAnnouncementController):
                     message="Announcements not found",
                 )
 
-            announcements_mapped = Mapper[Announcement, AnnouncementResponseDto].map_list(
-                announcements, AnnouncementResponseDto, True
-            )
+            announcements_mapped = Mapper[
+                Announcement, AnnouncementResponseDto
+            ].map_list(announcements, AnnouncementResponseDto, True)
 
             return ResponseHandler.generate_response(
                 success=True,
@@ -169,7 +158,7 @@ class AnnouncementController(IAnnouncementController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="AnnouncementController",
             )
             return ResponseHandler.generate_response(
@@ -178,16 +167,15 @@ class AnnouncementController(IAnnouncementController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def create(self, request):
+    async def create(self, request, data):
         try:
             await self.announcement_service.begin_transaction()
-            payload = await request.json()
-            
-            data = Generator[AnnouncementCreateDto].generate(AnnouncementCreateDto, payload)
-            announcement = Mapper[AnnouncementCreateDto, Announcement].map(data, Announcement)
-            
+            announcement = Mapper[AnnouncementCreateDto, Announcement].map(
+                data, Announcement
+            )
+
             response = await self.announcement_service.create(announcement)
-            
+
             if not response.success:
                 await self.announcement_service.rollback_transaction()
                 return ResponseHandler.generate_response(
@@ -200,7 +188,7 @@ class AnnouncementController(IAnnouncementController):
             announcement_mapped = Mapper[Announcement, AnnouncementResponseDto].map(
                 created_announcement, AnnouncementResponseDto, True
             )
-            
+
             await self.announcement_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
@@ -216,7 +204,7 @@ class AnnouncementController(IAnnouncementController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="AnnouncementController",
             )
             return ResponseHandler.generate_response(
@@ -225,26 +213,18 @@ class AnnouncementController(IAnnouncementController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update(self, request):
+    async def update(self, request, id, data):
         try:
             await self.announcement_service.begin_transaction()
-            announcement_id = request.path_params.get("announcement_id")
-            
-            if not announcement_id:
-                await self.announcement_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Announcement ID is required",
-                )
+            announcement = cast(
+                Announcement,
+                Mapper[AnnouncementUpdateDto, Announcement].map(data, Announcement),
+            )
 
-            payload = await request.json()
-            payload["id"] = int(announcement_id)
-            data = Generator[AnnouncementUpdateDto].generate(AnnouncementUpdateDto, payload)
-            announcement = Mapper[AnnouncementUpdateDto, Announcement].map(data, Announcement)
+            announcement.id = id
 
             response = await self.announcement_service.update(announcement)
-            
+
             if not response.success:
                 await self.announcement_service.rollback_transaction()
                 return ResponseHandler.generate_response(
@@ -257,7 +237,7 @@ class AnnouncementController(IAnnouncementController):
             announcement_mapped = Mapper[Announcement, AnnouncementResponseDto].map(
                 updated_announcement, AnnouncementResponseDto, True
             )
-            
+
             await self.announcement_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
@@ -273,7 +253,7 @@ class AnnouncementController(IAnnouncementController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="AnnouncementController",
             )
             return ResponseHandler.generate_response(
@@ -282,26 +262,16 @@ class AnnouncementController(IAnnouncementController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def delete(self, request):
+    async def delete(self, request, id):
         try:
             await self.announcement_service.begin_transaction()
-            announcement_id = request.path_params.get("announcement_id")
-            
-            if not announcement_id:
-                await self.announcement_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Announcement ID is required",
-                )
-
             data = Generator[AnnouncementDeleteDto].generate(
-                AnnouncementDeleteDto, {"id": int(announcement_id)}
+                AnnouncementDeleteDto, {"id": id}
             )
             entity = Mapper[AnnouncementDeleteDto, Announcement].map(data, Announcement)
-            
+
             response = await self.announcement_service.delete(entity)
-            
+
             if not response.success:
                 await self.announcement_service.rollback_transaction()
                 return ResponseHandler.generate_response(
@@ -324,7 +294,7 @@ class AnnouncementController(IAnnouncementController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="AnnouncementController",
             )
             return ResponseHandler.generate_response(

@@ -1,13 +1,12 @@
 from fastapi import Response
 from starlette.requests import Request
-
+from typing import cast
 from core.iControllers.iMaterialController import IMaterialController
 from core.iServices.iMaterialService import IMaterialService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
 from core.utils.mapper import Mapper
-from core.utils.parser import Parser
 
 # Entities & DTOs
 from core.entities.material import Material
@@ -29,17 +28,10 @@ class MaterialController(IMaterialController):
         self.logger = logger
 
     # CRUD Functions
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         try:
-            material_id = request.path_params.get("material_id")
-            if not material_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Material ID is required",
-                )
             entity_search_dto = Generator[MaterialSearchDto].generate(
-                MaterialSearchDto, {"id": material_id}
+                MaterialSearchDto, {"id": id}
             )
             response = await self.material_service.find_one(
                 entity_search_dto,
@@ -83,7 +75,7 @@ class MaterialController(IMaterialController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="MaterialController",
             )
             return ResponseHandler.generate_response(
@@ -92,12 +84,8 @@ class MaterialController(IMaterialController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def find(self, request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[MaterialSearchDto],
-            )
             entity_search_dto = Generator[MaterialSearchDto].generate_from_query(
                 MaterialSearchDto, query
             )
@@ -164,7 +152,7 @@ class MaterialController(IMaterialController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="MaterialController",
             )
             return ResponseHandler.generate_response(
@@ -173,14 +161,9 @@ class MaterialController(IMaterialController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def create(self, request):
+    async def create(self, request, data):
         try:
             await self.material_service.begin_transaction()
-            payload = await request.json()
-            payload["details"] = {
-                "description": payload.get("description"),
-            }
-            data = Generator[MaterialCreateDto].generate(MaterialCreateDto, payload)
             material = Mapper[MaterialCreateDto, Material].map(data, Material)
             response = await self.material_service.create(material)
             if not response.success:
@@ -223,7 +206,7 @@ class MaterialController(IMaterialController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="MaterialController",
             )
             return ResponseHandler.generate_response(
@@ -232,23 +215,14 @@ class MaterialController(IMaterialController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update(self, request):
+    async def update(self, request, id, data):
         try:
             await self.material_service.begin_transaction()
-            material_id = request.path_params.get("material_id")
-            if not material_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Material ID is required",
-                )
-            payload = await request.json()
-            payload["id"] = int(material_id)
-            payload["details"] = {
-                "description": payload.get("description"),
-            }
-            data = Generator[MaterialUpdateDto].generate(MaterialUpdateDto, payload)
-            material = Mapper[MaterialUpdateDto, Material].map(data, Material)
+            material = cast(
+                Material,
+                Mapper[MaterialUpdateDto, Material].map(data, Material),
+            )
+            material.id = id
             response = await self.material_service.update(material)
             if not response.success:
                 await self.material_service.rollback_transaction()
@@ -291,7 +265,7 @@ class MaterialController(IMaterialController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="MaterialController",
             )
             return ResponseHandler.generate_response(
@@ -300,18 +274,11 @@ class MaterialController(IMaterialController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def delete_many(self, request):
+    async def delete_many(self, request, ids):
         try:
             await self.material_service.begin_transaction()
-            material_ids = request.path_params.get("material_ids")
-            if not material_ids:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Material IDs are required",
-                )
             data = Generator[MaterialsDeleteDto].generate(
-                MaterialsDeleteDto, {"material_ids": material_ids.split(",").map(int)}
+                MaterialsDeleteDto, {"material_ids": ids}
             )
             response = await self.material_service.delete_many(data)
             if not response.success:
@@ -335,7 +302,7 @@ class MaterialController(IMaterialController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="MaterialController",
             )
             return ResponseHandler.generate_response(
@@ -345,16 +312,9 @@ class MaterialController(IMaterialController):
             )
 
     # Material Specific Functions
-    async def get_parents(self, request):
+    async def get_parents(self, request, id):
         try:
-            material_id = request.path_params.get("material_id")
-            if not material_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Material ID is required",
-                )
-            response = await self.material_service.get_parents(material_id)
+            response = await self.material_service.get_parents(id)
             if not response.success:
                 return ResponseHandler.generate_response(
                     success=False,
@@ -377,7 +337,7 @@ class MaterialController(IMaterialController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="MaterialController",
             )
             return ResponseHandler.generate_response(
@@ -386,13 +346,9 @@ class MaterialController(IMaterialController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def copy_many(self, request):
+    async def copy_many(self, request, data):
         try:
             await self.material_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[MaterialsCopyOrMoveDto].generate(
-                MaterialsCopyOrMoveDto, payload
-            )
             response = await self.material_service.copy_many(data)
             if not response.success:
                 await self.material_service.rollback_transaction()
@@ -415,7 +371,7 @@ class MaterialController(IMaterialController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="MaterialController",
             )
             return ResponseHandler.generate_response(
@@ -424,13 +380,9 @@ class MaterialController(IMaterialController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def move_many(self, request):
+    async def move_many(self, request, data):
         try:
             await self.material_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[MaterialsCopyOrMoveDto].generate(
-                MaterialsCopyOrMoveDto, payload
-            )
             response = await self.material_service.move_many(data)
             if not response.success:
                 await self.material_service.rollback_transaction()
@@ -453,7 +405,7 @@ class MaterialController(IMaterialController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="MaterialController",
             )
             return ResponseHandler.generate_response(
@@ -462,13 +414,9 @@ class MaterialController(IMaterialController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def fetch_materials_from_drive(self, request):
+    async def fetch_materials_from_drive(self, request, data):
         try:
             await self.material_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[MaterialsFetchFromDriveDto].generate(
-                MaterialsFetchFromDriveDto, payload
-            )
             response = await self.material_service.fetch_materials_from_drive(data)
             if not response.success:
                 await self.material_service.rollback_transaction()
@@ -491,7 +439,7 @@ class MaterialController(IMaterialController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="MaterialController",
             )
             return ResponseHandler.generate_response(

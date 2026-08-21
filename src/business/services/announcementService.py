@@ -86,7 +86,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while finding announcement",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(
@@ -151,7 +151,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while finding announcements",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(
@@ -264,8 +264,10 @@ class AnnouncementService(IAnnouncementService):
                         data=None,
                         message="Failed to fetch file data from Google Drive",
                     )
-                files.append(file_data.model_dump())
-            for link_name, link_url in (data.links).items():
+                files.append(file_data.model_dump(mode="json"))
+            for link in data.links:
+                link_name = link.get("name", "")
+                link_url = link.get("url", "")
                 if not Validator.is_valid_external_url(link_url):
                     await self.logger.log(
                         action="Create",
@@ -371,7 +373,7 @@ class AnnouncementService(IAnnouncementService):
                 )
             share_link = f"/users/announcements/{created_announcement.id}"
             notification_response = await self.helper_service.send_notification(
-                Notification.Type.ANNOUNCEMENT,
+                Notification.NotificationType.ANNOUNCEMENT,
                 created_announcement.id,
                 user_ids,
                 f"New announcement '{created_announcement.title}' has been created for subject {subject.name}.",
@@ -408,7 +410,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while creating announcement",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(
@@ -668,8 +670,10 @@ class AnnouncementService(IAnnouncementService):
                         data=None,
                         message="An error occurred while updating announcement",
                     )
-                files.append(file_data.model_dump())
-            for link_name, link_url in (data.links).items():
+                files.append(file_data.model_dump(mode="json"))
+            for link in data.links:
+                link_name = link.get("name", "")
+                link_url = link.get("url", "")
                 if not Validator.is_valid_external_url(link_url):
                     await self.logger.log(
                         action="Update",
@@ -746,7 +750,7 @@ class AnnouncementService(IAnnouncementService):
                     )
             share_link = f"/users/announcements/{updated_announcement.id}"
             notification_response = await self.helper_service.send_notification(
-                Notification.Type.ANNOUNCEMENT,
+                Notification.NotificationType.ANNOUNCEMENT,
                 updated_announcement.id,
                 user_ids,
                 f"Announcement '{updated_announcement.title}' has been updated for subject {subject.name}.",
@@ -783,7 +787,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while updating announcement",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(
@@ -963,7 +967,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting announcement",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(

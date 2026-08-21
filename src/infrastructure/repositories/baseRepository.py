@@ -1,5 +1,6 @@
+import json
 from datetime import datetime
-from typing import Type, List
+from typing import Type
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 from sqlalchemy import text, desc, func, inspect
@@ -10,11 +11,11 @@ from core.utils.entitiesHandler import EntitiesHandler
 from core.utils.timezoneHandler import TimezoneHandler
 
 
-class BaseRepository(IBaseRepository[T]):
+class BaseRepository(IBaseRepository):
     def __init__(
         self,
         session: AsyncSession | None,
-        model: Type[T],
+        model: Type,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
     ):
         self._session = session
@@ -58,6 +59,10 @@ class BaseRepository(IBaseRepository[T]):
         if len(safe_message) > max_message_len:
             safe_message = safe_message[: max_message_len - 3] + "..."
 
+        formatted_details = (
+            json.dumps(details, default=str) if details is not None else None
+        )
+
         query = f"INSERT INTO {EntitiesHandler.TABLES.get('Log')} (action, entity, level, response_code, message, details, source, route, ip, user_id, created_at, updated_at) VALUES (:action, :entity, :level, :response_code, :message, :details, :source, :route, :ip, :user_id, :created_at, :updated_at)"
         params = {
             "action": action,
@@ -65,7 +70,7 @@ class BaseRepository(IBaseRepository[T]):
             "level": level,
             "response_code": code,
             "message": safe_message,
-            "details": details,
+            "details": formatted_details,
             "source": source,
             "route": route,
             "ip": ip,
@@ -111,7 +116,7 @@ class BaseRepository(IBaseRepository[T]):
             result = await session.execute(query)
             entity = result.scalars().first()
 
-            return BaseResponseDto[T](
+            return BaseResponseDto(
                 success=True,
                 data=entity,
                 message="Found Successfully",
@@ -123,15 +128,15 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while searching for {self._model.__name__}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[T](
+            return BaseResponseDto(
                 success=False,
                 data=None,
                 message="An error occurred while searching for the entity",
                 code=500,
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def find(
@@ -175,7 +180,7 @@ class BaseRepository(IBaseRepository[T]):
             result = await session.execute(query)
             entities = result.scalars().all()
 
-            return BaseResponseDto[List[T]](
+            return BaseResponseDto(
                 success=True,
                 data=list(entities),
                 message="Found Successfully",
@@ -187,11 +192,15 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while searching for {self._model.__name__}s",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[List[T]](
-                success=False, data=[], message="Search Failed", code=500, error=str(ex)
+            return BaseResponseDto(
+                success=False,
+                data=[],
+                message="Search Failed",
+                code=500,
+                error=repr(ex),
             )
 
     async def count(self, predicate=None):
@@ -205,7 +214,7 @@ class BaseRepository(IBaseRepository[T]):
             result = await session.execute(query)
             count = result.scalar()
 
-            return BaseResponseDto[int](
+            return BaseResponseDto(
                 success=True,
                 data=count if count else 0,
                 message="Count Retrieved Successfully",
@@ -217,15 +226,15 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while counting {self._model.__name__}s",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[int](
+            return BaseResponseDto(
                 success=False,
                 data=0,
                 message="Count Failed",
                 code=500,
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def create(self, entity):
@@ -234,7 +243,7 @@ class BaseRepository(IBaseRepository[T]):
             session.add(entity)
             await session.flush()
             await session.refresh(entity)
-            return BaseResponseDto[T](
+            return BaseResponseDto(
                 success=True,
                 data=entity,
                 message="Entity Added Successfully",
@@ -246,14 +255,14 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while creating {self._model.__name__}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[T](
+            return BaseResponseDto(
                 success=False,
                 data=None,
                 message=f"Error Creating {self._model.__name__}",
-                error=str(ex),
+                error=repr(ex),
                 code=500,
             )
 
@@ -277,7 +286,7 @@ class BaseRepository(IBaseRepository[T]):
                     setattr(updated_entity, attr, val)
 
             await session.flush()
-            return BaseResponseDto[T](
+            return BaseResponseDto(
                 success=True,
                 data=updated_entity,
                 message="Updated Successfully",
@@ -289,15 +298,15 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while updating {self._model.__name__}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[T](
+            return BaseResponseDto(
                 success=False,
                 data=None,
                 message="Update Failed",
                 code=500,
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def delete(self, entity):
@@ -306,7 +315,7 @@ class BaseRepository(IBaseRepository[T]):
             merged = await session.merge(entity)
             await session.delete(merged)
             await session.flush()
-            return BaseResponseDto[bool](
+            return BaseResponseDto(
                 success=True, data=True, message="Deleted Successfully", code=200
             )
         except Exception as ex:
@@ -315,15 +324,15 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while deleting {self._model.__name__}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[bool](
+            return BaseResponseDto(
                 success=False,
                 data=False,
                 message="Delete Failed",
                 code=500,
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def execute_sql(self, command, params=None):
@@ -334,7 +343,7 @@ class BaseRepository(IBaseRepository[T]):
                 await session.commit()
             else:
                 await self._execute_isolated_sql(command, params)
-            return BaseResponseDto[bool](
+            return BaseResponseDto(
                 success=True, data=True, message="SQL Executed", code=200
             )
         except Exception as ex:
@@ -343,15 +352,15 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while executing SQL",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[bool](
+            return BaseResponseDto(
                 success=False,
                 data=False,
                 message="SQL Execution Failed",
                 code=500,
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def execute_stored_function(self, function_name, params=None):
@@ -375,7 +384,7 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while executing stored function {function_name}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
             return BaseResponseDto(
@@ -383,7 +392,7 @@ class BaseRepository(IBaseRepository[T]):
                 data=None,
                 message="Stored Function Execution Failed",
                 code=500,
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def begin_transaction(self):
@@ -398,7 +407,7 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while beginning the transaction.",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
 
@@ -414,7 +423,7 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while committing the transaction.",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
 
@@ -430,6 +439,6 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while rolling back the transaction.",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )

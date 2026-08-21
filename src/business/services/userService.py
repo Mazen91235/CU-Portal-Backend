@@ -13,11 +13,12 @@ from core.entities.role import Role
 from core.entities.token import Token
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.userDtos import (
-    UserLoginWithGoogleDto,
+    UserLoginWithGoogleResponseDto,
     UserSignUpResponseDto,
     UserLoginResponseDto,
     UserStatisticsResponseDto,
     UserTokenDetailsResponseDto,
+    UserResendTokenResponseDto,
 )
 from core.utils.timezoneHandler import TimezoneHandler
 from core.utils.fernetHandler import FernetHandler
@@ -102,7 +103,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while finding user",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -163,7 +164,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while finding users",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -194,8 +195,8 @@ class UserService(IUserService):
             google_token_response = await self.token_repository.find_one(
                 and_(
                     Token.token == google_token_received,
-                    Token.type == Token.TokenType.GOOGLE_TOKEN,
-                    Token.expire_at > TimezoneHandler.now("UTC"),
+                    Token.token_type == Token.TokenType.GOOGLE_TOKEN["value"],
+                    Token.expires_at > TimezoneHandler.now("UTC"),
                 )
             )
             if not google_token_response.success:
@@ -237,9 +238,9 @@ class UserService(IUserService):
                     data=None,
                     message="Bad Request, Please try authorizing with Google again",
                 )
-            google_token.expire_at = TimezoneHandler.add_hours(-1)
+            google_token.expires_at = TimezoneHandler.add_hours(-1)
             update_google_token_response = await self.token_repository.update(
-                google_token, ["expire_at"]
+                google_token, ["expires_at"]
             )
             if not update_google_token_response.success:
                 return BaseResponseDto(
@@ -496,7 +497,11 @@ class UserService(IUserService):
             data.google_email = google_user_details.get("google_email")
             data.google_avatar = google_user_details.get("google_avatar")
             data.google_refresh_token = google_user_details.get("google_refresh_token")
-            json_user_data = data.model_dump()
+            json_user_data = {
+                k: v
+                for k, v in data.__dict__.items()
+                if v is not None and not k.startswith("_")
+            }
             encoded_json_user_data_response = JWTHandler.encode_jwt(
                 json_user_data,
                 os.environ.get("USER_TOKEN_SECRET_KEY"),
@@ -542,7 +547,7 @@ class UserService(IUserService):
                     "user": encoded_json_user_data,
                     "pending_approval": url if needs_approval else None,
                 },
-                type=Token.TokenType.EMAIL_VERIFICATION,
+                token_type=Token.TokenType.EMAIL_VERIFICATION["value"],
                 expires_at=expires_at,
                 is_valid=True,
             )
@@ -555,7 +560,22 @@ class UserService(IUserService):
                     message=created_token_response.message,
                 )
             created_token = created_token_response.data
-            message = f"Please use the following code to verify your email: {token_str}. This code will expire in {User.VerificationToken.EXPIRE_HOURS} hour({f"s" if User.VerificationToken.EXPIRE_HOURS > 1 else ''})."
+            if not created_token:
+                await self.logger.log(
+                    action="Create",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to create verification token, no token returned after creation",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while creating verification token, please try again.",
+                )
+            message = f"Please use the following code to verify your email: {token_str}. This code will expire in {User.VerificationToken.EXPIRE_HOURS} hour{f"s" if User.VerificationToken.EXPIRE_HOURS > 1 else ''}."
             email_response = await self.helper_service.send_email(
                 to_email=data.email,
                 subject="CU - Portal - Verify Email",
@@ -585,7 +605,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while creating user",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -785,7 +805,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while updating user",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -798,36 +818,42 @@ class UserService(IUserService):
     # User Specific Functions
     async def _invalidate_tokens(self, user_id: int):
         try:
-            tokens_response = await self.token_repository.find(
-                Token.user_id == user_id,
-            )
-            if not tokens_response.success:
+            user_response = await self.user_repository.find_one(User.id == user_id)
+            if not user_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=tokens_response.code,
+                    code=user_response.code,
                     data=False,
-                    message=tokens_response.message,
+                    message=user_response.message,
                 )
-            tokens = tokens_response.data
-            if not tokens:
+            user = user_response.data
+            if not user:
                 await self.logger.log(
                     action="InvalidateTokens",
                     entity="User",
-                    level="info",
-                    code=200,
-                    message="No tokens found for the user to invalidate",
+                    level="warning",
+                    code=404,
+                    message="User not found with this ID",
                     source="UserService",
                 )
-                return BaseResponseDto(success=True, data=True)
-            for token in tokens:
-                delete_token_response = await self.token_repository.delete(token)
-                if not delete_token_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=delete_token_response.code,
-                        data=False,
-                        message=delete_token_response.message,
-                    )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=False,
+                    message="User not found",
+                )
+            user.refresh_token = None
+            user.refresh_expire_at = TimezoneHandler.add_minutes(-1)
+            update_user_response = await self.user_repository.update(
+                user, ["refresh_token", "refresh_expire_at"]
+            )
+            if not update_user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_user_response.code,
+                    data=False,
+                    message=update_user_response.message,
+                )
             return BaseResponseDto(success=True, data=True)
         except Exception as ex:
             await self.logger.log(
@@ -836,7 +862,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while invalidating tokens",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -934,7 +960,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while logging in user",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -949,8 +975,8 @@ class UserService(IUserService):
             token_response = await self.token_repository.find_one(
                 and_(
                     Token.token == token,
-                    Token.type == Token.TokenType.EMAIL_VERIFICATION,
-                    Token.expire_at > TimezoneHandler.now("UTC"),
+                    Token.token_type == Token.TokenType.EMAIL_VERIFICATION["value"],
+                    Token.expires_at > TimezoneHandler.now("UTC"),
                 ),
             )
             if not token_response.success:
@@ -1030,9 +1056,9 @@ class UserService(IUserService):
                     data=False,
                     message="Failed to Retrieve user data from token, please try again.",
                 )
-            token.expire_at = TimezoneHandler.add_hours(-1)
+            token.expires_at = TimezoneHandler.add_hours(-1)
             update_token_response = await self.token_repository.update(
-                token, ["expire_at"]
+                token, ["expires_at"]
             )
             if not update_token_response.success:
                 return BaseResponseDto(
@@ -1067,6 +1093,7 @@ class UserService(IUserService):
                     data=False,
                     message="An error occurred while verifying email, please try again.",
                 )
+            pending_approval_url = token_details.get("pending_approval")
             user = User(
                 name=user_data.get("name"),
                 email=user_data.get("email"),
@@ -1081,6 +1108,7 @@ class UserService(IUserService):
                     user_data.get("google_refresh_token") or ""
                 ),
                 role=user_role,
+                status=True if not pending_approval_url else False,
             )
             create_user_response = await self.user_repository.create(user)
             if not create_user_response.success:
@@ -1106,10 +1134,10 @@ class UserService(IUserService):
                     data=False,
                     message="An error occurred while creating user after email verification",
                 )
-            if token_details.get("pending_approval"):
+            if pending_approval_url:
                 pending_user = PendingUser(
                     user_id=created_user.id,
-                    url=token_details.get("pending_approval"),
+                    url=pending_approval_url,
                 )
                 create_pending_user_response = (
                     await self.pending_user_repository.create(pending_user)
@@ -1158,7 +1186,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while verifying email",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1171,23 +1199,20 @@ class UserService(IUserService):
     async def login_with_google(self):
         try:
             request = request_context.get()
-            is_localhost = (
-                request.query_params.get("localhost", "false").lower() == "true"
-            )
+            is_localhost = "localhost" in (request.url.hostname or "")
             redirect_response_url = (
-                "https://"
+                ("https://" if not is_localhost else "http://")
                 + (request.url.hostname or "")
-                + "/google-authentication-redirect"
+                + (f":{request.url.port}" if request.url.port else "")
+                + "/auth/google-authentication-redirect"
             )
-            if is_localhost:
-                redirect_response_url += "?localhost=true"
             google_client = OAuthHandler.create_google_client()
             state = StringHandler.generate_random_string(User.GoogleToken.TOKEN_LENGTH)
             nonce = StringHandler.generate_random_string(User.GoogleToken.TOKEN_LENGTH)
             state_token = Token(
                 token=state,
-                type=Token.TokenType.GOOGLE_TOKEN,
-                expire_at=TimezoneHandler.add_hours(User.GoogleToken.EXPIRE_HOURS),
+                token_type=Token.TokenType.GOOGLE_TOKEN["value"],
+                expires_at=TimezoneHandler.add_hours(User.GoogleToken.EXPIRE_HOURS),
                 details={"nonce": nonce},
                 is_valid=True,
             )
@@ -1223,7 +1248,7 @@ class UserService(IUserService):
                 message="Initiating Google login",
                 source="UserService",
             )
-            response = UserLoginWithGoogleDto(
+            response = UserLoginWithGoogleResponseDto(
                 redirect_response_url=redirect_response_url, state=state, nonce=nonce
             )
             return BaseResponseDto(success=True, code=200, data=response)
@@ -1234,7 +1259,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while logging in",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1248,7 +1273,7 @@ class UserService(IUserService):
         try:
             request = request_context.get()
             redirect_url = os.environ.get("FRONTEND_URL")
-            if request.query_params.get("localhost", "false").lower() == "true":
+            if "localhost" in (request.url.hostname or ""):
                 redirect_url = os.environ.get("FRONTEND_URL_LOCALHOST")
             requested_scopes = [
                 "openid",
@@ -1264,8 +1289,8 @@ class UserService(IUserService):
             state_token_response = await self.token_repository.find_one(
                 and_(
                     Token.token == oauth_state,
-                    Token.type == Token.TokenType.GOOGLE_TOKEN,
-                    Token.expire_at > TimezoneHandler.now("UTC"),
+                    Token.token_type == Token.TokenType.GOOGLE_TOKEN["value"],
+                    Token.expires_at > TimezoneHandler.now("UTC"),
                 )
             )
             if not state_token_response.success:
@@ -1405,8 +1430,8 @@ class UserService(IUserService):
             )
             google_token = Token(
                 token=google_token_str,
-                type=Token.TokenType.GOOGLE_TOKEN,
-                expire_at=TimezoneHandler.add_hours(User.GoogleToken.EXPIRE_HOURS),
+                token_type=Token.TokenType.GOOGLE_TOKEN["value"],
+                expires_at=TimezoneHandler.add_hours(User.GoogleToken.EXPIRE_HOURS),
                 details={"token": encoded_google_user_details},
                 is_valid=True,
             )
@@ -1452,7 +1477,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while authenticating with Google",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1517,7 +1542,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while logging out",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1532,7 +1557,7 @@ class UserService(IUserService):
             token_response = await self.token_repository.find_one(
                 and_(
                     Token.token == token,
-                    Token.expire_at > TimezoneHandler.now("UTC"),
+                    Token.expires_at > TimezoneHandler.now("UTC"),
                 )
             )
             if not token_response.success:
@@ -1639,7 +1664,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while retrieving token details",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1654,14 +1679,14 @@ class UserService(IUserService):
             token_response = await self.token_repository.find_one(
                 and_(
                     Token.token == token,
-                    Token.expire_at > TimezoneHandler.now("UTC"),
+                    Token.expires_at > TimezoneHandler.now("UTC"),
                 )
             )
             if not token_response.success:
                 return BaseResponseDto(
                     success=False,
                     code=token_response.code,
-                    data=False,
+                    data=None,
                     message=token_response.message,
                 )
             token = token_response.data
@@ -1677,7 +1702,7 @@ class UserService(IUserService):
                 return BaseResponseDto(
                     success=False,
                     code=404,
-                    data=False,
+                    data=None,
                     message="Token not found or expired, please request a new one.",
                 )
             token.token = StringHandler.generate_random_number(Token.SHORT_LENGTH)
@@ -1689,7 +1714,7 @@ class UserService(IUserService):
                 return BaseResponseDto(
                     success=False,
                     code=update_token_response.code,
-                    data=False,
+                    data=None,
                     message=update_token_response.message,
                 )
             updated_token = update_token_response.data
@@ -1705,7 +1730,7 @@ class UserService(IUserService):
                 return BaseResponseDto(
                     success=False,
                     code=500,
-                    data=False,
+                    data=None,
                     message="An error occurred while resending token, please try again.",
                 )
             token_details = updated_token.details
@@ -1721,7 +1746,7 @@ class UserService(IUserService):
                 return BaseResponseDto(
                     success=False,
                     code=500,
-                    data=False,
+                    data=None,
                     message="An error occurred while resending token, please try again.",
                 )
             encoded_user_data = token_details.get("user")
@@ -1737,7 +1762,7 @@ class UserService(IUserService):
                 return BaseResponseDto(
                     success=False,
                     code=500,
-                    data=False,
+                    data=None,
                     message="An error occurred while resending token, please try again.",
                 )
             user_data_response = JWTHandler.decode_jwt(
@@ -1758,7 +1783,7 @@ class UserService(IUserService):
                 return BaseResponseDto(
                     success=False,
                     code=500,
-                    data=False,
+                    data=None,
                     message="An error occurred while resending token, please try again.",
                 )
             user_data = user_data_response.data
@@ -1774,7 +1799,7 @@ class UserService(IUserService):
                 return BaseResponseDto(
                     success=False,
                     code=500,
-                    data=False,
+                    data=None,
                     message="An error occurred while resending token, please try again.",
                 )
             user_email = user_data.get("email")
@@ -1790,10 +1815,10 @@ class UserService(IUserService):
                 return BaseResponseDto(
                     success=False,
                     code=500,
-                    data=False,
+                    data=None,
                     message="An error occurred while resending token, please try again.",
                 )
-            message = f"Please use the following code to verify your email: {updated_token.token}. This code will expire in {Token.EXPIRE_HOURS} hour({f's' if Token.EXPIRE_HOURS > 1 else ''})."
+            message = f"Please use the following code to verify your email: {updated_token.token}. This code will expire in {Token.EXPIRE_HOURS} hour{f's' if Token.EXPIRE_HOURS > 1 else ''}."
             email_response = await self.helper_service.send_email(
                 to_email=user_email,
                 subject="CU Portal - Email Verification Code",
@@ -1812,7 +1837,7 @@ class UserService(IUserService):
                 return BaseResponseDto(
                     success=False,
                     code=email_response.code or 500,
-                    data=False,
+                    data=None,
                     message="An error occurred while resending token, please try again.",
                 )
             await self.logger.log(
@@ -1826,7 +1851,7 @@ class UserService(IUserService):
             return BaseResponseDto(
                 success=True,
                 code=200,
-                data=True,
+                data=UserResendTokenResponseDto(token=updated_token.token),
                 message="Verification email sent successfully.",
             )
         except Exception as ex:
@@ -1836,13 +1861,13 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while resending token",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
                 success=False,
                 code=500,
-                data=False,
+                data=None,
                 message="An error occurred while resending token, please try again.",
             )
 
@@ -1872,8 +1897,10 @@ class UserService(IUserService):
                     data=None,
                     message="Logged in user not found, please log in again.",
                 )
-            new_refresh_token = StringHandler.generate_random_string(Token.LONG_LENGTH)
-            new_expires_at = TimezoneHandler.add_days(Token.REFRESH_TOKEN_EXPIRE_DAYS)
+            new_refresh_token = StringHandler.generate_random_string(
+                Token.STANDARD_LENGTH
+            )
+            new_expires_at = TimezoneHandler.add_days(User.RefreshToken.EXPIRE_DAYS)
             user.refresh_token = new_refresh_token
             user.refresh_expire_at = new_expires_at
             update_user_response = await self.user_repository.update(
@@ -1908,7 +1935,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while refreshing token",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -1923,8 +1950,8 @@ class UserService(IUserService):
             token_response = await self.token_repository.find_one(
                 and_(
                     Token.token == google_details_token,
-                    Token.type == Token.TokenType.GOOGLE_TOKEN,
-                    Token.expire_at > TimezoneHandler.now("UTC"),
+                    Token.token_type == Token.TokenType.GOOGLE_TOKEN["value"],
+                    Token.expires_at > TimezoneHandler.now("UTC"),
                 )
             )
             if not token_response.success:
@@ -2069,7 +2096,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while retrieving Google stored token",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2162,7 +2189,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while retrieving Google access token",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2219,7 +2246,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while getting user statistics",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2263,6 +2290,56 @@ class UserService(IUserService):
                     code=404,
                     data=False,
                     message="Logged in user not found, please log in again.",
+                )
+            logged_in_user_permissions = (
+                await self.helper_service.get_logged_in_user_permissions()
+            )
+            if not logged_in_user_permissions.success:
+                await self.logger.log(
+                    action="UpdateMany",
+                    entity="User",
+                    level="error",
+                    code=logged_in_user_permissions.code or 500,
+                    message=f"Failed to retrieve logged in user permissions for updating users",
+                    details={"error": logged_in_user_permissions.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_permissions.code,
+                    data=False,
+                    message=logged_in_user_permissions.message,
+                )
+            logged_in_user_permissions = logged_in_user_permissions.data
+            if not logged_in_user_permissions:
+                await self.logger.log(
+                    action="UpdateMany",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message=f"Logged in user permissions are None after retrieval for updating users",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="An error occurred while retrieving your permissions, please try again.",
+                )
+            if "Assign Roles" not in logged_in_user_permissions:
+                await self.logger.log(
+                    action="UpdateMany",
+                    entity="User",
+                    level="warning",
+                    code=403,
+                    message=f"Logged in user does not have 'Assign Roles' permission to update user roles",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=False,
+                    message=f"You do not have the 'Assign Roles' permission required to update user roles.",
                 )
             for record in data.data_to_update:
                 user_response = await self.user_repository.find_one(
@@ -2323,7 +2400,7 @@ class UserService(IUserService):
                     )
                 user.status = record.approved
                 role_response = await self.role_repository.find_one(
-                    Role.id == record.role_id, ["exact_roles"]
+                    Role.id == record.role_id, ["role_links.exact_role"]
                 )
                 if not role_response.success:
                     return BaseResponseDto(
@@ -2348,32 +2425,8 @@ class UserService(IUserService):
                         data=False,
                         message=f"Role with ID {record.role_id} not found.",
                     )
-                user_permissions_response = await self.get_user_permissions()
-                if not user_permissions_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=user_permissions_response.code,
-                        data=False,
-                        message=user_permissions_response.message,
-                    )
-                user_permissions = user_permissions_response.data
-                if not user_permissions:
-                    await self.logger.log(
-                        action="UpdateMany",
-                        entity="User",
-                        level="warning",
-                        code=403,
-                        message=f"Logged in user does not have permissions to update user with ID {user.id}",
-                        source="UserService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=403,
-                        data=False,
-                        message=f"You do not have permissions to update user records.",
-                    )
                 role_permissions = [perm.name for perm in role.exact_roles]
-                if not set(role_permissions).issubset(set(user_permissions)):
+                if not set(role_permissions).issubset(set(logged_in_user_permissions)):
                     await self.logger.log(
                         action="UpdateMany",
                         entity="User",
@@ -2455,7 +2508,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while updating multiple users",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2500,32 +2553,35 @@ class UserService(IUserService):
                     data=False,
                     message="Logged in user not found, please log in again.",
                 )
-            should_be_none = ["faculty_id", "department_id", "year_id", "type"]
-            for attr in should_be_none:
-                attr_value = getattr(logged_in_user, attr)
-                if type(attr_value) == str:
-                    attr_value = attr_value.strip().lower()
-                if attr_value:
-                    await self.logger.log(
-                        action="UpdateAcademicData",
-                        entity="User",
-                        level="warning",
-                        code=400,
-                        message=f"User with ID {logged_in_user.id} attempted to update academic data, but their academic data is already set, which is not allowed",
-                        source="UserService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=False,
-                        message=f"User has Set Academic Data already, and cannot update it again.",
-                    )
+            verify_academic_data_response = (
+                await self.helper_service.verify_academic_data(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                )
+            )
+            if not verify_academic_data_response.success:
+                await self.logger.log(
+                    action="UpdateAcademicData",
+                    entity="User",
+                    level="error",
+                    code=verify_academic_data_response.code or 500,
+                    message=f"Failed to verify academic data for updating user : {verify_academic_data_response.message}",
+                    details={"error": verify_academic_data_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=verify_academic_data_response.code,
+                    data=False,
+                    message=verify_academic_data_response.message,
+                )
             logged_in_user.faculty_id = data.faculty_id
             logged_in_user.department_id = data.department_id
             logged_in_user.year_id = data.year_id
-            logged_in_user.type = data.study_type
+            logged_in_user.study_type = data.study_type
             update_user_response = await self.user_repository.update(
-                logged_in_user, ["faculty_id", "department_id", "year_id", "type"]
+                logged_in_user, ["faculty_id", "department_id", "year_id", "study_type"]
             )
             if not update_user_response.success:
                 return BaseResponseDto(
@@ -2555,7 +2611,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while updating user academic data",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2642,7 +2698,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while getting current user",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2691,7 +2747,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while getting current user ID",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2736,8 +2792,11 @@ class UserService(IUserService):
                     data=None,
                     message="Logged in user not found, please log in again.",
                 )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Role, ["role_links.exact_role"]
+            )
             role_response = await self.role_repository.find_one(
-                Role.id == logged_in_user.role_id, ["exact_roles"]
+                Role.id == logged_in_user.role_id, dynamic_includes
             )
             if not role_response.success:
                 return BaseResponseDto(
@@ -2776,7 +2835,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while getting user permissions",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(
@@ -2833,7 +2892,7 @@ class UserService(IUserService):
                 level="error",
                 code=500,
                 message=f"An error occurred while checking user permissions",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="UserService",
             )
             return BaseResponseDto(

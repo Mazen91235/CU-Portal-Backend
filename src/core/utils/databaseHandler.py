@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import json
 from pathlib import Path
 
 load_dotenv()  # Load environment variables from .env file
@@ -38,4 +39,5 @@ class DatabaseHandler:
         return {
             "pool_size": 20,
             "max_overflow": 10,
+            "json_serializer": lambda obj: json.dumps(obj, default=str),
         }

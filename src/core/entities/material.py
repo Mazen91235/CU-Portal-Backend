@@ -34,7 +34,7 @@ class Material(Base):
     # Columns
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    type: Mapped[str] = mapped_column(String(30), nullable=False)
+    material_type: Mapped[str] = mapped_column(String(30), nullable=False)
     url: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict

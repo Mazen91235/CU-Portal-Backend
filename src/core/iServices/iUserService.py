@@ -7,10 +7,11 @@ from core.dtos.userDtos import (
     UserHasPermissionsDto,
     UserSearchDto,
     UserSignUpResponseDto,
-    UserLoginWithGoogleDto,
+    UserLoginWithGoogleResponseDto,
     UserLoginResponseDto,
     UserStatisticsResponseDto,
     UserTokenDetailsResponseDto,
+    UserResendTokenResponseDto,
     UserUpdateAcademicDataDto,
     UserUpdateUsersDto,
 )
@@ -29,7 +30,7 @@ class IUserService(
         pass
 
     @abstractmethod
-    async def login_with_google(self) -> BaseResponseDto[UserLoginWithGoogleDto]:
+    async def login_with_google(self) -> BaseResponseDto[UserLoginWithGoogleResponseDto]:
         pass
 
     @abstractmethod
@@ -47,7 +48,7 @@ class IUserService(
         pass
 
     @abstractmethod
-    async def resend_token(self, token: str) -> BaseResponseDto[bool]:
+    async def resend_token(self, token: str) -> BaseResponseDto[UserResendTokenResponseDto]:
         pass
 
     @abstractmethod

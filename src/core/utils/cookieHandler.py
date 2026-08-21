@@ -1,6 +1,9 @@
 import os
 from fastapi import Request, Response
+from fastapi.security import APIKeyCookie
 from typing import Literal
+
+cookie_scheme = APIKeyCookie(name="token", auto_error=False)
 
 
 class CookieHandler:

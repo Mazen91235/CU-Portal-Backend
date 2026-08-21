@@ -2,6 +2,11 @@ from importlib import import_module
 from typing import Any, TypeVar, Generic, Type
 from pydantic import BaseModel
 from sqlalchemy import inspect
+from sqlalchemy.ext.associationproxy import (
+    AssociationProxy,
+    _AssociationList,
+    _AssociationSet,
+)
 
 T = TypeVar("T")
 U = TypeVar("U")
@@ -9,6 +14,16 @@ U = TypeVar("U")
 
 class Mapper(Generic[T, U]):
     _response_dto_cache: dict[type, type | None] = {}
+    PROXIES = {
+        "user.subjects": "user_subject_links",
+        "subject.users": "user_subject_links",
+        "role.exact_roles": "role_links",
+        "exact_role.roles": "role_links",
+        "user.notifications": "user_notifications",
+        "notification.users": "user_notifications",
+        "user.going_events": "user_events",
+        "event.attendees": "user_events",
+    }
 
     @classmethod
     def _resolve_response_dto(cls, entity_cls: type) -> type | None:
@@ -39,7 +54,7 @@ class Mapper(Generic[T, U]):
         if value is None:
             return None
 
-        if isinstance(value, list):
+        if isinstance(value, (list, tuple, set, _AssociationList, _AssociationSet)):
             return [cls._map_nested_value(item, visited) for item in value]
 
         if not cls._is_orm_instance(value):
@@ -64,17 +79,29 @@ class Mapper(Generic[T, U]):
         to_dict: bool = False,
         visited: set[int] | None = None,
     ) -> U | dict:
-        dest = cls()
+        mapped_values = {}
         active_visited = set(visited) if visited is not None else set()
         active_visited.add(id(src))
 
         # Identify source attributes cleanly based on structure type
         if isinstance(src, BaseModel):
-            source_attrs = list(src.model_fields.keys())
+            source_attrs = list(type(src).model_fields.keys())
+        elif isinstance(src, dict):
+            source_attrs = list(src.keys())
         else:
             try:
                 inspected = inspect(src)
                 source_attrs = list(inspected.dict.keys()) if inspected else []
+                if inspected and hasattr(inspected, "mapper"):
+                    for key, descriptor in inspected.mapper.all_orm_descriptors.items():
+                        proxy_key = f"{src.__class__.__name__.lower()}.{key}"
+                        if (
+                            issubclass(type(descriptor), AssociationProxy)
+                            and Mapper.PROXIES.get(proxy_key, "") in source_attrs
+                            and key not in source_attrs
+                        ):
+                            source_attrs.append(key)
+
             except Exception:
                 source_attrs = dir(src)
 
@@ -85,18 +112,30 @@ class Mapper(Generic[T, U]):
             ):
                 source_attrs.append("google_details_token")
 
+        target_fields = (
+            cls.model_fields.keys() if issubclass(cls, BaseModel) else dir(cls)
+        )
+
         # Map matching field names directly across
-        for attr in source_attrs:
+        for attr in target_fields:
             if attr.startswith("_") or attr.startswith("Model"):
                 continue
 
-            if hasattr(dest, attr):
-                raw_value = getattr(src, attr)
+            if attr in source_attrs:
+                raw_value = (
+                    getattr(src, attr) if not isinstance(src, dict) else src.get(attr)
+                )
                 mapped_value = Mapper._map_nested_value(raw_value, active_visited)
-                setattr(dest, attr, mapped_value)
+                mapped_values[attr] = mapped_value
+
+        dest = cls(**mapped_values)
 
         if to_dict:
-            return dest.model_dump() if isinstance(dest, BaseModel) else dest.__dict__
+            return (
+                dest.model_dump(mode="json")
+                if isinstance(dest, BaseModel)
+                else dest.__dict__
+            )
 
         return dest
 

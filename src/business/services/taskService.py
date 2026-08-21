@@ -86,7 +86,7 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="Error finding task",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(
@@ -146,7 +146,7 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="An error occurred while finding tasks",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(
@@ -161,7 +161,7 @@ class TaskService(ITaskService):
             existing_task_response = await self.task_repository.find_one(
                 and_(
                     Task.name == data.name,
-                    Task.type == "task",
+                    Task.task_type == "task",
                     Task.subject_id == data.subject_id,
                 )
             )
@@ -258,8 +258,10 @@ class TaskService(ITaskService):
                         data=None,
                         message="Failed to fetch file data from Google Drive",
                     )
-                files.append(file_data.model_dump())
-            for link_name, link_url in (data.links).items():
+                files.append(file_data.model_dump(mode="json"))
+            for link in data.links:
+                link_name = link.get("name", "")
+                link_url = link.get("url", "")
                 if not Validator.is_valid_external_url(link_url):
                     await self.logger.log(
                         action="Create",
@@ -381,7 +383,7 @@ class TaskService(ITaskService):
                 )
             share_link = f"/users/tasks/{created_task.id}"
             notification_response = await self.helper_service.send_notification(
-                Notification.Type.TASK,
+                Notification.NotificationType.TASK,
                 created_task.id,
                 user_ids,
                 f"New task '{created_task.title}' has been created for subject {subject.name}.",
@@ -418,7 +420,7 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="An error occurred while creating task",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(
@@ -431,7 +433,7 @@ class TaskService(ITaskService):
     async def update(self, data):
         try:
             target_task_response = await self.task_repository.find_one(
-                and_(Task.id == data.id, Task.type == "task")
+                and_(Task.id == data.id, Task.task_type == "task")
             )
             if not target_task_response.success:
                 return BaseResponseDto(
@@ -459,7 +461,7 @@ class TaskService(ITaskService):
             existing_task_response = await self.task_repository.find_one(
                 and_(
                     Task.name == data.name,
-                    Task.type == "task",
+                    Task.task_type == "task",
                     Task.subject_id == data.subject_id,
                 )
             )
@@ -680,8 +682,10 @@ class TaskService(ITaskService):
                         data=None,
                         message="An error occurred while updating task",
                     )
-                files.append(file_data.model_dump())
-            for link_name, link_url in (data.links).items():
+                files.append(file_data.model_dump(mode="json"))
+            for link in data.links:
+                link_name = link.get("name", "")
+                link_url = link.get("url", "")
                 if not Validator.is_valid_external_url(link_url):
                     await self.logger.log(
                         action="Update",
@@ -773,7 +777,7 @@ class TaskService(ITaskService):
                     )
             share_link = f"/users/tasks/{updated_task.id}"
             notification_response = await self.helper_service.send_notification(
-                Notification.Type.TASK,
+                Notification.NotificationType.TASK,
                 updated_task.id,
                 user_ids,
                 f"Task '{updated_task.title}' has been updated for subject {subject.name}.",
@@ -800,7 +804,7 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="An error occurred while updating task",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(
@@ -813,7 +817,7 @@ class TaskService(ITaskService):
     async def delete(self, data):
         try:
             target_task_response = await self.task_repository.find_one(
-                and_(Task.id == data.id, Task.type == "task")
+                and_(Task.id == data.id, Task.task_type == "task")
             )
             if not target_task_response.success:
                 return BaseResponseDto(
@@ -978,7 +982,7 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting task",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(

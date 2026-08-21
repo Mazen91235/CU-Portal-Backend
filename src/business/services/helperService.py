@@ -48,6 +48,10 @@ class HelperService(IHelperService[U]):
         self.department_repository = department_repository
         self.year_repository = year_repository
         self.subject_repository = subject_repository
+        self.smtp_name = os.environ.get("SMTP_FROM_NAME", "")
+        self.smtp_email = os.environ.get("SMTP_FROM_EMAIL", "")
+        self.brevo_api_url = os.environ.get("BREVO_API_URL", "")
+        self.brevo_api_key = os.environ.get("BREVO_API_KEY", "")
 
     def _get_column_type(self, column):
         column_property = getattr(column, "property", None)
@@ -86,7 +90,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while fetching IP address",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def get_logged_in_user(self):
@@ -107,7 +111,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while fetching logged-in user",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def get_logged_in_user_permissions(self):
@@ -128,7 +132,9 @@ class HelperService(IHelperService[U]):
                     data=None,
                     message="No logged-in user found",
                 )
-            dynamic_includes = self.generate_dynamic_includes(Role, ["exact_roles"])
+            dynamic_includes = self.generate_dynamic_includes(
+                Role, ["role_links.exact_role"]
+            )
             role_response = await self.role_repository.find_one(
                 Role.id == user.role_id, dynamic_includes
             )
@@ -159,7 +165,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while fetching logged-in user permissions",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def verify_restricted_access(
@@ -313,7 +319,7 @@ class HelperService(IHelperService[U]):
             if subject_id:
                 dynamic_includes = self.generate_dynamic_includes(Subject, ["users"])
                 subject_response = await self.subject_repository.find_one(
-                    Subject.id == subject_id
+                    Subject.id == subject_id, dynamic_includes
                 )
                 if not subject_response.success:
                     return BaseResponseDto(
@@ -329,6 +335,27 @@ class HelperService(IHelperService[U]):
                         code=404,
                         data=False,
                         message=f"Subject with ID {subject_id} not found",
+                    )
+                if faculty_id and subject.faculty_id != faculty_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Subject does not belong to the specified faculty",
+                    )
+                if department_id and subject.department_id != department_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Subject does not belong to the specified department",
+                    )
+                if year_id and subject.year_id != year_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Subject does not belong to the specified year",
                     )
                 user_ids = [user.id for user in subject.users] if subject.users else []
                 if (
@@ -353,7 +380,135 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=False,
                 message="An error occurred while verifying restricted access",
-                error=str(ex),
+                error=repr(ex),
+            )
+
+    async def verify_academic_data(
+        self, faculty_id=None, department_id=None, year_id=None, subject_id=None
+    ):
+        try:
+            if faculty_id:
+                faculty_response = await self.faculty_repository.find_one(
+                    Faculty.id == faculty_id
+                )
+                if not faculty_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=faculty_response.code,
+                        data=False,
+                        message=faculty_response.message,
+                    )
+                faculty = faculty_response.data
+                if not faculty:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Faculty with ID {faculty_id} not found",
+                    )
+            if department_id and not faculty_id:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=False,
+                    message="Department ID specified without corresponding Faculty ID",
+                )
+            if department_id:
+                department_response = await self.department_repository.find_one(
+                    Department.id == department_id
+                )
+                if not department_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=department_response.code,
+                        data=False,
+                        message=department_response.message,
+                    )
+                department = department_response.data
+                if not department:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Department with ID {department_id} not found",
+                    )
+                if faculty_id and department.faculty_id != faculty_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Department does not belong to the specified faculty",
+                    )
+            if year_id:
+                year_response = await self.year_repository.find_one(Year.id == year_id)
+                if not year_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=year_response.code,
+                        data=False,
+                        message=year_response.message,
+                    )
+                year = year_response.data
+                if not year:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Year with ID {year_id} not found",
+                    )
+            if subject_id:
+                subject_response = await self.subject_repository.find_one(
+                    Subject.id == subject_id
+                )
+                if not subject_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=subject_response.code,
+                        data=False,
+                        message=subject_response.message,
+                    )
+                subject = subject_response.data
+                if not subject:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"Subject with ID {subject_id} not found",
+                    )
+                if faculty_id and subject.faculty_id != faculty_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Subject does not belong to the specified faculty",
+                    )
+                if department_id and subject.department_id != department_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Subject does not belong to the specified department",
+                    )
+                if year_id and subject.year_id != year_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message="Subject does not belong to the specified year",
+                    )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Academic data is valid and consistent",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="An error occurred while verifying academic data",
+                error=repr(ex),
             )
 
     async def send_email(self, to_email, subject, body):
@@ -361,31 +516,37 @@ class HelperService(IHelperService[U]):
             if os.environ.get("TESTING", "false").lower() == "true":
                 # In testing mode, we won't actually send an email.
                 return BaseResponseDto(success=True, data=True)
-            smtp_host = os.environ.get("SMTP_HOST")
-            smtp_port = int(os.environ.get("SMTP_PORT") or 587)
-            smtp_user = os.environ.get("SMTP_USER", "")
-            smtp_password = os.environ.get("SMTP_PASSWORD", "")
-            smtp_from = os.environ.get("SMTP_FROM") or smtp_user
-
-            async with SMTP(
-                hostname=smtp_host,
-                port=smtp_port,
-            ) as smtp:
-                await smtp.login(smtp_user, smtp_password)
-                email_message = EmailMessage()
-                email_message["From"] = smtp_from
-                email_message["To"] = to_email
-                email_message["Subject"] = subject
-                email_message.set_content(body, subtype="html")
-                await smtp.send_message(email_message)
-                return BaseResponseDto(success=True, data=True)
+            async with aiohttp.ClientSession() as session:
+                response = await session.post(
+                    self.brevo_api_url,
+                    headers={
+                        "accept": "application/json",
+                        "api-key": self.brevo_api_key,
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "sender": {"name": self.smtp_name, "email": self.smtp_email},
+                        "to": [{"email": to_email}],
+                        "subject": subject,
+                        "htmlContent": body,
+                    },
+                )
+                if response.status != 201:
+                    return BaseResponseDto(
+                        success=False,
+                        code=response.status,
+                        data=False,
+                        message=f"Failed to send email. Please try again later.",
+                        error=f"Code: {response.status}, Response: {await response.text()}",
+                    )
+            return BaseResponseDto(success=True, data=True)
         except Exception as ex:
             return BaseResponseDto(
                 success=False,
                 code=500,
                 data=False,
                 message="An error occurred while sending the email",
-                error=str(ex),
+                error=repr(ex),
             )
 
     def generate_dynamic_includes(self, cls, includes):
@@ -539,7 +700,7 @@ class HelperService(IHelperService[U]):
         try:
             notification = Notification(
                 content=content,
-                type=notification_type,
+                notification_type=notification_type,
                 parent_id=parent_id,
                 url=url,
             )
@@ -595,7 +756,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=False,
                 message="An error occurred while sending the notification",
-                error=str(ex),
+                error=repr(ex),
             )
 
     # File Functions
@@ -658,7 +819,7 @@ class HelperService(IHelperService[U]):
                             message="Request successful",
                         )
             except Exception as ex:
-                errors.append(str(ex))
+                errors.append(repr(ex))
                 await asyncio.sleep(2**attempt)  # Exponential backoff
                 continue
         return BaseResponseDto(
@@ -817,13 +978,16 @@ class HelperService(IHelperService[U]):
 
     def verify_file_size(self, file_size, max_size_in_bytes):
         units = ["B", "KB", "MB", "GB", "TB"]
-        if not file_size or not file_size.isdigit():
+        if not file_size:
             return False
         for unit in units:
             if file_size.endswith(unit):
-                size_value = float(file_size[: -len(unit)].strip())
-                size_in_bytes = size_value * (1024 ** units.index(unit))
-                return size_in_bytes <= max_size_in_bytes
+                try:
+                    size_value = float(file_size[: -len(unit)].strip())
+                    size_in_bytes = size_value * (1024 ** units.index(unit))
+                    return size_in_bytes <= max_size_in_bytes
+                except ValueError:
+                    continue
         return False
 
     async def verify_file_exists_on_drive(self, url):
@@ -875,7 +1039,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while verifying file existence on Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def remove_files_from_drive(self, files):
@@ -952,7 +1116,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=False,
                 message="An error occurred while removing files from Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def fetch_from_drive(
@@ -1139,7 +1303,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while fetching the file from Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def get_google_access_token(
@@ -1208,7 +1372,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while fetching Connecting with Google API, please try again later",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def download_file_from_drive(
@@ -1293,7 +1457,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while downloading the file from Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def set_file_public_on_drive(
@@ -1367,7 +1531,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while setting the file public on Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def upload_file_to_drive(
@@ -1468,7 +1632,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while uploading the file to Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def delete_file_from_drive(
@@ -1516,7 +1680,7 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while deleting the file from Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def copy_file_on_drive(
@@ -1592,5 +1756,5 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while copying the file on Google Drive",
-                error=str(ex),
+                error=repr(ex),
             )
