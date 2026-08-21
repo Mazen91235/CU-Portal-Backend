@@ -161,7 +161,7 @@ class TaskService(ITaskService):
             existing_task_response = await self.task_repository.find_one(
                 and_(
                     Task.name == data.name,
-                    Task.type == "task",
+                    Task.task_type == "task",
                     Task.subject_id == data.subject_id,
                 )
             )
@@ -383,7 +383,7 @@ class TaskService(ITaskService):
                 )
             share_link = f"/users/tasks/{created_task.id}"
             notification_response = await self.helper_service.send_notification(
-                Notification.Type.TASK,
+                Notification.NotificationType.TASK,
                 created_task.id,
                 user_ids,
                 f"New task '{created_task.title}' has been created for subject {subject.name}.",
@@ -433,7 +433,7 @@ class TaskService(ITaskService):
     async def update(self, data):
         try:
             target_task_response = await self.task_repository.find_one(
-                and_(Task.id == data.id, Task.type == "task")
+                and_(Task.id == data.id, Task.task_type == "task")
             )
             if not target_task_response.success:
                 return BaseResponseDto(
@@ -461,7 +461,7 @@ class TaskService(ITaskService):
             existing_task_response = await self.task_repository.find_one(
                 and_(
                     Task.name == data.name,
-                    Task.type == "task",
+                    Task.task_type == "task",
                     Task.subject_id == data.subject_id,
                 )
             )
@@ -777,7 +777,7 @@ class TaskService(ITaskService):
                     )
             share_link = f"/users/tasks/{updated_task.id}"
             notification_response = await self.helper_service.send_notification(
-                Notification.Type.TASK,
+                Notification.NotificationType.TASK,
                 updated_task.id,
                 user_ids,
                 f"Task '{updated_task.title}' has been updated for subject {subject.name}.",
@@ -817,7 +817,7 @@ class TaskService(ITaskService):
     async def delete(self, data):
         try:
             target_task_response = await self.task_repository.find_one(
-                and_(Task.id == data.id, Task.type == "task")
+                and_(Task.id == data.id, Task.task_type == "task")
             )
             if not target_task_response.success:
                 return BaseResponseDto(

@@ -81,8 +81,8 @@ BEGIN
     WHERE u.faculty_id IS NOT NULL
       AND u.department_id IS NOT NULL
       AND u.year_id IS NOT NULL
-      AND u.type IS NOT NULL
-      AND u.type <> ''
+      AND u.study_type IS NOT NULL
+      AND u.study_type <> ''
       AND u.status = FALSE
       AND (p_faculty_id IS NULL OR u.faculty_id = p_faculty_id)
       AND (p_department_id IS NULL OR u.department_id = p_department_id)

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, set_timeout
 from core.iControllers.iUserController import IUserController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -67,6 +67,7 @@ def create_auth_router(
                     "google_details_token",
                 )
             ),
+            Depends(set_timeout(120)),
         ],
         response_model=BaseResponseDto,
         status_code=201,
@@ -84,12 +85,12 @@ def create_auth_router(
         "/verify-email",
         dependencies=[
             Depends(_is_logged_out),
-            Depends(_validate("code")),
+            Depends(_validate("token")),
         ],
         response_model=BaseResponseDto,
         status_code=200,
         summary="Verify user email",
-        description="Verifies the user's email using the provided verification code. Returns a success message upon successful verification.",
+        description="Verifies the user's email using the provided verification token. Returns a success message upon successful verification.",
     )
     async def verify_email(
         data: UserVerifyEmailDto,
@@ -102,6 +103,7 @@ def create_auth_router(
         "/resend-token",
         dependencies=[
             Depends(_is_logged_out),
+            Depends(set_timeout(120)),
         ],
         response_model=BaseResponseDto,
         status_code=200,
@@ -172,7 +174,7 @@ def create_auth_router(
 
     @router.get(
         "/login-with-google",
-        dependencies=[Depends(_is_logged_out)],
+        dependencies=[Depends(_is_logged_out), Depends(set_timeout(120))],
         summary="Login with Google",
         description="Initiates the Google login process and redirects the user to the Google authentication page.",
     )
@@ -183,7 +185,7 @@ def create_auth_router(
 
     @router.get(
         "/google-authentication-redirect",
-        dependencies=[Depends(_is_logged_out)],
+        dependencies=[Depends(_is_logged_out), Depends(set_timeout(120))],
         summary="Handle Google authentication redirect",
         description="Handles the redirect from Google after user authentication and processes the login. User is then redirected to the frontend url with the authentication result and token if logged in.",
     )

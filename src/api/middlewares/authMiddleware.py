@@ -248,8 +248,8 @@ class AuthMiddleware(IAuthMiddleware):
                 not user.faculty_id
                 or not user.department_id
                 or not user.year_id
-                or not user.type
-                or not user.type.strip()
+                or not user.study_type
+                or not user.study_type.strip()
             ):
                 await self.logger.log(
                     action="ReadyCheck",

@@ -373,7 +373,7 @@ class AnnouncementService(IAnnouncementService):
                 )
             share_link = f"/users/announcements/{created_announcement.id}"
             notification_response = await self.helper_service.send_notification(
-                Notification.Type.ANNOUNCEMENT,
+                Notification.NotificationType.ANNOUNCEMENT,
                 created_announcement.id,
                 user_ids,
                 f"New announcement '{created_announcement.title}' has been created for subject {subject.name}.",
@@ -750,7 +750,7 @@ class AnnouncementService(IAnnouncementService):
                     )
             share_link = f"/users/announcements/{updated_announcement.id}"
             notification_response = await self.helper_service.send_notification(
-                Notification.Type.ANNOUNCEMENT,
+                Notification.NotificationType.ANNOUNCEMENT,
                 updated_announcement.id,
                 user_ids,
                 f"Announcement '{updated_announcement.title}' has been updated for subject {subject.name}.",

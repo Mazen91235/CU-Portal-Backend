@@ -700,7 +700,7 @@ class HelperService(IHelperService[U]):
         try:
             notification = Notification(
                 content=content,
-                type=notification_type,
+                notification_type=notification_type,
                 parent_id=parent_id,
                 url=url,
             )
@@ -978,13 +978,16 @@ class HelperService(IHelperService[U]):
 
     def verify_file_size(self, file_size, max_size_in_bytes):
         units = ["B", "KB", "MB", "GB", "TB"]
-        if not file_size or not file_size.isdigit():
+        if not file_size:
             return False
         for unit in units:
             if file_size.endswith(unit):
-                size_value = float(file_size[: -len(unit)].strip())
-                size_in_bytes = size_value * (1024 ** units.index(unit))
-                return size_in_bytes <= max_size_in_bytes
+                try:
+                    size_value = float(file_size[: -len(unit)].strip())
+                    size_in_bytes = size_value * (1024 ** units.index(unit))
+                    return size_in_bytes <= max_size_in_bytes
+                except ValueError:
+                    continue
         return False
 
     async def verify_file_exists_on_drive(self, url):

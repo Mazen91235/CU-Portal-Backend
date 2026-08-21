@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 from .base import (
     Base,
     Integer,
@@ -29,12 +28,12 @@ class Token(Base):
         String(255),
         nullable=False,
     )
-    expire_at: Mapped[datetime] = mapped_column(
+    expires_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False
     )
-    type: Mapped[int] = mapped_column(
+    token_type: Mapped[int] = mapped_column(
         Integer, nullable=False
-    )  # (0: Google Token, 1: Verification Token, 2: Stored Token)
+    )  # (0: Email Verification, 1: Google Token)
     details: Mapped[Optional[dict]] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
     )
@@ -57,13 +56,17 @@ class Token(Base):
     __table_args__ = (
         Index("idx_token", "token", unique=True),
         # Composite Indexes
-        Index("idx_token_expire_at", "token", "expire_at"),
+        Index("idx_token_expires_at", "token", "expires_at"),
     )
 
     # Validation
-    @validates("type")
-    def validate_type(self, key, value) -> int:
-        if value not in [v["value"] for v in self.TokenType.__dict__.values()]:
+    @validates("token_type")
+    def validate_token_type(self, key, value) -> int:
+        if value not in [
+            v["value"]
+            for k, v in self.TokenType.__dict__.items()
+            if not k.startswith("__") and isinstance(v, dict)
+        ]:
             raise ValueError("Invalid token type")
         return value
 
@@ -77,13 +80,10 @@ class Token(Base):
             "name": "Google Token",
             "value": 1,
         }
-        REFRESH_TOKEN = {
-            "name": "Refresh Token",
-            "value": 2,
-        }
 
     STANDARD_LENGTH = 32
     SHORT_LENGTH = 6
+    EXPIRE_HOURS = 1
 
     # Methods
     def get_token_type(self):
@@ -91,7 +91,7 @@ class Token(Base):
             (
                 v["name"]
                 for v in self.TokenType.__dict__.values()
-                if v["value"] == self.type
+                if v["value"] == self.token_type
             ),
             "Unknown",
         )

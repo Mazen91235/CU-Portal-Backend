@@ -36,7 +36,7 @@ class Task(Base):
     # Columns
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
-    type: Mapped[Optional[str]] = mapped_column(
+    task_type: Mapped[Optional[str]] = mapped_column(
         String(10), nullable=True
     )  # e.g., "Exam", "Assignment", "Project", "Task"
     urls: Mapped[list[str]] = mapped_column(
@@ -114,18 +114,8 @@ class Task(Base):
     __table_args__ = (
         # Composite Indexes
         Index(
-            "idx_task_type_faculty_department_year_subject_due_date_name",
-            "type",
-            "faculty_id",
-            "department_id",
-            "year_id",
-            "subject_id",
-            "due_date",
-            "name",
-        ),
-        Index(
-            "idx_task_type_faculty_department_year_name",
-            "type",
+            "idx_task_task_type_faculty_department_year_name",
+            "task_type",
             "faculty_id",
             "department_id",
             "year_id",

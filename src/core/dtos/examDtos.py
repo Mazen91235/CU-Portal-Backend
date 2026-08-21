@@ -40,7 +40,7 @@ class ExamCreateDto(BaseModel):
 class ExamResponseDto(BaseModel):
     id: int | None = Field(default=None, description="ID of the task/exam")
     name: str | None = Field(default=None, description="Title of the exam")
-    type: str | None = Field(
+    task_type: str | None = Field(
         default=None, description="Type of task (will always be 'exam')"
     )
     deadline: datetime | None = Field(

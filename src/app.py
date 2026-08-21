@@ -4,6 +4,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 
 # Ensure `src` is importable as the top-level package root in serverless runtimes.
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -148,6 +149,11 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
         allow_credentials=True,
+    )
+
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=os.environ.get("SECRET_KEY", ""),
     )
 
     return app

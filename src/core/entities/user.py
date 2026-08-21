@@ -56,7 +56,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(100), nullable=False)
     phone: Mapped[str] = mapped_column(String(13), nullable=False)
     gender: Mapped[str] = mapped_column(String(6), nullable=False)
-    type: Mapped[Optional["User.Type"]] = mapped_column(
+    study_type: Mapped[Optional["User.StudyType"]] = mapped_column(
         String(12), nullable=True
     )  # Mainstream, Credit
     section: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -73,7 +73,7 @@ class User(Base):
     google_email: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     google_avatar: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     google_refresh_token: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True
+        String(500), nullable=True
     )
     ips: Mapped[list[str]] = mapped_column(
         MutableList.as_mutable(JSON), nullable=True, default=list
@@ -222,10 +222,10 @@ class User(Base):
     )
 
     # Validation
-    @validates("type")
-    def validate_type(self, key, value) -> int:
-        if value not in self.Type.__dict__.values():
-            raise ValueError("Invalid user type")
+    @validates("study_type")
+    def validate_study_type(self, key, value) -> int:
+        if value not in self.StudyType.__dict__.values():
+            raise ValueError("Invalid study type")
         return value
 
     # Attributes
@@ -240,7 +240,7 @@ class User(Base):
     class VerificationToken:
         EXPIRE_HOURS = 1
 
-    class Type(str, Enum):
+    class StudyType(str, Enum):
         MAINSTREAM = "Mainstream"
         CREDIT = "Credit"
 

@@ -11,6 +11,7 @@ from core.dtos.userDtos import (
     UserLoginResponseDto,
     UserStatisticsResponseDto,
     UserTokenDetailsResponseDto,
+    UserResendTokenResponseDto,
     UserUpdateAcademicDataDto,
     UserUpdateUsersDto,
 )
@@ -47,7 +48,7 @@ class IUserService(
         pass
 
     @abstractmethod
-    async def resend_token(self, token: str) -> BaseResponseDto[bool]:
+    async def resend_token(self, token: str) -> BaseResponseDto[UserResendTokenResponseDto]:
         pass
 
     @abstractmethod

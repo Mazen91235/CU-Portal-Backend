@@ -88,7 +88,7 @@ class IHelperService(ABC, Generic[U]):
     @abstractmethod
     async def send_notification(
         self,
-        notification_type: Notification.Type,
+        notification_type: Notification.NotificationType,
         parent_id: int,
         user_ids: list[int] | None,
         content: str,

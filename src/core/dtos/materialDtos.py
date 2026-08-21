@@ -14,7 +14,7 @@ class MaterialCreateDto(BaseModel):
     name: str = Field(
         ..., min_length=1, max_length=200, description="Name of the material"
     )
-    type: str = Field(
+    material_type: str = Field(
         ...,
         min_length=1,
         max_length=30,
@@ -34,7 +34,7 @@ class MaterialResponseDto(BaseModel):
     name: str | None = Field(
         default=None, max_length=200, description="Name of the material"
     )
-    type: str | None = Field(
+    material_type: str | None = Field(
         default=None,
         max_length=30,
         description="Type of the material (file, folder, youtube, drive, external.)",
@@ -76,7 +76,7 @@ class MaterialResponseDto(BaseModel):
 
 class MaterialUpdateDto(BaseModel):
     name: str = Field(..., max_length=200, description="Updated name of the material")
-    type: str = Field(..., max_length=30, description="Updated type of the material")
+    material_type: str = Field(..., max_length=30, description="Updated type of the material")
     url: str | None = Field(default=None, max_length=255, description="Updated URL")
 
 
@@ -88,7 +88,7 @@ class MaterialsDeleteDto(BaseModel):
 
 class MaterialSearchDto(BaseSearchDto):
     id: int | None = Field(default=None, description="ID of the material to filter by")
-    type: str | None = Field(
+    material_type: str | None = Field(
         default=None,
         max_length=30,
         description="Type of the material to filter by (file, folder, youtube, drive, external.)",

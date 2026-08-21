@@ -56,7 +56,9 @@ class UserResponseDto(BaseModel):
     email: EmailStr | None = Field(default=None, description="Email of User")
     phone: str | None = Field(default=None, description="Phone number of User")
     gender: str | None = Field(default=None, description="Gender of User")
-    type: User.Type | None = Field(default=None, description="Type of User")
+    study_type: User.StudyType | None = Field(
+        default=None, description="Study type of User"
+    )
     section: int | None = Field(default=None, description="Section ID of the user")
     status: bool | None = Field(default=None, description="Status of the user")
     is_early_access: bool | None = Field(
@@ -180,9 +182,7 @@ class UserLoginWithGoogleResponseDto(BaseModel):
 
 
 class UserLoginResponseDto(BaseModel):
-    user: UserResponseDto | None = Field(
-        default=None, description="Logged in user details"
-    )
+    user: User | None = Field(default=None, description="Logged in user details")
     token: str = Field(..., description="Authentication token for the user")
     state: str | None = Field(
         default=None, description="State parameter for google authentication"
@@ -193,6 +193,10 @@ class UserLoginResponseDto(BaseModel):
     redirect_url: str | None = Field(
         default=None, description="Redirect URL after successful login"
     )
+    model_config = {
+        "from_attributes": True,
+        "arbitrary_types_allowed": True,
+    }
 
 
 class UserTokenDetailsResponseDto(BaseModel):
@@ -202,6 +206,10 @@ class UserTokenDetailsResponseDto(BaseModel):
         default=None,
         description="Time in seconds after which the user can resend the token",
     )
+
+
+class UserResendTokenResponseDto(BaseModel):
+    token: str = Field(..., description="New verification token for the user")
 
 
 class UserUpdateUsersRecordDto(BaseModel):
@@ -234,7 +242,7 @@ class UserUpdateAcademicDataDto(BaseModel):
         None, description="ID of the new department for the user"
     )
     year_id: int | None = Field(None, description="ID of the new year for the user")
-    study_type: User.Type | None = Field(
+    study_type: User.StudyType | None = Field(
         None,
         description="New study type for the user (e.g., 'Mainstream', 'Credit')",
     )

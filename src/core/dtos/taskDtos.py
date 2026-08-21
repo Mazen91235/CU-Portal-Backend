@@ -50,7 +50,7 @@ class TaskCreateDto(BaseModel):
 class TaskResponseDto(BaseModel):
     id: int | None = Field(default=None, description="ID of the task")
     name: str | None = Field(default=None, description="Name/Title of the task")
-    type: str | None = Field(
+    task_type: str | None = Field(
         default=None, description="Type of the entry (e.g., 'Exam', 'Task')"
     )
     url: str | None = Field(default=None, description="Submission URL for the task")

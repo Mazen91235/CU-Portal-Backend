@@ -172,6 +172,13 @@ class UserController(IUserController):
     async def create(self, request, data):
         try:
             await self.user_service.begin_transaction()
+            if not data.agreed:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=400,
+                    message="You must agree to the terms and conditions to create an account",
+                )
             user = Mapper[UserCreateDto, User].map(data, User)
             response = await self.user_service.create(user)
             if not response.success:
@@ -668,12 +675,29 @@ class UserController(IUserController):
                     code=response.code,
                     message=response.message,
                 )
+            response_data = response.data
+            if not response_data:
+                await self.user_service.rollback_transaction()
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to resend token",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
             await self.user_service.commit_transaction()
             response = ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 message="Token resent successfully if email exists",
             )
+            token_details["token"] = response_data.token
             token_details["can_resend_after"] = TimezoneHandler.add_minutes(
                 1
             ).isoformat()
