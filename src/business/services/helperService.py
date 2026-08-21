@@ -48,6 +48,10 @@ class HelperService(IHelperService[U]):
         self.department_repository = department_repository
         self.year_repository = year_repository
         self.subject_repository = subject_repository
+        self.smtp_name = os.environ.get("SMTP_FROM_NAME", "")
+        self.smtp_email = os.environ.get("SMTP_FROM_EMAIL", "")
+        self.brevo_api_url = os.environ.get("BREVO_API_URL", "")
+        self.brevo_api_key = os.environ.get("BREVO_API_KEY", "")
 
     def _get_column_type(self, column):
         column_property = getattr(column, "property", None)
@@ -512,24 +516,30 @@ class HelperService(IHelperService[U]):
             if os.environ.get("TESTING", "false").lower() == "true":
                 # In testing mode, we won't actually send an email.
                 return BaseResponseDto(success=True, data=True)
-            smtp_host = os.environ.get("SMTP_HOST")
-            smtp_port = int(os.environ.get("SMTP_PORT") or 587)
-            smtp_user = os.environ.get("SMTP_USER", "")
-            smtp_password = os.environ.get("SMTP_PASSWORD", "")
-            smtp_from = os.environ.get("SMTP_FROM") or smtp_user
-
-            async with SMTP(
-                hostname=smtp_host,
-                port=smtp_port,
-            ) as smtp:
-                await smtp.login(smtp_user, smtp_password)
-                email_message = EmailMessage()
-                email_message["From"] = smtp_from
-                email_message["To"] = to_email
-                email_message["Subject"] = subject
-                email_message.set_content(body, subtype="html")
-                await smtp.send_message(email_message)
-                return BaseResponseDto(success=True, data=True)
+            async with aiohttp.ClientSession() as session:
+                response = await session.post(
+                    self.brevo_api_url,
+                    headers={
+                        "accept": "application/json",
+                        "api-key": self.brevo_api_key,
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "sender": {"name": self.smtp_name, "email": self.smtp_email},
+                        "to": [{"email": to_email}],
+                        "subject": subject,
+                        "htmlContent": body,
+                    },
+                )
+                if response.status != 201:
+                    return BaseResponseDto(
+                        success=False,
+                        code=response.status,
+                        data=False,
+                        message=f"Failed to send email. Please try again later.",
+                        error=f"Code: {response.status}, Response: {await response.text()}",
+                    )
+            return BaseResponseDto(success=True, data=True)
         except Exception as ex:
             return BaseResponseDto(
                 success=False,
