@@ -1,0 +1,20 @@
+{
+    "builds": [
+        {
+            "src": "src/app.py",
+            "use": "@vercel/python",
+            "config": {
+                "maxDuration": 15
+            }
+        }
+    ],
+    "env": {
+        "PYTHONPATH": "src"
+    },
+    "routes": [
+        {
+            "src": "/(.*)",
+            "dest": "src/app.py"
+        }
+    ]
+}
