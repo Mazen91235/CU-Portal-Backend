@@ -5,6 +5,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 if TYPE_CHECKING:
     from core.dtos.userDtos import UserResponseDto
+    from core.dtos.attachmentDtos import AttachmentResponseDto
 
 
 class PendingUserResponseDto(BaseModel):
@@ -20,6 +21,9 @@ class PendingUserResponseDto(BaseModel):
     # Relationships
     user: UserResponseDto | None = Field(
         default=None, description="The user associated with this pending user"
+    )
+    attachment: AttachmentResponseDto | None = Field(
+        default=None, description="Approval image attachment for the pending user"
     )
 
     # Pydantic Configuration

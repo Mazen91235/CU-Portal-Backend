@@ -208,6 +208,7 @@ uploads/
 ngrok.exe
 test_mazen*.wav
 c# template/
+*.mp4
 
 # Ruff stuff:
 .ruff_cache/

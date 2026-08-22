@@ -11,6 +11,7 @@ from core.entities.user import User
 from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
 from core.entities.token import Token
+from core.entities.attachment import Attachment
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.userDtos import (
     UserLoginWithGoogleResponseDto,
@@ -35,6 +36,7 @@ class UserService(IUserService):
         token_repository: IBaseRepository[Token],
         role_repository: IBaseRepository[Role],
         pending_user_repository: IBaseRepository[PendingUser],
+        attachment_repository: IBaseRepository[Attachment],
         logger: IBaseLogger,
         helper_service: IHelperService,
     ):
@@ -42,6 +44,7 @@ class UserService(IUserService):
         self.token_repository = token_repository
         self.role_repository = role_repository
         self.pending_user_repository = pending_user_repository
+        self.attachment_repository = attachment_repository
         self.logger = logger
         self.helper_service = helper_service
 
@@ -1164,6 +1167,27 @@ class UserService(IUserService):
                         code=500,
                         data=False,
                         message="An error occurred while creating pending user after email verification",
+                    )
+                try:
+                    await self.attachment_repository.create(
+                        Attachment(
+                            is_file=True,
+                            url=created_pending_user.url,
+                            details={},
+                            author_id=created_user.id,
+                            author_google_refresh_token=created_user.google_refresh_token,
+                            pending_user_id=created_pending_user.id,
+                        )
+                    )
+                except Exception as ex:
+                    await self.logger.log(
+                        action="SyncAttachment",
+                        entity="PendingUser",
+                        level="error",
+                        code=500,
+                        message="Failed to sync attachment for pending user approval image",
+                        details={"error": str(ex)},
+                        source="UserService",
                     )
             await self.logger.log(
                 action="VerifyEmail",

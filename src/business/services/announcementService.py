@@ -4,9 +4,15 @@ from core.iServices.iAnnouncementService import IAnnouncementService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
-from core.entities.announcement import Announcement
 from core.entities.subject import Subject
+from core.entities.announcement import Announcement
 from core.entities.notification import Notification
+from core.entities.role import Role
+from core.entities.faculty import Faculty
+from core.entities.department import Department
+from core.entities.year import Year
+from core.entities.attachment import Attachment
+
 from core.dtos.baseDtos import BaseResponseDto
 from core.utils.validator import Validator
 
@@ -16,13 +22,70 @@ class AnnouncementService(IAnnouncementService):
         self,
         announcement_repository: IBaseRepository[Announcement],
         subject_repository: IBaseRepository[Subject],
+        role_repository: IBaseRepository[Role],
+        faculty_repository: IBaseRepository[Faculty],
+        department_repository: IBaseRepository[Department],
+        year_repository: IBaseRepository[Year],
+        attachment_repository: IBaseRepository[Attachment],
         logger: IBaseLogger,
         helper_service: IHelperService,
     ):
+
         self.announcement_repository = announcement_repository
         self.subject_repository = subject_repository
+        self.role_repository = role_repository
+        self.faculty_repository = faculty_repository
+        self.department_repository = department_repository
+        self.year_repository = year_repository
+        self.attachment_repository = attachment_repository
+
         self.logger = logger
         self.helper_service = helper_service
+
+    async def _sync_announcement_attachment_group(
+        self, announcement, urls, is_file, logged_in_user, link_title_by_url=None
+    ):
+        try:
+            existing_response = await self.attachment_repository.find(
+                and_(
+                    Attachment.announcement_id == announcement.id,
+                    Attachment.is_file == is_file,
+                ),
+                limit=200,
+            )
+            existing = (existing_response.data or []) if existing_response.success else []
+            existing_by_url = {attachment.url: attachment for attachment in existing}
+            desired = set(urls or [])
+            for url, attachment in existing_by_url.items():
+                if url not in desired:
+                    await self.attachment_repository.delete(attachment)
+            for url in desired:
+                if url not in existing_by_url:
+                    details = (
+                        {"link_title": link_title_by_url[url]}
+                        if link_title_by_url and url in link_title_by_url
+                        else {}
+                    )
+                    await self.attachment_repository.create(
+                        Attachment(
+                            is_file=is_file,
+                            url=url,
+                            details=details,
+                            author_id=logged_in_user.id,
+                            author_google_refresh_token=logged_in_user.google_refresh_token,
+                            announcement_id=announcement.id,
+                        )
+                    )
+        except Exception as ex:
+            await self.logger.log(
+                action="SyncAttachment",
+                entity="Announcement",
+                level="error",
+                code=500,
+                message="Failed to sync attachments for announcement",
+                details={"error": str(ex)},
+                source="AnnouncementService",
+            )
 
     # Transaction Functions
     async def begin_transaction(self):
@@ -389,6 +452,17 @@ class AnnouncementService(IAnnouncementService):
                     details={"announcement_id": created_announcement.id},
                     source="AnnouncementService",
                 )
+            await self._sync_announcement_attachment_group(
+                created_announcement, data.urls, True, logged_in_user
+            )
+            await self._sync_announcement_attachment_group(
+                created_announcement,
+                list(data.links.values()),
+                False,
+                logged_in_user,
+                link_title_by_url={v: k for k, v in data.links.items()},
+            )
+
             await self.logger.log(
                 action="Create",
                 entity="Announcement",
@@ -766,6 +840,17 @@ class AnnouncementService(IAnnouncementService):
                     details={"announcement_id": updated_announcement.id},
                     source="AnnouncementService",
                 )
+            await self._sync_announcement_attachment_group(
+                updated_announcement, data.urls, True, logged_in_user
+            )
+            await self._sync_announcement_attachment_group(
+                updated_announcement,
+                list(data.links.values()),
+                False,
+                logged_in_user,
+                link_title_by_url={v: k for k, v in data.links.items()},
+            )
+
             await self.logger.log(
                 action="Update",
                 entity="Announcement",

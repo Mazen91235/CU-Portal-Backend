@@ -44,7 +44,7 @@ class UserController(IUserController):
                     "faculty",
                     "department",
                     "year",
-                    "pending_user",
+                    "pending_user.attachment",
                     "notifications",
                     "subjects",
                 ],

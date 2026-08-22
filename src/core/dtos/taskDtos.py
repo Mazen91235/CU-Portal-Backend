@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from .facultyDtos import FacultyResponseDto
     from .departmentDtos import DepartmentResponseDto
     from .yearDtos import YearResponseDto
+    from .attachmentDtos import AttachmentResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
 
@@ -88,6 +89,9 @@ class TaskResponseDto(BaseModel):
     )
     year: YearResponseDto | None = Field(
         default=None, description="Year associated with the task"
+    )
+    attachments: list[AttachmentResponseDto] = Field(
+        default_factory=list, description="Attachments (files or links) associated with the task"
     )
 
     # Pydantic Configuration

@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from .departmentDtos import DepartmentResponseDto
     from .yearDtos import YearResponseDto
     from .facultyDtos import FacultyResponseDto
+    from .attachmentDtos import AttachmentResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
 
@@ -83,6 +84,10 @@ class AnnouncementResponseDto(BaseModel):
     )
     year: YearResponseDto | None = Field(
         default=None, description="Academic year associated with the announcement"
+    )
+    attachments: list[AttachmentResponseDto] = Field(
+        default_factory=list,
+        description="Attachments (files or links) associated with the announcement",
     )
 
     # Pydantic Configuration

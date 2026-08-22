@@ -1,4 +1,8 @@
 import os
+import math
+from datetime import datetime
+from typing import cast
+from fastapi import Request
 from sqlalchemy import and_
 from core.iServices.iTaskService import ITaskService
 from core.iServices.iHelperService import IHelperService
@@ -7,7 +11,10 @@ from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.task import Task
 from core.entities.subject import Subject
 from core.entities.notification import Notification
+from core.entities.role import Role
+from core.entities.attachment import Attachment
 from core.dtos.baseDtos import BaseResponseDto
+
 from core.utils.validator import Validator
 from core.utils.timezoneHandler import TimezoneHandler
 
@@ -17,15 +24,63 @@ class TaskService(ITaskService):
         self,
         task_repository: IBaseRepository[Task],
         subject_repository: IBaseRepository[Subject],
+        role_repository: IBaseRepository[Role],
+        faculty_repository: IBaseRepository,
+        department_repository: IBaseRepository,
+        year_repository: IBaseRepository,
+        attachment_repository: IBaseRepository[Attachment],
         logger: IBaseLogger,
         helper_service: IHelperService,
+        notification_service=None,
     ):
         self.task_repository = task_repository
         self.subject_repository = subject_repository
+        self.role_repository = role_repository
+        self.faculty_repository = faculty_repository
+        self.department_repository = department_repository
+        self.year_repository = year_repository
+        self.attachment_repository = attachment_repository
         self.logger = logger
         self.helper_service = helper_service
+        self.notification_service = notification_service
+
+    async def _sync_task_attachment_group(self, task, urls, is_file, logged_in_user):
+        try:
+            existing_response = await self.attachment_repository.find(
+                and_(Attachment.task_id == task.id, Attachment.is_file == is_file),
+                limit=200,
+            )
+            existing = (existing_response.data or []) if existing_response.success else []
+            existing_by_url = {attachment.url: attachment for attachment in existing}
+            desired = set(urls or [])
+            for url, attachment in existing_by_url.items():
+                if url not in desired:
+                    await self.attachment_repository.delete(attachment)
+            for url in desired:
+                if url not in existing_by_url:
+                    await self.attachment_repository.create(
+                        Attachment(
+                            is_file=is_file,
+                            url=url,
+                            details={},
+                            author_id=logged_in_user.id,
+                            author_google_refresh_token=logged_in_user.google_refresh_token,
+                            task_id=task.id,
+                        )
+                    )
+        except Exception as ex:
+            await self.logger.log(
+                action="SyncAttachment",
+                entity="Task",
+                level="error",
+                code=500,
+                message="Failed to sync attachments for task",
+                details={"error": str(ex)},
+                source="TaskService",
+            )
 
     # Transaction Functions
+
 
     async def begin_transaction(self):
         await self.task_repository.begin_transaction()
@@ -221,7 +276,7 @@ class TaskService(ITaskService):
                 )
             user_ids = [user.id for user in subject.users] if subject.users else []
             files = []
-            for url in data.urls:
+            for url in (data.urls or []):
                 file_exists_response = (
                     await self.helper_service.verify_file_exists_on_drive(url)
                 )
@@ -259,9 +314,9 @@ class TaskService(ITaskService):
                         message="Failed to fetch file data from Google Drive",
                     )
                 files.append(file_data.model_dump(mode="json"))
-            for link in data.links:
-                link_name = link.get("name", "")
-                link_url = link.get("url", "")
+            for link in (data.links or []):
+                link_url = link.get("url", "") if isinstance(link, dict) else str(link)
+                link_name = link.get("name", "") if isinstance(link, dict) else ""
                 if not Validator.is_valid_external_url(link_url):
                     await self.logger.log(
                         action="Create",
@@ -399,14 +454,17 @@ class TaskService(ITaskService):
                     details={"task_id": created_task.id},
                     source="TaskService",
                 )
-            await self.logger.log(
-                action="Create",
-                entity="Task",
-                level="info",
-                code=201,
-                message="Task created successfully",
-                source="TaskService",
+            await self._sync_task_attachment_group(
+                created_task, data.urls, True, logged_in_user
             )
+            raw_links = [
+                (link.get("url") if isinstance(link, dict) else str(link))
+                for link in (data.links or [])
+            ]
+            await self._sync_task_attachment_group(
+                created_task, raw_links, False, logged_in_user
+            )
+
             return BaseResponseDto(
                 success=True,
                 code=201,
@@ -645,7 +703,7 @@ class TaskService(ITaskService):
                 else old_urls
             )
             files = []
-            for url in data.urls:
+            for url in (data.urls or []):
                 file_exists_response = (
                     await self.helper_service.verify_file_exists_on_drive(url)
                 )
@@ -683,9 +741,9 @@ class TaskService(ITaskService):
                         message="An error occurred while updating task",
                     )
                 files.append(file_data.model_dump(mode="json"))
-            for link in data.links:
-                link_name = link.get("name", "")
-                link_url = link.get("url", "")
+            for link in (data.links or []):
+                link_url = link.get("url", "") if isinstance(link, dict) else str(link)
+                link_name = link.get("name", "") if isinstance(link, dict) else ""
                 if not Validator.is_valid_external_url(link_url):
                     await self.logger.log(
                         action="Update",
@@ -783,14 +841,19 @@ class TaskService(ITaskService):
                 f"Task '{updated_task.title}' has been updated for subject {subject.name}.",
                 share_link,
             )
-            await self.logger.log(
-                action="Update",
-                entity="Task",
-                level="info",
-                code=200,
-                message="Task updated successfully",
-                source="TaskService",
-            )
+            if data.urls is not None:
+                await self._sync_task_attachment_group(
+                    updated_task, data.urls, True, logged_in_user
+                )
+            if data.links is not None:
+                raw_link_urls = [
+                    (link.get("url") if isinstance(link, dict) else str(link))
+                    for link in data.links
+                ]
+                await self._sync_task_attachment_group(
+                    updated_task, raw_link_urls, False, logged_in_user
+                )
+
             return BaseResponseDto(
                 success=True,
                 code=200,

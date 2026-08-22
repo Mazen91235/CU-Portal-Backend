@@ -191,7 +191,29 @@ class User(Base):
     notes: Mapped[list["Note"]] = relationship(
         "Note", back_populates="author", cascade="all, delete-orphan"
     )
+    attachments: Mapped[list["Attachment"]] = relationship(
+        "Attachment", back_populates="author", cascade="all, delete-orphan"
+    )
+    # marks: Mapped[list["Mark"]] = relationship(
+    #     "Mark", back_populates="author", cascade="all, delete-orphan"
+    # )
+    # roadmaps: Mapped[list["Roadmap"]] = relationship(
+    #     "Roadmap", back_populates="author", cascade="all, delete-orphan"
+    # )
+    # questions: Mapped[list["Question"]] = relationship(
+    #     "Question", back_populates="author", cascade="all, delete-orphan"
+    # )
+    # answers: Mapped[list["Answer"]] = relationship(
+    #     "Answer", back_populates="author", cascade="all, delete-orphan"
+    # )
+    # timetables: Mapped[list["Timetable"]] = relationship(
+    #     "Timetable", back_populates="author", cascade="all, delete-orphan"
+    # )
+    # reviews: Mapped[list["Review"]] = relationship(
+    #     "Review", back_populates="author", cascade="all, delete-orphan"
+    # )
     logs: Mapped[list["Log"]] = relationship(
+
         "Log", back_populates="user", cascade="all, delete-orphan"
     )
     subjects: AssociationProxy[list["Subject"]] = association_proxy(

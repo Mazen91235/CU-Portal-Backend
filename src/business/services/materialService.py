@@ -9,6 +9,7 @@ from core.entities.material import Material
 from core.entities.subject import Subject
 from core.entities.user import User
 from core.entities.notification import Notification
+from core.entities.attachment import Attachment
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import FetchedModel
 from core.utils.validator import Validator
@@ -21,14 +22,76 @@ class MaterialService(IMaterialService):
         material_repository: IBaseRepository[Material],
         subject_repository: IBaseRepository[Subject],
         user_repository: IBaseRepository[User],
+        attachment_repository: IBaseRepository[Attachment],
         logger: IBaseLogger,
         helper_service: IHelperService,
     ):
         self.material_repository = material_repository
         self.subject_repository = subject_repository
         self.user_repository = user_repository
+        self.attachment_repository = attachment_repository
         self.logger = logger
         self.helper_service = helper_service
+
+    async def _sync_material_attachment(self, material, file_data, logged_in_user):
+        try:
+            existing_attachment_response = await self.attachment_repository.find_one(
+                Attachment.material_id == material.id
+            )
+            existing_attachment = (
+                existing_attachment_response.data
+                if existing_attachment_response.success
+                else None
+            )
+            if material.type == "folder" or not material.url:
+                if existing_attachment:
+                    await self.attachment_repository.delete(existing_attachment)
+                return
+            is_file = material.type in ("file", "drive")
+            details = (
+                {"file_data": file_data.model_dump()}
+                if is_file and file_data
+                else ({} if is_file else {"link_title": material.name})
+            )
+            if existing_attachment:
+                existing_attachment.is_file = is_file
+                existing_attachment.url = material.url
+                existing_attachment.details = details
+                existing_attachment.author_id = logged_in_user.id
+                existing_attachment.author_google_refresh_token = (
+                    logged_in_user.google_refresh_token
+                )
+                await self.attachment_repository.update(
+                    existing_attachment,
+                    [
+                        "is_file",
+                        "url",
+                        "details",
+                        "author_id",
+                        "author_google_refresh_token",
+                    ],
+                )
+            else:
+                await self.attachment_repository.create(
+                    Attachment(
+                        is_file=is_file,
+                        url=material.url,
+                        details=details,
+                        author_id=logged_in_user.id,
+                        author_google_refresh_token=logged_in_user.google_refresh_token,
+                        material_id=material.id,
+                    )
+                )
+        except Exception as ex:
+            await self.logger.log(
+                action="SyncAttachment",
+                entity="Material",
+                level="error",
+                code=500,
+                message="Failed to sync attachment for material",
+                details={"error": str(ex)},
+                source="MaterialService",
+            )
 
     # Transaction Functions
     async def begin_transaction(self):
@@ -358,7 +421,9 @@ class MaterialService(IMaterialService):
             data.author_id = logged_in_user.id
             data.details = data.details or {}
             data.details["fetched"] = False
+            file_data = None
             if data.material_type == "file":
+
                 file_exists_response = (
                     await self.helper_service.verify_file_exists_on_drive(
                         data.url or ""
@@ -434,6 +499,9 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Failed to create material, please try again later.",
                 )
+            await self._sync_material_attachment(
+                created_material, file_data, logged_in_user
+            )
             share_link = f"/user/materials/{subject_id}"
             if parent_id:
                 share_link += f"/{parent_id}"
@@ -720,6 +788,7 @@ class MaterialService(IMaterialService):
             }
             data.details = data.details or {}
             data.details["fetched"] = False
+            file_data = None
             if (
                 data.material_type == "file"
                 and existing_material.material_type == "file"
@@ -806,6 +875,9 @@ class MaterialService(IMaterialService):
                 )
             if to_be_removed:
                 await self._remove_files([to_be_removed_data])
+            await self._sync_material_attachment(
+                updated_material, file_data, logged_in_user
+            )
             user_ids = [user.id for user in subject.users] if subject.users else []
             share_link = f"/user/materials/{updated_material.subject_id}"
             if updated_material.parent_id:

@@ -29,6 +29,7 @@ from api.routes.materialRoutes import (
     create_material_user_router,
     create_material_admin_router,
 )
+from api.routes.fileRoutes import create_file_user_router
 from api.routes.messageRoutes import (
     create_message_public_router,
     create_message_admin_router,
@@ -44,7 +45,9 @@ from api.controllers.messageController import MessageController
 from api.controllers.logController import LogController
 from api.controllers.materialController import MaterialController
 from api.controllers.subjectController import SubjectController
+from api.controllers.fileController import FileController
 from api.controllers.announcementController import AnnouncementController
+
 from api.controllers.taskController import TaskController
 from api.controllers.notificationController import NotificationController
 from api.controllers.yearController import YearController
@@ -90,6 +93,7 @@ from core.entities.userNotification import UserNotification
 from core.entities.notification import Notification
 from core.entities.message import Message
 from core.entities.faculty import Faculty
+from core.entities.attachment import Attachment
 from core.utils.databaseHandler import DatabaseHandler
 
 DB_URL = DatabaseHandler.get_db_url()
@@ -208,6 +212,12 @@ class Container(containers.DeclarativeContainer):
         model=Faculty,
         session_factory=session_factory,
     )
+    attachment_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Attachment,
+        session_factory=session_factory,
+    )
 
     # --- 4. Services ---
     helper_service = providers.Factory(
@@ -231,6 +241,7 @@ class Container(containers.DeclarativeContainer):
         token_repository=token_repository,
         role_repository=role_repository,
         pending_user_repository=pending_user_repository,
+        attachment_repository=attachment_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -252,6 +263,7 @@ class Container(containers.DeclarativeContainer):
         material_repository=material_repository,
         subject_repository=subject_repository,
         user_repository=user_repository,
+        attachment_repository=attachment_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -295,6 +307,11 @@ class Container(containers.DeclarativeContainer):
         AnnouncementService,
         announcement_repository=announcement_repository,
         subject_repository=subject_repository,
+        role_repository=role_repository,
+        faculty_repository=faculty_repository,
+        department_repository=department_repository,
+        year_repository=year_repository,
+        attachment_repository=attachment_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -302,6 +319,11 @@ class Container(containers.DeclarativeContainer):
         TaskService,
         task_repository=task_repository,
         subject_repository=subject_repository,
+        role_repository=role_repository,
+        faculty_repository=faculty_repository,
+        department_repository=department_repository,
+        year_repository=year_repository,
+        attachment_repository=attachment_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -312,6 +334,7 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
+
     notification_service = providers.Factory(
         NotificationService,
         user_notification_repository=user_notification_repository,
@@ -370,6 +393,13 @@ class Container(containers.DeclarativeContainer):
 
     material_controller = providers.Factory(
         MaterialController, material_service=material_service, logger=logger
+    )
+
+    file_controller = providers.Factory(
+        FileController,
+        attachment_repository=attachment_repository,
+        helper_service=helper_service,
+        logger=logger,
     )
 
     message_controller = providers.Factory(
@@ -478,6 +508,13 @@ class Container(containers.DeclarativeContainer):
     material_user_routes = providers.Factory(
         create_material_user_router,
         controller_provider=material_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    file_user_routes = providers.Factory(
+        create_file_user_router,
+        controller_provider=file_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )

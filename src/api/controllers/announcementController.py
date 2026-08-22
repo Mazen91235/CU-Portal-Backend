@@ -40,6 +40,7 @@ class AnnouncementController(IAnnouncementController):
                     "faculty",
                     "department",
                     "year",
+                    "attachments",
                 ],
             )
 

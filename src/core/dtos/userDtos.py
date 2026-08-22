@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 from core.dtos.baseDtos import BaseSearchDto
 
 
+
 class UserCreateDto(BaseModel):
     name: str = Field(..., min_length=1, max_length=60, description="Name of User")
     email: EmailStr = Field(
