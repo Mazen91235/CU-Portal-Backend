@@ -16,6 +16,7 @@ from core.entities.token import Token
 from core.entities.user import User
 from core.entities.userNotification import UserNotification
 from core.entities.userSubjectLink import UserSubjectLink
+from core.entities.week import Week
 from core.entities.year import Year
 
 
@@ -39,6 +40,7 @@ class EntitiesHandler:
         "User": User,
         "UserNotification": UserNotification,
         "UserSubjectLink": UserSubjectLink,
+        "Week": Week,
         "Year": Year,
     }
 

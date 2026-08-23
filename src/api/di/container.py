@@ -36,6 +36,10 @@ from api.routes.messageRoutes import (
 from api.routes.yearRoutes import create_year_admin_router
 from api.routes.departmentRoutes import create_department_admin_router
 from api.routes.facultyRoutes import create_faculty_admin_router
+from api.routes.weekRoutes import (
+    create_week_user_router,
+    create_week_admin_router,
+)
 from api.controllers.userController import UserController
 from api.controllers.roleController import RoleController
 from api.controllers.examController import ExamController
@@ -49,6 +53,7 @@ from api.controllers.taskController import TaskController
 from api.controllers.notificationController import NotificationController
 from api.controllers.yearController import YearController
 from api.controllers.departmentController import DepartmentController
+from api.controllers.weekController import WeekController
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
 from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
@@ -65,6 +70,7 @@ from business.services.messageService import MessageService
 from business.services.facultyService import FacultyService
 from business.services.yearService import YearService
 from business.services.departmentService import DepartmentService
+from business.services.weekService import WeekService
 from business.services.requestLimitService import RequestLimitService
 from business.services.helperService import HelperService
 from business.services.examService import ExamService
@@ -90,6 +96,7 @@ from core.entities.userNotification import UserNotification
 from core.entities.notification import Notification
 from core.entities.message import Message
 from core.entities.faculty import Faculty
+from core.entities.week import Week
 from core.utils.databaseHandler import DatabaseHandler
 
 DB_URL = DatabaseHandler.get_db_url()
@@ -208,6 +215,12 @@ class Container(containers.DeclarativeContainer):
         model=Faculty,
         session_factory=session_factory,
     )
+    week_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Week,
+        session_factory=session_factory,
+    )
 
     # --- 4. Services ---
     helper_service = providers.Factory(
@@ -254,6 +267,7 @@ class Container(containers.DeclarativeContainer):
         user_repository=user_repository,
         logger=logger,
         helper_service=helper_service,
+        week_repository=week_repository,
     )
 
     message_service = providers.Factory(
@@ -281,6 +295,16 @@ class Container(containers.DeclarativeContainer):
         DepartmentService,
         department_repository=department_repository,
         faculty_repository=faculty_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+
+    week_service = providers.Factory(
+        WeekService,
+        week_repository=week_repository,
+        faculty_repository=faculty_repository,
+        department_repository=department_repository,
+        year_repository=year_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -386,6 +410,10 @@ class Container(containers.DeclarativeContainer):
 
     department_controller = providers.Factory(
         DepartmentController, department_service=department_service, logger=logger
+    )
+
+    week_controller = providers.Factory(
+        WeekController, week_service=week_service, logger=logger
     )
 
     subject_controller = providers.Factory(
@@ -544,6 +572,20 @@ class Container(containers.DeclarativeContainer):
     subject_admin_routes = providers.Factory(
         create_subject_admin_router,
         controller_provider=subject_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    week_user_routes = providers.Factory(
+        create_week_user_router,
+        controller_provider=week_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    week_admin_routes = providers.Factory(
+        create_week_admin_router,
+        controller_provider=week_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
