@@ -76,8 +76,8 @@ class Material(Base):
     parent: Mapped[Optional["Material"]] = relationship(
         "Material", remote_side=[id], back_populates="children"
     )
-    children: Mapped[list["Material"]] = relationship(
-        "Material", back_populates="parent", cascade="all, delete-orphan"
+    children: Mapped[set["Material"]] = relationship(
+        "Material", back_populates="parent", cascade="all, delete-orphan", collection_class=set
     )
     week_id: Mapped[Optional[int]] = mapped_column(
         Integer,

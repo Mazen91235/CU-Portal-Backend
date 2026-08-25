@@ -5,9 +5,8 @@ import asyncio
 import json
 from typing import TypeVar, cast
 from sqlalchemy import and_, func, or_
-from aiosmtplib import SMTP
-from email.message import EmailMessage
 from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from business.contextVars.requestContext import request_context
 from business.contextVars.userContext import user_context
 from core.iServices.iHelperService import IHelperService
@@ -39,6 +38,7 @@ class HelperService(IHelperService[U]):
         department_repository: IBaseRepository[Department],
         year_repository: IBaseRepository[Year],
         subject_repository: IBaseRepository[Subject],
+        session_factory: async_sessionmaker[AsyncSession] | None = None,
     ):
         self.notification_repository = notification_repository
         self.user_notification_repository = user_notification_repository
@@ -52,6 +52,7 @@ class HelperService(IHelperService[U]):
         self.smtp_email = os.environ.get("SMTP_FROM_EMAIL", "")
         self.brevo_api_url = os.environ.get("BREVO_API_URL", "")
         self.brevo_api_key = os.environ.get("BREVO_API_KEY", "")
+        self.session_factory = session_factory
 
     def _get_column_type(self, column):
         column_property = getattr(column, "property", None)
@@ -317,7 +318,9 @@ class HelperService(IHelperService[U]):
                         message=f"Year with ID {year_id} not found",
                     )
             if subject_id:
-                dynamic_includes = self.generate_dynamic_includes(Subject, ["users"])
+                dynamic_includes = self.generate_dynamic_includes(
+                    Subject, ["user_subject_links.user"]
+                )
                 subject_response = await self.subject_repository.find_one(
                     Subject.id == subject_id, dynamic_includes
                 )
@@ -694,70 +697,79 @@ class HelperService(IHelperService[U]):
         return and_(*conditions) if is_and else or_(*conditions)
 
     # Notification Functions
-    async def send_notification(
+    async def _send_notification(
         self, notification_type, parent_id, user_ids, content, url=None
     ):
-        try:
-            notification = Notification(
-                content=content,
-                notification_type=notification_type,
-                parent_id=parent_id,
-                url=url,
-            )
-            create_notification_response = await self.notification_repository.create(
-                notification
-            )
-            if not create_notification_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=create_notification_response.code,
-                    data=False,
-                    message=create_notification_response.message,
-                )
-            created_notification = create_notification_response.data
-            if not created_notification:
-                return BaseResponseDto(
-                    success=False,
-                    code=500,
-                    data=False,
-                    message="Failed to create notification",
-                )
-            for user_id in user_ids or []:
-                user_notification = UserNotification(
-                    user_id=user_id, notification_id=created_notification.id
-                )
-                create_user_notification_response = (
-                    await self.user_notification_repository.create(user_notification)
-                )
-                if not create_user_notification_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=create_user_notification_response.code,
-                        data=False,
-                        message=create_user_notification_response.message,
-                    )
-                created_user_notification = create_user_notification_response.data
-                if not created_user_notification:
-                    return BaseResponseDto(
-                        success=False,
-                        code=500,
-                        data=False,
-                        message="Failed to create user notification",
-                    )
-            return BaseResponseDto(
-                success=True,
-                code=200,
-                data=True,
-                message="Notification sent successfully",
-            )
-        except Exception as ex:
+        if not self.session_factory:
             return BaseResponseDto(
                 success=False,
                 code=500,
                 data=False,
-                message="An error occurred while sending the notification",
-                error=repr(ex),
+                message="Session factory is not initialized",
             )
+        async with self.session_factory() as session:
+            try:
+                await session.begin()  # Start a transaction
+                notification = Notification(
+                    content=content,
+                    notification_type=notification_type,
+                    parent_id=parent_id,
+                    url=url,
+                    user_notifications=[
+                        UserNotification(user_id=user_id)
+                        for user_id in (user_ids or [])
+                    ],
+                )
+                create_notification_response = (
+                    await self.notification_repository.create(
+                        notification, session=session
+                    )
+                )
+                if not create_notification_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=create_notification_response.code,
+                        data=False,
+                        message=create_notification_response.message,
+                    )
+                created_notification = create_notification_response.data
+                if not created_notification:
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=False,
+                        message="Failed to create notification",
+                    )
+                await session.commit()  # Commit the transaction
+                return BaseResponseDto(
+                    success=True,
+                    code=200,
+                    data=True,
+                    message="Notification sent successfully",
+                )
+            except Exception as ex:
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="An error occurred while sending the notification",
+                    error=repr(ex),
+                )
+
+    async def send_notification(
+        self, notification_type, parent_id, user_ids, content, url=None
+    ):
+        asyncio.create_task(
+            self._send_notification(
+                notification_type, parent_id, user_ids, content, url
+            )
+        )
+        return BaseResponseDto(
+            success=True,
+            code=200,
+            data=True,
+            message="Notification sent successfully",
+        )
 
     # File Functions
     async def _request_with_retries(

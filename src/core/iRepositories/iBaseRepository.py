@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import TypeVar, Generic, List, Any
+from sqlalchemy.ext.asyncio import AsyncSession
 from core.dtos.baseDtos import BaseResponseDto
 
 T = TypeVar("T")
@@ -35,7 +36,9 @@ class IBaseRepository(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    async def create(self, entity: T) -> BaseResponseDto[T]:
+    async def create(
+        self, entity: T, session: AsyncSession | None = None
+    ) -> BaseResponseDto[T]:
         pass
 
     @abstractmethod

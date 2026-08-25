@@ -373,7 +373,6 @@ class YearService(IYearService):
                     data=None,
                     message="Year not found",
                 )
-
             if year.users and len(year.users) > 0:
                 await self.logger.log(
                     action="Delete",
@@ -390,7 +389,6 @@ class YearService(IYearService):
                     data=None,
                     message="Year cannot be deleted because it has users associated with it",
                 )
-
             result = await self.year_repository.delete(year)
             if not result.success:
                 return BaseResponseDto(
@@ -405,7 +403,7 @@ class YearService(IYearService):
                 level="info",
                 code=200,
                 message="Year deleted successfully",
-                details={"year_id": data.id},
+                details={},
                 source="YearService",
             )
             return BaseResponseDto(success=True, code=200, data=True)

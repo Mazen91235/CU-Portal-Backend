@@ -39,7 +39,7 @@ class Parser:
             if cls is None:
                 raise ValueError("Class type must be provided for parsing")
             if not query:
-                raise ValueError("Query string cannot be empty")
+                return cls.model_validate({})  # Return an empty instance if no query is provided
 
             try:
                 # 1. Handle URL decoding and initial JSON parsing safely

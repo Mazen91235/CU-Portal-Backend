@@ -243,7 +243,7 @@ class RoleService(IRoleService):
                     data=None,
                     message=validate_permissions_response.message,
                 )
-            exact_roles = []
+            exact_roles = set()
             for permission in data.permissions or []:
                 exact_role_response = await self.exact_role_repository.find_one(
                     ExactRole.name == permission
@@ -271,7 +271,7 @@ class RoleService(IRoleService):
                         data=None,
                         message=f"Exact role '{permission}' not found.",
                     )
-                exact_roles.append(exact_role)
+                exact_roles.add(exact_role)
             role = Role(
                 name=data.name,
                 level=3,
@@ -469,7 +469,7 @@ class RoleService(IRoleService):
                     data=None,
                     message=validate_permissions_response.message,
                 )
-            exact_roles = []
+            exact_roles = set()
             for permission in data.permissions or []:
                 exact_role_response = await self.exact_role_repository.find_one(
                     ExactRole.name == permission
@@ -497,11 +497,11 @@ class RoleService(IRoleService):
                         data=None,
                         message=f"Exact role '{permission}' not found.",
                     )
-                exact_roles.append(exact_role)
+                exact_roles.add(exact_role)
             target_role.name = data.name or ""
             target_role.exact_roles = exact_roles
             update_response = await self.role_repository.update(
-                target_role, ["name", "role_links.exact_role"]
+                target_role, ["name", "role_links"]
             )
             if not update_response.success:
                 return BaseResponseDto(
@@ -873,7 +873,7 @@ class RoleService(IRoleService):
                                 data=None,
                                 message=f"Exact role '{permission}' not found for addition to role '{exclusion_role}'.",
                             )
-                        role.exact_roles.append(exact_role)
+                        role.exact_roles.add(exact_role)
                     create_role_response = await self.role_repository.create(role)
                     if not create_role_response.success:
                         return BaseResponseDto(
@@ -923,7 +923,7 @@ class RoleService(IRoleService):
                                 data=None,
                                 message=f"Exact role '{permission}' not found for addition to role '{exclusion_role}'.",
                             )
-                        role.exact_roles.append(exact_role)
+                        role.exact_roles.add(exact_role)
                     for permission in role_permissions_to_remove:
                         exact_role = all_exact_roles.get(permission)
                         if not exact_role:
@@ -1006,7 +1006,7 @@ class RoleService(IRoleService):
                 category = permission.split(" ")[-1]
                 if category not in categories:
                     categories[category] = []
-                categories[category].append(permission[:-1])
+                categories[category].append(" ".join(permission.split(" ")[:-1]))
             for category, perms in categories.items():
                 if "View" not in perms:
                     await self.logger.log(

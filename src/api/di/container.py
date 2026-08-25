@@ -220,6 +220,7 @@ class Container(containers.DeclarativeContainer):
         department_repository=department_repository,
         year_repository=year_repository,
         subject_repository=subject_repository,
+        session_factory=session_factory,
     )
     logger = providers.Factory(
         BaseLogger, repository=log_repository, helper_service=helper_service

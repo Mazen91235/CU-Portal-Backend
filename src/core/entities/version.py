@@ -45,8 +45,8 @@ class Version(Base):
     )
 
     # Relationships
-    releases: Mapped[list["Release"]] = relationship(
-        "Release", back_populates="version", cascade="all, delete-orphan"
+    releases: Mapped[set["Release"]] = relationship(
+        "Release", back_populates="version", cascade="all, delete-orphan", collection_class=set
     )
 
     # Indexes

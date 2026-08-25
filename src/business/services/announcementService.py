@@ -1,4 +1,3 @@
-import os
 from sqlalchemy import and_
 from core.iServices.iAnnouncementService import IAnnouncementService
 from core.iServices.iHelperService import IHelperService
@@ -196,10 +195,10 @@ class AnnouncementService(IAnnouncementService):
                     message="Announcement with the same title already exists for this subject.",
                 )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
+                Subject, ["user_subject_links.user"]
             )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id
+                Subject.id == data.subject_id, dynamic_includes
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -282,7 +281,7 @@ class AnnouncementService(IAnnouncementService):
                         success=False,
                         code=400,
                         data=None,
-                        message="Invalid URL provided",
+                        message=f"Invalid URL provided: {link_url}",
                     )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
@@ -343,7 +342,9 @@ class AnnouncementService(IAnnouncementService):
             data.faculty_id = data.faculty_id or logged_in_user.faculty_id
             data.department_id = data.department_id or logged_in_user.department_id
             data.year_id = data.year_id or logged_in_user.year_id
-            data.details = {"files_data": files} if files else {}
+            data.details = {} if not data.details else data.details
+            if files:
+                data.details["files_data"] = files
 
             create_announcement_response = await self.announcement_repository.create(
                 data
@@ -372,23 +373,13 @@ class AnnouncementService(IAnnouncementService):
                     message="An error occurred while creating announcement",
                 )
             share_link = f"/users/announcements/{created_announcement.id}"
-            notification_response = await self.helper_service.send_notification(
+            await self.helper_service.send_notification(
                 Notification.NotificationType.ANNOUNCEMENT,
                 created_announcement.id,
                 user_ids,
                 f"New announcement '{created_announcement.title}' has been created for subject {subject.name}.",
                 share_link,
             )
-            if not notification_response.success:
-                await self.logger.log(
-                    action="Create",
-                    entity="Announcement",
-                    level="warning",
-                    code=400,
-                    message="Failed to send notifications for Announcement Creation.",
-                    details={"announcement_id": created_announcement.id},
-                    source="AnnouncementService",
-                )
             await self.logger.log(
                 action="Create",
                 entity="Announcement",
@@ -449,7 +440,7 @@ class AnnouncementService(IAnnouncementService):
                     message="Announcement not found",
                 )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
+                Subject, ["user_subject_links.user"]
             )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == data.subject_id, dynamic_includes
@@ -688,9 +679,11 @@ class AnnouncementService(IAnnouncementService):
                         success=False,
                         code=400,
                         data=None,
-                        message="Invalid URL provided",
+                        message=f"Invalid URL provided: {link_url}",
                     )
-            data.details = {"files_data": files} if files else {}
+            data.details = {} if not data.details else data.details
+            if files:
+                data.details["files_data"] = files
             target_announcement.title = data.title
             target_announcement.content = data.content
             target_announcement.date = data.date
@@ -749,23 +742,13 @@ class AnnouncementService(IAnnouncementService):
                         source="AnnouncementService",
                     )
             share_link = f"/users/announcements/{updated_announcement.id}"
-            notification_response = await self.helper_service.send_notification(
+            await self.helper_service.send_notification(
                 Notification.NotificationType.ANNOUNCEMENT,
                 updated_announcement.id,
                 user_ids,
                 f"Announcement '{updated_announcement.title}' has been updated for subject {subject.name}.",
                 share_link,
             )
-            if not notification_response.success:
-                await self.logger.log(
-                    action="Update",
-                    entity="Announcement",
-                    level="warning",
-                    code=400,
-                    message="Failed to send notifications for Announcement Update.",
-                    details={"announcement_id": updated_announcement.id},
-                    source="AnnouncementService",
-                )
             await self.logger.log(
                 action="Update",
                 entity="Announcement",

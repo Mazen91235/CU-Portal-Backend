@@ -94,35 +94,36 @@ class Subject(Base):
     faculty: Mapped[Optional["Faculty"]] = relationship(
         "Faculty", back_populates="subjects", cascade="save-update, merge"
     )
-    tasks: Mapped[list["Task"]] = relationship(
-        "Task", back_populates="subject", cascade="all, delete-orphan"
+    tasks: Mapped[set["Task"]] = relationship(
+        "Task", back_populates="subject", cascade="all, delete-orphan", collection_class=set
     )
-    announcements: Mapped[list["Announcement"]] = relationship(
-        "Announcement", back_populates="subject", cascade="all, delete-orphan"
+    announcements: Mapped[set["Announcement"]] = relationship(
+        "Announcement", back_populates="subject", cascade="all, delete-orphan", collection_class=set
     )
-    materials: Mapped[list["Material"]] = relationship(
-        "Material", back_populates="subject", cascade="all, delete-orphan"
+    materials: Mapped[set["Material"]] = relationship(
+        "Material", back_populates="subject", cascade="all, delete-orphan", collection_class=set
     )
-    # grades: Mapped[list["Grade"]] = relationship(
-    #     "Grade", back_populates="subject", cascade="all, delete-orphan"
+    # grades: Mapped[set["Grade"]] = relationship(
+    #     "Grade", back_populates="subject", cascade="all, delete-orphan", collection_class=set
     # )
-    # marks: Mapped[list["Mark"]] = relationship(
-    #     "Mark", back_populates="subject", cascade="all, delete-orphan"
+    # marks: Mapped[set["Mark"]] = relationship(
+    #     "Mark", back_populates="subject", cascade="all, delete-orphan", collection_class=set
     # )
-    # questions: Mapped[list["Question"]] = relationship(
-    #     "Question", back_populates="subject", cascade="all, delete-orphan"
+    # questions: Mapped[set["Question"]] = relationship(
+    #     "Question", back_populates="subject", cascade="all, delete-orphan", collection_class=set
     # )
-    users: AssociationProxy[list["User"]] = association_proxy(
+    users: AssociationProxy[set["User"]] = association_proxy(
         "user_subject_links",
         "user",
         creator=lambda user: __import__(
             "core.entities.userSubjectLink", fromlist=["UserSubjectLink"]
         ).UserSubjectLink(user=user),
     )
-    user_subject_links: Mapped[list["UserSubjectLink"]] = relationship(
+    user_subject_links: Mapped[set["UserSubjectLink"]] = relationship(
         "UserSubjectLink",
         back_populates="subject",
         cascade="all, delete-orphan",
+        collection_class=set
     )
 
     # Indexes

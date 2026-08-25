@@ -152,65 +152,68 @@ class User(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
-    materials: Mapped[list["Material"]] = relationship(
-        "Material", back_populates="author", cascade="all, delete-orphan"
+    materials: Mapped[set["Material"]] = relationship(
+        "Material", back_populates="author", cascade="all, delete-orphan", collection_class=set
     )
-    tasks: Mapped[list["Task"]] = relationship(
-        "Task", back_populates="author", cascade="all, delete-orphan"
+    tasks: Mapped[set["Task"]] = relationship(
+        "Task", back_populates="author", cascade="all, delete-orphan", collection_class=set
     )
-    announcements: Mapped[list["Announcement"]] = relationship(
-        "Announcement", back_populates="author", cascade="all, delete-orphan"
+    announcements: Mapped[set["Announcement"]] = relationship(
+        "Announcement", back_populates="author", cascade="all, delete-orphan", collection_class=set
     )
-    notifications: AssociationProxy[list["Notification"]] = association_proxy(
+    notifications: AssociationProxy[set["Notification"]] = association_proxy(
         "user_notifications",
         "notification",
         creator=lambda notification: __import__(
             "core.entities.userNotification", fromlist=["UserNotification"]
         ).UserNotification(notification=notification),
     )
-    user_notifications: Mapped[list["UserNotification"]] = relationship(
+    user_notifications: Mapped[set["UserNotification"]] = relationship(
         "UserNotification",
         back_populates="user",
         cascade="all, delete-orphan",
+        collection_class=set
     )
-    events: Mapped[list["Event"]] = relationship(
-        "Event", back_populates="author", cascade="all, delete-orphan"
+    events: Mapped[set["Event"]] = relationship(
+        "Event", back_populates="author", cascade="all, delete-orphan", collection_class=set
     )
-    going_events: AssociationProxy[list["Event"]] = association_proxy(
+    going_events: AssociationProxy[set["Event"]] = association_proxy(
         "user_events",
         "event",
         creator=lambda event: __import__(
             "core.entities.userEvent", fromlist=["UserEvent"]
         ).UserEvent(event=event),
     )
-    user_events: Mapped[list["UserEvent"]] = relationship(
+    user_events: Mapped[set["UserEvent"]] = relationship(
         "UserEvent",
         back_populates="user",
         cascade="all, delete-orphan",
+        collection_class=set
     )
-    notes: Mapped[list["Note"]] = relationship(
-        "Note", back_populates="author", cascade="all, delete-orphan"
+    notes: Mapped[set["Note"]] = relationship(
+        "Note", back_populates="author", cascade="all, delete-orphan", collection_class=set
     )
-    logs: Mapped[list["Log"]] = relationship(
-        "Log", back_populates="user", cascade="all, delete-orphan"
+    logs: Mapped[set["Log"]] = relationship(
+        "Log", back_populates="user", cascade="all, delete-orphan", collection_class=set
     )
-    subjects: AssociationProxy[list["Subject"]] = association_proxy(
+    subjects: AssociationProxy[set["Subject"]] = association_proxy(
         "user_subject_links",
         "subject",
         creator=lambda subject: __import__(
             "core.entities.userSubjectLink", fromlist=["UserSubjectLink"]
         ).UserSubjectLink(subject=subject),
     )
-    user_subject_links: Mapped[list["UserSubjectLink"]] = relationship(
+    user_subject_links: Mapped[set["UserSubjectLink"]] = relationship(
         "UserSubjectLink",
         back_populates="user",
         cascade="all, delete-orphan",
+        collection_class=set
     )
-    request_limits: Mapped[list["RequestLimit"]] = relationship(
-        "RequestLimit", back_populates="user", cascade="all, delete-orphan"
+    request_limits: Mapped[set["RequestLimit"]] = relationship(
+        "RequestLimit", back_populates="user", cascade="all, delete-orphan", collection_class=set
     )
-    attachments: Mapped[list["Attachment"]] = relationship(
-        "Attachment", back_populates="author", cascade="all, delete-orphan"
+    attachments: Mapped[set["Attachment"]] = relationship(
+        "Attachment", back_populates="author", cascade="all, delete-orphan", collection_class=set
     )
 
     # Indexes

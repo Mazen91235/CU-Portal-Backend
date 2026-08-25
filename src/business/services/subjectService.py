@@ -463,8 +463,11 @@ class SubjectService(ISubjectService):
 
     async def delete(self, data):
         try:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["user_subject_links.user"]
+            )
             existing_response = await self.subject_repository.find_one(
-                Subject.id == data.id, ["users"]
+                Subject.id == data.id, dynamic_includes
             )
             if not existing_response.success:
                 return BaseResponseDto(
@@ -677,14 +680,19 @@ class SubjectService(ISubjectService):
                     success=False, code=401, data=None, message="Unauthorized"
                 )
 
-            result = await self.user_subject_link_repository.find(
-                UserSubjectLink.user_id == logged_in_user.id,
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                UserSubjectLink,
                 [
                     "subject.faculty",
                     "subject.department",
                     "subject.year",
                     "subject.users",
                 ],
+            )
+
+            result = await self.user_subject_link_repository.find(
+                UserSubjectLink.user_id == logged_in_user.id,
+                dynamic_includes,
             )
             if not result.success:
                 return BaseResponseDto(
@@ -772,17 +780,22 @@ class SubjectService(ISubjectService):
                     success=False, code=401, data=None, message="Unauthorized"
                 )
 
-            link_response = await self.user_subject_link_repository.find_one(
-                and_(
-                    UserSubjectLink.user_id == logged_in_user.id,
-                    UserSubjectLink.subject_id == subject_id,
-                ),
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                UserSubjectLink,
                 [
                     "subject.faculty",
                     "subject.department",
                     "subject.year",
                     "subject.users",
                 ],
+            )
+
+            link_response = await self.user_subject_link_repository.find_one(
+                and_(
+                    UserSubjectLink.user_id == logged_in_user.id,
+                    UserSubjectLink.subject_id == subject_id,
+                ),
+                dynamic_includes,
             )
             if not link_response.success:
                 return BaseResponseDto(

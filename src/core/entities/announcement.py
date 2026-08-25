@@ -104,8 +104,8 @@ class Announcement(Base):
     subject: Mapped[Optional["Subject"]] = relationship(
         "Subject", back_populates="announcements"
     )
-    attachments: Mapped[list["Attachment"]] = relationship(
-        "Attachment", back_populates="announcement", cascade="all, delete-orphan"
+    attachments: Mapped[set["Attachment"]] = relationship(
+        "Attachment", back_populates="announcement", cascade="all, delete-orphan", collection_class=set
     )
 
     # Indexes

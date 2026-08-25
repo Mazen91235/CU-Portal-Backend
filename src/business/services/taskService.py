@@ -1,4 +1,3 @@
-import os
 from sqlalchemy import and_
 from core.iServices.iTaskService import ITaskService
 from core.iServices.iHelperService import IHelperService
@@ -190,7 +189,7 @@ class TaskService(ITaskService):
                     message="Task with the same name already exists for this subject.",
                 )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
+                Subject, ["user_subject_links.user"]
             )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == data.subject_id, dynamic_includes
@@ -276,7 +275,7 @@ class TaskService(ITaskService):
                         success=False,
                         code=400,
                         data=None,
-                        message="Invalid URL provided",
+                        message=f"Invalid URL provided: {link_url}",
                     )
             if data.url and not Validator.is_valid_external_url(data.url):
                 await self.logger.log(
@@ -292,7 +291,7 @@ class TaskService(ITaskService):
                     success=False,
                     code=400,
                     data=None,
-                    message="Invalid Submission URL provided",
+                    message=f"Invalid Submission URL provided: {data.url}",
                 )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
@@ -356,7 +355,10 @@ class TaskService(ITaskService):
             data.faculty_id = data.faculty_id or logged_in_user.faculty_id
             data.department_id = data.department_id or logged_in_user.department_id
             data.year_id = data.year_id or logged_in_user.year_id
-            data.details = {"files_data": files} if files else {}
+            data.details = {} if not data.details else data.details
+            if files:
+                data.details["files_data"] = files
+            data.task_type = "task"
             create_task_response = await self.task_repository.create(data)
             if not create_task_response.success:
                 return BaseResponseDto(
@@ -382,23 +384,13 @@ class TaskService(ITaskService):
                     message="An error occurred while creating task",
                 )
             share_link = f"/users/tasks/{created_task.id}"
-            notification_response = await self.helper_service.send_notification(
+            await self.helper_service.send_notification(
                 Notification.NotificationType.TASK,
                 created_task.id,
                 user_ids,
-                f"New task '{created_task.title}' has been created for subject {subject.name}.",
+                f"New task '{created_task.name}' has been created for subject {subject.name}.",
                 share_link,
             )
-            if not notification_response.success:
-                await self.logger.log(
-                    action="Create",
-                    entity="Task",
-                    level="warning",
-                    code=400,
-                    message="Failed to send notifications for Task Creation.",
-                    details={"task_id": created_task.id},
-                    source="TaskService",
-                )
             await self.logger.log(
                 action="Create",
                 entity="Task",
@@ -490,7 +482,7 @@ class TaskService(ITaskService):
                     message="Another task with the same name already exists for this subject.",
                 )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
+                Subject, ["user_subject_links.user"]
             )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == data.subject_id, dynamic_includes
@@ -700,7 +692,7 @@ class TaskService(ITaskService):
                         success=False,
                         code=400,
                         data=None,
-                        message="Invalid URL provided",
+                        message=f"Invalid URL provided: {link_url}",
                     )
             if data.url and not Validator.is_valid_external_url(data.url):
                 await self.logger.log(
@@ -718,7 +710,9 @@ class TaskService(ITaskService):
                     data=None,
                     message="Invalid Submission URL provided",
                 )
-            data.details = {"files_data": files} if files else {}
+            data.details = {} if not data.details else data.details
+            if files:
+                data.details["files_data"] = files
             target_task.name = data.name
             target_task.deadline = data.deadline
             target_task.due_date = data.due_date
@@ -776,11 +770,11 @@ class TaskService(ITaskService):
                         source="TaskService",
                     )
             share_link = f"/users/tasks/{updated_task.id}"
-            notification_response = await self.helper_service.send_notification(
+            await self.helper_service.send_notification(
                 Notification.NotificationType.TASK,
                 updated_task.id,
                 user_ids,
-                f"Task '{updated_task.title}' has been updated for subject {subject.name}.",
+                f"Task '{updated_task.name}' has been updated for subject {subject.name}.",
                 share_link,
             )
             await self.logger.log(

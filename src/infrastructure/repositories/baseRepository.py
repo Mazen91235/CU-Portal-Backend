@@ -4,6 +4,7 @@ from typing import Type
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 from sqlalchemy import text, desc, func, inspect
+from sqlalchemy.orm import load_only
 from business.contextVars.sessionContext import session_context
 from core.iRepositories.iBaseRepository import IBaseRepository, T
 from core.dtos.baseDtos import BaseResponseDto
@@ -103,7 +104,7 @@ class BaseRepository(IBaseRepository):
 
             # Handling Projections (Selects)
             if selects and len(selects) > 0:
-                query = query.with_only_columns(*selects)
+                query = query.options(load_only(*selects))
 
             # Ordering
             if order_by:
@@ -164,7 +165,7 @@ class BaseRepository(IBaseRepository):
 
             # Handling Projections (Selects)
             if selects and len(selects) > 0:
-                query = query.with_only_columns(*selects)
+                query = query.options(load_only(*selects))
 
             # Ordering
             if order_by:
@@ -237,9 +238,10 @@ class BaseRepository(IBaseRepository):
                 error=repr(ex),
             )
 
-    async def create(self, entity):
+    async def create(self, entity, session=None):
         try:
-            session = self._resolve_session()
+            if not session:
+                session = self._resolve_session()
             session.add(entity)
             await session.flush()
             await session.refresh(entity)

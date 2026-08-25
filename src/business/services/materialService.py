@@ -1,4 +1,3 @@
-import os
 from sqlalchemy import and_
 from core.iServices.iMaterialService import IMaterialService
 from core.iServices.iMaterialService import IMaterialService
@@ -203,8 +202,11 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"URL is required for material type: {data.material_type}",
                 )
-            if data.material_type != "folder" and not Validator.is_valid_url_based_on_type(
-                data.url or "", data.material_type
+            if (
+                data.material_type != "folder"
+                and not Validator.is_valid_url_based_on_type(
+                    data.url or "", data.material_type
+                )
             ):
                 await self.logger.log(
                     action="Create",
@@ -269,7 +271,7 @@ class MaterialService(IMaterialService):
                     message=f"Subject ID is required for material creation",
                 )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
+                Subject, ["user_subject_links.user"]
             )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == data.subject_id,
@@ -441,23 +443,22 @@ class MaterialService(IMaterialService):
                 share_link += f"?material_id={created_material.id}"
             elif data.material_type != "folder":
                 share_link = created_material.url
-            notification_response = await self.helper_service.send_notification(
+            await self.helper_service.send_notification(
                 Notification.NotificationType.MATERIAL,
                 created_material.id,
                 user_ids,
                 f"New material '{created_material.name}' has been created for subject {subject.name}.",
                 share_link,
             )
-            if not notification_response.success:
-                await self.logger.log(
-                    action="Create",
-                    entity="Material",
-                    level="error",
-                    code=notification_response.code or 500,
-                    message=f"Failed to send notification for material creation: {notification_response.message}",
-                    details={"error": notification_response.error},
-                    source="MaterialService",
-                )
+            await self.logger.log(
+                action="Create",
+                entity="Material",
+                level="info",
+                code=201,
+                message=f"Material created successfully: {created_material.name}",
+                details={"material_id": created_material.id},
+                source="MaterialService",
+            )
             return BaseResponseDto(
                 success=True,
                 code=201,
@@ -515,8 +516,11 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"URL is required for material type: {data.material_type}",
                 )
-            if data.material_type != "folder" and not Validator.is_valid_url_based_on_type(
-                data.url or "", data.material_type
+            if (
+                data.material_type != "folder"
+                and not Validator.is_valid_url_based_on_type(
+                    data.url or "", data.material_type
+                )
             ):
                 await self.logger.log(
                     action="Update",
@@ -561,7 +565,7 @@ class MaterialService(IMaterialService):
                     message=f"Material with ID {data.id} not found",
                 )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
+                Subject, ["user_subject_links.user"]
             )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == existing_material.subject_id, dynamic_includes
@@ -778,7 +782,7 @@ class MaterialService(IMaterialService):
                     }
             data.author_id = logged_in_user.id
             updated_material_response = await self.material_repository.update(
-                data, ["name", "type", "url", "details", "author_id"]
+                data, ["name", "material_type", "url", "details", "author_id"]
             )
             if not updated_material_response.success:
                 return BaseResponseDto(
@@ -814,23 +818,22 @@ class MaterialService(IMaterialService):
                 share_link += f"?material_id={updated_material.id}"
             elif updated_material.material_type != "folder":
                 share_link = updated_material.url
-            notification_response = await self.helper_service.send_notification(
+            await self.helper_service.send_notification(
                 Notification.NotificationType.MATERIAL,
                 updated_material.id,
                 user_ids,
                 f"Material '{updated_material.name}' has been updated for subject {subject.name}.",
                 share_link,
             )
-            if not notification_response.success:
-                await self.logger.log(
-                    action="Update",
-                    entity="Material",
-                    level="error",
-                    code=notification_response.code or 500,
-                    message=f"Failed to send notification for material update: {notification_response.message}",
-                    details={"error": notification_response.error},
-                    source="MaterialService",
-                )
+            await self.logger.log(
+                action="Update",
+                entity="Material",
+                level="info",
+                code=200,
+                message=f"Material updated successfully: {updated_material.name}",
+                details={"material_id": updated_material.id},
+                source="MaterialService",
+            )
             return BaseResponseDto(
                 success=True,
                 code=200,
@@ -1447,7 +1450,7 @@ class MaterialService(IMaterialService):
                     message=f"Invalid URL format: {url}",
                 )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
+                Subject, ["user_subject_links.user"]
             )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == subject_id, dynamic_includes
@@ -1662,23 +1665,13 @@ class MaterialService(IMaterialService):
                 share_link += f"/{parent_id}"
             if len(fetched_data.children) == 0:
                 share_link += f"?material_id={created_data.id}"
-            notification_response = await self.helper_service.send_notification(
+            await self.helper_service.send_notification(
                 notification_type=Notification.NotificationType.MATERIAL,
                 parent_id=created_data.id,
                 user_ids=user_ids,
                 content=f"New material '{created_data.name}' has been fetched from drive to subject '{subject.name}'",
                 url=share_link,
             )
-            if not notification_response.success:
-                await self.logger.log(
-                    action="FetchMaterialsFromDrive",
-                    entity="Material",
-                    level="error",
-                    code=notification_response.code or 500,
-                    message=f"Failed to send notification for fetched material with ID {created_data.id}: {notification_response.message}",
-                    details={"error": notification_response.error},
-                    source="MaterialService",
-                )
             await self.logger.log(
                 action="FetchMaterialsFromDrive",
                 entity="Material",
@@ -1881,8 +1874,9 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Material with ID {material_id} not found",
                 )
-            if existing_material.material_type == "file" and not existing_material.details.get(
-                "fetched"
+            if (
+                existing_material.material_type == "file"
+                and not existing_material.details.get("fetched")
             ):
                 files.append(
                     {

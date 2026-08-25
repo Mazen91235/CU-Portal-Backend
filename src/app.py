@@ -78,16 +78,25 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
         # Create one DB session per request and store it in ContextVar.
-        session = container.session_factory()()
-        session_token = session_context.set(session)
-        request_token = request_context.set(request)
-        try:
-            response = await call_next(request)
-            return response
-        finally:
-            session_context.reset(session_token)
-            request_context.reset(request_token)
-            await session.close()
+        async with container.session_factory()() as session:
+            session_token = session_context.set(session)
+            request_token = request_context.set(request)
+            try:
+                response = await call_next(request)
+                return response
+            except Exception:
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
+                raise
+            finally:
+                try:
+                    await session.close()
+                except Exception:
+                    pass
+                session_context.reset(session_token)
+                request_context.reset(request_token)
 
     # We resolve the router here at startup.
     # Because we are now using `Depends()` inside `create_user_router`,

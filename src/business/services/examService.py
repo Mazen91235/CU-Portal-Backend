@@ -1,4 +1,3 @@
-import os
 from sqlalchemy import and_
 from core.iServices.iExamService import IExamService
 from core.iServices.iHelperService import IHelperService
@@ -189,7 +188,7 @@ class ExamService(IExamService):
                     message="Exam with the same name already exists for this subject.",
                 )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
+                Subject, ["user_subject_links.user"]
             )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == data.subject_id, dynamic_includes
@@ -281,6 +280,7 @@ class ExamService(IExamService):
             data.faculty_id = data.faculty_id or logged_in_user.faculty_id
             data.department_id = data.department_id or logged_in_user.department_id
             data.year_id = data.year_id or logged_in_user.year_id
+            data.task_type = "exam"
             create_exam_response = await self.task_repository.create(data)
             if not create_exam_response.success:
                 return BaseResponseDto(
@@ -306,23 +306,13 @@ class ExamService(IExamService):
                     message="An error occurred while creating exam",
                 )
             share_link = f"/users/exams/{created_exam.id}"
-            notification_response = await self.helper_service.send_notification(
+            await self.helper_service.send_notification(
                 Notification.NotificationType.EXAM,
                 created_exam.id,
                 user_ids,
-                f"New exam '{created_exam.title}' has been created for subject {subject.name}.",
+                f"New exam '{created_exam.name}' has been created for subject {subject.name}.",
                 share_link,
             )
-            if not notification_response.success:
-                await self.logger.log(
-                    action="Create",
-                    entity="Exam",
-                    level="warning",
-                    code=400,
-                    message="Failed to send notifications for Exam Creation.",
-                    details={"exam_id": created_exam.id},
-                    source="ExamService",
-                )
             await self.logger.log(
                 action="Create",
                 entity="Exam",
@@ -414,7 +404,7 @@ class ExamService(IExamService):
                     message="Another exam with the same name already exists for this subject.",
                 )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
+                Subject, ["user_subject_links.user"]
             )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == data.subject_id, dynamic_includes
@@ -596,23 +586,13 @@ class ExamService(IExamService):
                     message="An error occurred while updating exam",
                 )
             share_link = f"/users/exams/{updated_exam.id}"
-            notification_response = await self.helper_service.send_notification(
+            await self.helper_service.send_notification(
                 Notification.NotificationType.EXAM,
                 updated_exam.id,
                 user_ids,
-                f"Exam '{updated_exam.title}' has been updated for subject {subject.name}.",
+                f"Exam '{updated_exam.name}' has been updated for subject {subject.name}.",
                 share_link,
             )
-            if not notification_response.success:
-                await self.logger.log(
-                    action="Update",
-                    entity="Exam",
-                    level="warning",
-                    code=400,
-                    message="Failed to send notifications for Exam Update.",
-                    details={"exam_id": updated_exam.id},
-                    source="ExamService",
-                )
             await self.logger.log(
                 action="Update",
                 entity="Exam",

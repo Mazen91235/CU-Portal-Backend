@@ -7,7 +7,7 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from business.contextVars.userContext import user_context
 from business.contextVars.sessionContext import session_context
 
-DEFAULT_TIMEOUT_SECONDS = 5.0
+DEFAULT_TIMEOUT_SECONDS = 10.0
 
 
 def set_timeout(seconds: float):
