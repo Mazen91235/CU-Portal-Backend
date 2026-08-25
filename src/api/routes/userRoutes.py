@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, allow_inactive
 from core.iControllers.iUserController import IUserController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -52,7 +52,7 @@ def create_user_user_router(
 
     @router.get(
         "/me",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive)],
         response_model=BaseResponseDto[UserResponseDto],
         status_code=200,
         summary="Get Current User",
@@ -69,7 +69,7 @@ def create_user_user_router(
 
     @router.get(
         "/permissions",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive)],
         response_model=BaseResponseDto[list[str]],
         status_code=200,
         summary="Get User Permissions",
@@ -84,6 +84,7 @@ def create_user_user_router(
         "/has-permissions",
         dependencies=[
             Depends(_is_logged_in),
+            Depends(allow_inactive),
             Depends(_validate("required_permissions", "is_and")),
         ],
         response_model=BaseResponseDto[bool],
@@ -100,7 +101,7 @@ def create_user_user_router(
 
     @router.patch(
         "/",
-        dependencies=[Depends(_is_logged_in), Depends(_validate("name"))],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive), Depends(_validate("name"))],
         response_model=BaseResponseDto[UserResponseDto],
         status_code=200,
         summary="Update User",
@@ -117,6 +118,7 @@ def create_user_user_router(
         "/academic-data",
         dependencies=[
             Depends(_is_logged_in),
+            Depends(allow_inactive),
             Depends(_validate("faculty_id", "department_id", "year_id", "study_type")),
         ],
         response_model=BaseResponseDto,
