@@ -1285,6 +1285,112 @@ class UserService(IUserService):
                 message="An error occurred while logging in",
             )
 
+    async def change_google_account(self):
+        try:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="ChangeGoogleAccount",
+                    entity="User",
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message="Failed to retrieve logged-in user for Google account change",
+                    details={"error": logged_in_user_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_response.code,
+                    data=None,
+                    message=logged_in_user_response.message,
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="ChangeGoogleAccount",
+                    entity="User",
+                    level="error",
+                    code=401,
+                    message="No logged-in user found in the request context for Google account change",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message="Unauthorized, please log in to change your Google account.",
+                )
+            request = request_context.get()
+            is_localhost = "localhost" in (request.url.hostname or "")
+            redirect_response_url = (
+                ("https://" if not is_localhost else "http://")
+                + (request.url.hostname or "")
+                + (f":{request.url.port}" if request.url.port else "")
+                + "/auth/google-authentication-redirect"
+            )
+            google_client = OAuthHandler.create_google_client()
+            state = StringHandler.generate_random_string(User.GoogleToken.TOKEN_LENGTH)
+            nonce = StringHandler.generate_random_string(User.GoogleToken.TOKEN_LENGTH)
+            state_token = Token(
+                token=state,
+                token_type=Token.TokenType.GOOGLE_TOKEN["value"],
+                expires_at=TimezoneHandler.add_hours(User.GoogleToken.EXPIRE_HOURS),
+                details={"nonce": nonce, "user_id": logged_in_user.id},
+                is_valid=True,
+            )
+            create_token_response = await self.token_repository.create(state_token)
+            if not create_token_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_token_response.code,
+                    data=None,
+                    message=create_token_response.message,
+                )
+            created_token = create_token_response.data
+            if not created_token:
+                await self.logger.log(
+                    action="ChangeGoogleAccount",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to create state token for Google account change",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while initiating Google account change, please try again.",
+                )
+            await self.logger.log(
+                action="ChangeGoogleAccount",
+                entity="User",
+                level="info",
+                code=200,
+                message="Initiating Google account change",
+                source="UserService",
+            )
+            response = UserLoginWithGoogleResponseDto(
+                redirect_response_url=redirect_response_url, state=state, nonce=nonce
+            )
+            return BaseResponseDto(success=True, code=200, data=response)
+        except Exception as ex:
+            await self.logger.log(
+                action="ChangeGoogleAccount",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while changing Google account",
+                details={"error": repr(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while changing Google account",
+            )
+
     async def authenticate_with_google(self):
         try:
             request = request_context.get()
@@ -1335,6 +1441,9 @@ class UserService(IUserService):
             details["nonce"] = (
                 state_token.details.get("nonce") if state_token.details else None
             )
+            user_id = (
+                state_token.details.get("user_id") if state_token.details else None
+            )
             token = await OAuthHandler.authorize_google_access_token(
                 request,
                 nonce=details.get("nonce"),
@@ -1384,6 +1493,75 @@ class UserService(IUserService):
                     token.get("refresh_token") or ""
                 ),
             }
+            if user_id:
+                user_response = await self.user_repository.find_one(User.id == user_id)
+                if not user_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=user_response.code,
+                        data=None,
+                        message=user_response.message,
+                    )
+                user = user_response.data
+                if not user:
+                    await self.logger.log(
+                        action="AuthenticateWithGoogle",
+                        entity="User",
+                        level="warning",
+                        code=404,
+                        message="Logged in user not found for Google account change",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message="Logged in user not found, please log in again.",
+                    )
+                user.google_id = google_user_details.get("google_id")
+                user.google_name = google_user_details.get("google_name")
+                user.google_email = google_user_details.get("google_email")
+                user.google_avatar = google_user_details.get("google_avatar")
+                user.google_refresh_token = google_user_details.get(
+                    "google_refresh_token"
+                )
+                update_user_response = await self.user_repository.update(
+                    user,
+                    [
+                        "google_id",
+                        "google_name",
+                        "google_email",
+                        "google_avatar",
+                        "google_refresh_token",
+                    ],
+                )
+                if not update_user_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=update_user_response.code,
+                        data=None,
+                        message=update_user_response.message,
+                    )
+                updated_user = update_user_response.data
+                if not updated_user:
+                    await self.logger.log(
+                        action="AuthenticateWithGoogle",
+                        entity="User",
+                        level="error",
+                        code=500,
+                        message="Failed to update logged in user's Google account details",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while updating your Google account information, please try again.",
+                    )
+                response = UserLoginResponseDto(
+                    redirect_url=(redirect_url or "") + "/user/settings/profile",
+                )
+                return BaseResponseDto(success=True, code=200, data=response)
             user_response = await self.user_repository.find_one(
                 User.google_id == google_user_details.get("google_id")
             )
@@ -2063,7 +2241,7 @@ class UserService(IUserService):
                     message="An error occurred while retrieving Google stored token, please try again.",
                 )
             access_token_response = await self.helper_service.get_google_access_token(
-                    google_user_data.get("google_refresh_token") or ""
+                google_user_data.get("google_refresh_token") or ""
             )
             if not access_token_response.success:
                 await self.logger.log(
@@ -2530,6 +2708,188 @@ class UserService(IUserService):
                 code=500,
                 data=None,
                 message="An error occurred while updating users, please try again.",
+            )
+
+    async def suspend(self, user_id):
+        try:
+            user_response = await self.user_repository.find_one(User.id == user_id)
+            if not user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=user_response.code,
+                    data=None,
+                    message=user_response.message,
+                )
+            user = user_response.data
+            if not user:
+                await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message=f"User with ID {user_id} not found for suspension",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"User not found.",
+                )
+            if not user.status:
+                await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="warning",
+                    code=400,
+                    message=f"User with ID {user_id} is not active and cannot be suspended",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"User must be active to be suspended.",
+                )
+            user.status = False
+            update_user_response = await self.user_repository.update(user, ["status"])
+            if not update_user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_user_response.code,
+                    data=None,
+                    message=update_user_response.message,
+                )
+            await self.logger.log(
+                action="SuspendUser",
+                entity="User",
+                level="info",
+                code=200,
+                message=f"User with ID {user_id} suspended successfully",
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=None,
+                message=f"User suspended successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="SuspendUser",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while suspending user with ID {user_id}",
+                details={"error": repr(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message=f"An error occurred while suspending user, please try again.",
+            )
+
+    async def unsuspend(self, user_id):
+        try:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                User, ["pending_user"]
+            )
+            user_response = await self.user_repository.find_one(
+                User.id == user_id, dynamic_includes
+            )
+            if not user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=user_response.code,
+                    data=None,
+                    message=user_response.message,
+                )
+            user = user_response.data
+            if not user:
+                await self.logger.log(
+                    action="UnsuspendUser",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message=f"User with ID {user_id} not found for unsuspension",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"User not found.",
+                )
+            if user.status:
+                await self.logger.log(
+                    action="UnsuspendUser",
+                    entity="User",
+                    level="warning",
+                    code=400,
+                    message=f"User with ID {user_id} is already active and cannot be unsuspended",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"User must be suspended to be unsuspended.",
+                )
+            if user.pending_user:
+                await self.logger.log(
+                    action="UnsuspendUser",
+                    entity="User",
+                    level="warning",
+                    code=400,
+                    message=f"User with ID {user_id} is pending approval and cannot be unsuspended",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"User is pending approval and cannot be unsuspended.",
+                )
+            user.status = True
+            update_user_response = await self.user_repository.update(user, ["status"])
+            if not update_user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_user_response.code,
+                    data=None,
+                    message=update_user_response.message,
+                )
+            await self.logger.log(
+                action="UnsuspendUser",
+                entity="User",
+                level="info",
+                code=200,
+                message=f"User with ID {user_id} unsuspended successfully",
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=None,
+                message=f"User unsuspended successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="UnsuspendUser",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while unsuspending user with ID {user_id}",
+                details={"error": repr(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message=f"An error occurred while unsuspending user, please try again.",
             )
 
     async def update_academic_data(self, data):

@@ -999,9 +999,6 @@ class MaterialService(IMaterialService):
                             data=None,
                             message=f"You are not authorized to delete this material.",
                         )
-                print(
-                    f"Material to be deleted: {existing_material.name} (ID: {existing_material.id})"
-                )
                 delete_response = await self._recursive_delete(material_id, files)
                 if not delete_response.success:
                     return BaseResponseDto(
@@ -2053,27 +2050,6 @@ class MaterialService(IMaterialService):
                     code=404,
                     data=None,
                     message=f"Material with ID {material_id} not found",
-                )
-            verify_restricted_access_response = (
-                await self.helper_service.verify_restricted_access(
-                    subject_id=existing_material.subject_id,
-                )
-            )
-            if not verify_restricted_access_response.success:
-                await self.logger.log(
-                    action="RecursiveCopy",
-                    entity="Material",
-                    level="error",
-                    code=verify_restricted_access_response.code or 403,
-                    message=f"Failed to verify restricted access for user {author_id} on subject {existing_material.subject_id}: {verify_restricted_access_response.message}",
-                    details={"error": verify_restricted_access_response.error},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=verify_restricted_access_response.code,
-                    data=None,
-                    message=verify_restricted_access_response.message,
                 )
             new_material = Material(
                 name=existing_material.name,

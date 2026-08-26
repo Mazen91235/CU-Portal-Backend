@@ -383,6 +383,57 @@ class UserController(IUserController):
                 code=500,
                 message="An error occurred while processing the request, please try again later",
             )
+            
+    async def change_google_account(self, request):
+        try:
+            await self.user_service.begin_transaction()
+            response = await self.user_service.change_google_account()
+            if not response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            response_data = response.data
+            if not response_data:
+                await self.user_service.rollback_transaction()
+                await self.logger.log(
+                    action="ChangeGoogleAccount",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to generate Google login URL",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            await self.user_service.commit_transaction()
+            return await OAuthHandler.authorize_google_redirect(
+                request,
+                redirect_url=response_data.redirect_response_url,
+                state=response_data.state,
+                nonce=response_data.nonce,
+            )
+        except Exception as e:
+            await self.user_service.rollback_transaction()
+            await self.logger.log(
+                action="ChangeGoogleAccount",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
 
     async def google_authentication_redirect(self, request):
         try:
@@ -891,6 +942,74 @@ class UserController(IUserController):
             await self.user_service.rollback_transaction()
             await self.logger.log(
                 action="UpdateMany",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def suspend(self, request, id):
+        try:
+            await self.user_service.begin_transaction()
+            response = await self.user_service.suspend(id)
+            if not response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            await self.user_service.commit_transaction()
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                message="User suspended successfully",
+            )
+        except Exception as e:
+            await self.user_service.rollback_transaction()
+            await self.logger.log(
+                action="Suspend",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def unsuspend(self, request, id):
+        try:
+            await self.user_service.begin_transaction()
+            response = await self.user_service.unsuspend(id)
+            if not response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            await self.user_service.commit_transaction()
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                message="User unsuspended successfully",
+            )
+        except Exception as e:
+            await self.user_service.rollback_transaction()
+            await self.logger.log(
+                action="Unsuspend",
                 entity="User",
                 level="error",
                 code=500,

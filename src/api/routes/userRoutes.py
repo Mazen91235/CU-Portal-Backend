@@ -68,6 +68,18 @@ def create_user_user_router(
         return await controller.get_current_user(request, query=query)
 
     @router.get(
+        "/change-google-account",
+        dependencies=[Depends(_is_logged_in)],
+        status_code=200,
+        summary="Change Google Account",
+        description="Change the Google account associated with the currently logged in user",
+    )
+    async def change_google_account(
+        request: Request, controller: IUserController = Depends(_get_controller)
+    ):
+        return await controller.change_google_account(request)
+
+    @router.get(
         "/permissions",
         dependencies=[Depends(_is_logged_in), Depends(allow_inactive)],
         response_model=BaseResponseDto[list[str]],
@@ -248,5 +260,41 @@ def create_user_admin_router(
         controller: IUserController = Depends(_get_controller),
     ):
         return await controller.update_many(request, data=data)
+
+    @router.patch(
+        "/{user_id}/suspend",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Manage Users")),
+        ],
+        response_model=BaseResponseDto,
+        status_code=200,
+        summary="Suspend User",
+        description="Suspend a user by their ID",
+    )
+    async def suspend_user(
+        user_id: int,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
+    ):
+        return await controller.suspend(request, id=user_id)
+
+    @router.patch(
+        "/{user_id}/unsuspend",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Manage Users")),
+        ],
+        response_model=BaseResponseDto,
+        status_code=200,
+        summary="Unsuspend User",
+        description="Unsuspend a user by their ID",
+    )
+    async def unsuspend_user(
+        user_id: int,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
+    ):
+        return await controller.unsuspend(request, id=user_id)
 
     return router

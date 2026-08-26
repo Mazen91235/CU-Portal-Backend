@@ -30,9 +30,15 @@ class IUserService(
         pass
 
     @abstractmethod
-    async def login_with_google(self) -> BaseResponseDto[UserLoginWithGoogleResponseDto]:
+    async def login_with_google(
+        self,
+    ) -> BaseResponseDto[UserLoginWithGoogleResponseDto]:
         pass
 
+    @abstractmethod
+    async def change_google_account(self) -> BaseResponseDto[UserLoginWithGoogleResponseDto]:
+        pass
+    
     @abstractmethod
     async def authenticate_with_google(self) -> BaseResponseDto[UserLoginResponseDto]:
         pass
@@ -48,7 +54,9 @@ class IUserService(
         pass
 
     @abstractmethod
-    async def resend_token(self, token: str) -> BaseResponseDto[UserResendTokenResponseDto]:
+    async def resend_token(
+        self, token: str
+    ) -> BaseResponseDto[UserResendTokenResponseDto]:
         pass
 
     @abstractmethod
@@ -73,6 +81,14 @@ class IUserService(
 
     @abstractmethod
     async def update_many(self, data: UserUpdateUsersDto) -> BaseResponseDto[bool]:
+        pass
+
+    @abstractmethod
+    async def suspend(self, user_id: int) -> BaseResponseDto[bool]:
+        pass
+
+    @abstractmethod
+    async def unsuspend(self, user_id: int) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod

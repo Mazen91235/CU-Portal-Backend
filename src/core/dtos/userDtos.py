@@ -183,7 +183,9 @@ class UserLoginWithGoogleResponseDto(BaseModel):
 
 class UserLoginResponseDto(BaseModel):
     user: User | None = Field(default=None, description="Logged in user details")
-    token: str = Field(..., description="Authentication token for the user")
+    token: str | None = Field(
+        default=None, description="Authentication token for the user"
+    )
     state: str | None = Field(
         default=None, description="State parameter for google authentication"
     )
