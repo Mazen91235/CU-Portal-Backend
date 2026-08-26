@@ -20,9 +20,7 @@ class AnnouncementCreateDto(BaseModel):
     content: str = Field(
         ..., min_length=1, max_length=1000, description="Content of the announcement"
     )
-    date: str | None = Field(
-        default=None, description="Date string for the announcement"
-    )
+    date: datetime | None = Field(default=None, description="Date for the announcement")
     subject_id: int = Field(
         ..., gt=0, description="ID of the subject this announcement belongs to"
     )
@@ -104,9 +102,7 @@ class AnnouncementUpdateDto(BaseModel):
         max_length=1000,
         description="Content of the announcement",
     )
-    date: str | None = Field(
-        default=None, description="ISO formatted date string for the announcement"
-    )
+    date: datetime | None = Field(default=None, description="Date for the announcement")
     subject_id: int = Field(
         ..., gt=0, description="ID of the subject this announcement belongs to"
     )
@@ -148,9 +144,9 @@ class AnnouncementSearchDto(BaseSearchDto):
     )
     year_id: int | None = Field(default=None, description="ID of Year to filter by")
     author_id: int | None = Field(default=None, description="ID of Author to filter by")
-    date_from: str | None = Field(
+    date_from: datetime | None = Field(
         default=None, description="Start date to filter announcements"
     )
-    date_to: str | None = Field(
+    date_to: datetime | None = Field(
         default=None, description="End date to filter announcements"
     )
