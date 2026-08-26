@@ -859,6 +859,76 @@ class MaterialService(IMaterialService):
 
     async def delete_many(self, data):
         try:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="DeleteMany",
+                    entity="Material",
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message=f"Failed to get logged in user",
+                    details={"error": logged_in_user_response.message},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_response.code,
+                    data=None,
+                    message=logged_in_user_response.message,
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="DeleteMany",
+                    entity="Material",
+                    level="error",
+                    code=401,
+                    message=f"Logged in user not found",
+                    details={"error": "Logged in user not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message=f"Logged in user not found",
+                )
+            logged_in_user_permissions_response = (
+                await self.helper_service.get_logged_in_user_permissions()
+            )
+            if not logged_in_user_permissions_response.success:
+                await self.logger.log(
+                    action="DeleteMany",
+                    entity="Material",
+                    level="error",
+                    code=logged_in_user_permissions_response.code or 500,
+                    message=f"Failed to get logged in user permissions for user {logged_in_user.id}: {logged_in_user_permissions_response.message}",
+                    details={"error": logged_in_user_permissions_response.error},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_permissions_response.code,
+                    data=None,
+                    message=logged_in_user_permissions_response.message,
+                )
+            logged_in_user_permissions = logged_in_user_permissions_response.data
+            if not logged_in_user_permissions:
+                await self.logger.log(
+                    action="DeleteMany",
+                    entity="Material",
+                    level="error",
+                    code=403,
+                    message=f"Logged in user {logged_in_user.id} has no permissions",
+                    details={"error": "Logged in user has no permissions"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message=f"You do not have the necessary permissions to delete this material.",
+                )
             material_ids = data.material_ids
             files = []
             for material_id in material_ids:
@@ -889,40 +959,6 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"Material with ID {material_id} not found",
                     )
-                logged_in_user_response = await self.helper_service.get_logged_in_user()
-                if not logged_in_user_response.success:
-                    await self.logger.log(
-                        action="DeleteMany",
-                        entity="Material",
-                        level="error",
-                        code=logged_in_user_response.code or 500,
-                        message=f"Failed to get logged in user",
-                        details={"error": logged_in_user_response.message},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=logged_in_user_response.code,
-                        data=None,
-                        message=logged_in_user_response.message,
-                    )
-                logged_in_user = logged_in_user_response.data
-                if not logged_in_user:
-                    await self.logger.log(
-                        action="DeleteMany",
-                        entity="Material",
-                        level="error",
-                        code=401,
-                        message=f"Logged in user not found",
-                        details={"error": "Logged in user not found"},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=401,
-                        data=None,
-                        message=f"Logged in user not found",
-                    )
                 verify_restricted_access_response = (
                     await self.helper_service.verify_restricted_access(
                         subject_id=existing_material.subject_id
@@ -944,42 +980,6 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=verify_restricted_access_response.message,
                     )
-                logged_in_user_permissions_response = (
-                    await self.helper_service.get_logged_in_user_permissions()
-                )
-                if not logged_in_user_permissions_response.success:
-                    await self.logger.log(
-                        action="DeleteMany",
-                        entity="Material",
-                        level="error",
-                        code=logged_in_user_permissions_response.code or 500,
-                        message=f"Failed to get logged in user permissions for user {logged_in_user.id}: {logged_in_user_permissions_response.message}",
-                        details={"error": logged_in_user_permissions_response.error},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=logged_in_user_permissions_response.code,
-                        data=None,
-                        message=logged_in_user_permissions_response.message,
-                    )
-                logged_in_user_permissions = logged_in_user_permissions_response.data
-                if not logged_in_user_permissions:
-                    await self.logger.log(
-                        action="DeleteMany",
-                        entity="Material",
-                        level="error",
-                        code=403,
-                        message=f"Logged in user {logged_in_user.id} has no permissions",
-                        details={"error": "Logged in user has no permissions"},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=403,
-                        data=None,
-                        message=f"You do not have the necessary permissions to delete this material.",
-                    )
                 if existing_material.author_id != logged_in_user.id:
                     if "Manage All Materials" not in logged_in_user_permissions:
                         await self.logger.log(
@@ -999,6 +999,9 @@ class MaterialService(IMaterialService):
                             data=None,
                             message=f"You are not authorized to delete this material.",
                         )
+                print(
+                    f"Material to be deleted: {existing_material.name} (ID: {existing_material.id})"
+                )
                 delete_response = await self._recursive_delete(material_id, files)
                 if not delete_response.success:
                     return BaseResponseDto(
@@ -1217,7 +1220,25 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=verify_restricted_access_response.message,
                     )
-                existing_material.parent_id = destination_id
+                if existing_material.parent_id == destination_material.id:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Material {material_id} is already in the destination folder {destination_id}",
+                        details={
+                            "error": "Material is already in the destination folder"
+                        },
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Material '{existing_material.name}' is already in the destination folder '{destination_material.name}'.",
+                    )
+                existing_material.parent_id = destination_material.id
                 update_response = await self.material_repository.update(
                     existing_material, ["parent_id"]
                 )
@@ -1355,7 +1376,7 @@ class MaterialService(IMaterialService):
                 )
             author_id = logged_in_user.id
             access_token_response = await self.helper_service.get_google_access_token(
-                FernetHandler.decrypt(logged_in_user.google_refresh_token or "")
+                logged_in_user.google_refresh_token
             )
             if not access_token_response.success:
                 await self.logger.log(
@@ -1802,7 +1823,7 @@ class MaterialService(IMaterialService):
                     return
                 access_token_response = (
                     await self.helper_service.get_google_access_token(
-                        FernetHandler.decrypt(user.google_refresh_token or "")
+                        user.google_refresh_token
                     )
                 )
                 if not access_token_response.success:

@@ -101,7 +101,11 @@ def create_user_user_router(
 
     @router.patch(
         "/",
-        dependencies=[Depends(_is_logged_in), Depends(allow_inactive), Depends(_validate("name"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(allow_inactive),
+            Depends(_validate("name")),
+        ],
         response_model=BaseResponseDto[UserResponseDto],
         status_code=200,
         summary="Update User",
@@ -178,6 +182,23 @@ def create_user_admin_router(
         return validate_request
 
     @router.get(
+        "/statistics",
+        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
+        response_model=BaseResponseDto[UserStatisticsResponseDto],
+        status_code=200,
+        summary="Get User Statistics",
+        description="Get statistics for the users in the system, including total count, new users this month, percentage increase, active users, and pending users.",
+    )
+    async def get_user_statistics(
+        request: Request,
+        query: QueryModel[UserSearchDto] = Depends(
+            Parser.parse_query(QueryModel[UserSearchDto])
+        ),
+        controller: IUserController = Depends(_get_controller),
+    ):
+        return await controller.get_statistics(request, query=query)
+
+    @router.get(
         "/{user_id}",
         dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
         response_model=BaseResponseDto[UserResponseDto],
@@ -208,23 +229,6 @@ def create_user_admin_router(
         controller: IUserController = Depends(_get_controller),
     ):
         return await controller.find(request, query=query)
-
-    @router.get(
-        "/system/statistics",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
-        response_model=BaseResponseDto[UserStatisticsResponseDto],
-        status_code=200,
-        summary="Get User Statistics",
-        description="Get statistics for the users in the system, including total count, new users this month, percentage increase, active users, and pending users.",
-    )
-    async def get_user_statistics(
-        request: Request,
-        query: QueryModel[UserSearchDto] = Depends(
-            Parser.parse_query(QueryModel[UserSearchDto])
-        ),
-        controller: IUserController = Depends(_get_controller),
-    ):
-        return await controller.get_statistics(request, query=query)
 
     @router.patch(
         "/",

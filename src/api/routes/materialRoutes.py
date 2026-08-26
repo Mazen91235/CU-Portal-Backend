@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, set_timeout
 from core.iControllers.iMaterialController import IMaterialController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -209,6 +209,28 @@ def create_material_admin_router(
         return await controller.find(request, query=query)
 
     @router.post(
+        "/fetch-from-drive",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Add Materials")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
+            Depends(_validate("url", "subject_id")),
+            Depends(set_timeout(120)),
+        ],
+        response_model=BaseResponseDto[bool],
+        status_code=201,
+        summary="Fetch Materials From Drive",
+        description="Fetch materials from a Google Drive URL and create them",
+    )
+    async def fetch_materials_from_drive(
+        data: MaterialsFetchFromDriveDto,
+        request: Request,
+        controller: IMaterialController = Depends(_get_controller),
+    ):
+        return await controller.fetch_materials_from_drive(request, data=data)
+
+    @router.post(
         "/",
         dependencies=[
             Depends(_is_logged_in),
@@ -228,6 +250,50 @@ def create_material_admin_router(
         controller: IMaterialController = Depends(_get_controller),
     ):
         return await controller.create(request, data=data)
+
+    @router.patch(
+        "/copy",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Edit Materials")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
+            Depends(_validate("material_ids", "destination_id")),
+            Depends(set_timeout(120)),
+        ],
+        response_model=BaseResponseDto,
+        status_code=201,
+        summary="Copy Materials",
+        description="Copy one or more materials to a destination folder",
+    )
+    async def copy_many_materials(
+        data: MaterialsCopyOrMoveDto,
+        request: Request,
+        controller: IMaterialController = Depends(_get_controller),
+    ):
+        return await controller.copy_many(request, data=data)
+
+    @router.patch(
+        "/move",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Edit Materials")),
+            Depends(_is_ready),
+            Depends(_has_registered_subjects),
+            Depends(_validate("material_ids", "destination_id")),
+            Depends(set_timeout(120)),
+        ],
+        response_model=BaseResponseDto,
+        status_code=200,
+        summary="Move Materials",
+        description="Move one or more materials to a destination folder",
+    )
+    async def move_many_materials(
+        data: MaterialsCopyOrMoveDto,
+        request: Request,
+        controller: IMaterialController = Depends(_get_controller),
+    ):
+        return await controller.move_many(request, data=data)
 
     @router.patch(
         "/{material_id}",
@@ -258,6 +324,7 @@ def create_material_admin_router(
             Depends(_is_authorized("Delete Materials")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
+            Depends(set_timeout(120)),
         ],
         response_model=BaseResponseDto,
         status_code=200,
@@ -270,68 +337,5 @@ def create_material_admin_router(
         controller: IMaterialController = Depends(_get_controller),
     ):
         return await controller.delete_many(request, ids=material_ids)
-
-    @router.patch(
-        "/copy",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("Edit Materials")),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
-            Depends(_validate("material_ids", "destination_id")),
-        ],
-        response_model=BaseResponseDto,
-        status_code=201,
-        summary="Copy Materials",
-        description="Copy one or more materials to a destination folder",
-    )
-    async def copy_many_materials(
-        data: MaterialsCopyOrMoveDto,
-        request: Request,
-        controller: IMaterialController = Depends(_get_controller),
-    ):
-        return await controller.copy_many(request, data=data)
-
-    @router.patch(
-        "/move",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("Edit Materials")),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
-            Depends(_validate("material_ids", "destination_id")),
-        ],
-        response_model=BaseResponseDto,
-        status_code=200,
-        summary="Move Materials",
-        description="Move one or more materials to a destination folder",
-    )
-    async def move_many_materials(
-        data: MaterialsCopyOrMoveDto,
-        request: Request,
-        controller: IMaterialController = Depends(_get_controller),
-    ):
-        return await controller.move_many(request, data=data)
-
-    @router.get(
-        "/fetch-from-drive",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_authorized("Add Materials")),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
-            Depends(_validate("url", "subject_id")),
-        ],
-        response_model=BaseResponseDto[bool],
-        status_code=201,
-        summary="Fetch Materials From Drive",
-        description="Fetch materials from a Google Drive URL and create them",
-    )
-    async def fetch_materials_from_drive(
-        data: MaterialsFetchFromDriveDto,
-        request: Request,
-        controller: IMaterialController = Depends(_get_controller),
-    ):
-        return await controller.fetch_materials_from_drive(request, data=data)
 
     return router

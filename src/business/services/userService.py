@@ -617,34 +617,49 @@ class UserService(IUserService):
 
     async def update(self, data):
         try:
-            user_response = await self.user_repository.find_one(User.id == data.id)
-            if not user_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=user_response.code,
-                    data=None,
-                    message=user_response.message,
-                )
-            user = user_response.data
-            if not user:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
                 await self.logger.log(
                     action="Update",
                     entity="User",
-                    level="warning",
-                    code=404,
-                    message="User not found with this ID",
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message="Failed to retrieve logged-in user",
+                    details={"error": logged_in_user_response.error},
                     source="UserService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=404,
+                    code=logged_in_user_response.code,
                     data=None,
-                    message="User not found",
+                    message=logged_in_user_response.message,
                 )
-            avatar = user.details.get("avatar", user.google_avatar)
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="Update",
+                    entity="User",
+                    level="error",
+                    code=401,
+                    message="No logged-in user found in the request context",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message="Unauthorized, please log in to update your profile.",
+                )
+            avatar = logged_in_user.details.get("avatar", logged_in_user.google_avatar)
             should_remove = None
-            if data.url and data.url != avatar:
-                file_id = self.helper_service.get_file_id_from_url(data.url)
+            if (
+                data.details
+                and data.details.get("avatar")
+                and data.details.get("avatar") != avatar
+            ):
+                file_id = self.helper_service.get_file_id_from_url(
+                    data.details.get("avatar", "")
+                )
                 if not file_id:
                     await self.logger.log(
                         action="Update",
@@ -728,9 +743,10 @@ class UserService(IUserService):
                         message=f"The uploaded file exceeds the maximum allowed size of {User.MAX_ALLOWED_FILE_SIZE_MB} MB, please try again with a smaller file.",
                     )
                 should_remove = avatar
-            data.details["avatar"] = data.url
+            logged_in_user.name = data.name
+            logged_in_user.details = data.details
             update_user_response = await self.user_repository.update(
-                data, ["name", "details"]
+                logged_in_user, ["name", "details"]
             )
             if not update_user_response.success:
                 return BaseResponseDto(
@@ -761,7 +777,7 @@ class UserService(IUserService):
                 if file_id:
                     access_token_response = (
                         await self.helper_service.get_google_access_token(
-                            user.google_refresh_token or ""
+                            logged_in_user.google_refresh_token or ""
                         )
                     )
                     if (
@@ -2047,9 +2063,7 @@ class UserService(IUserService):
                     message="An error occurred while retrieving Google stored token, please try again.",
                 )
             access_token_response = await self.helper_service.get_google_access_token(
-                FernetHandler.decrypt(
                     google_user_data.get("google_refresh_token") or ""
-                )
             )
             if not access_token_response.success:
                 await self.logger.log(
@@ -2142,7 +2156,7 @@ class UserService(IUserService):
                     message="Logged in user not found, please log in again.",
                 )
             access_token_response = await self.helper_service.get_google_access_token(
-                FernetHandler.decrypt(logged_in_user.google_refresh_token or "")
+                logged_in_user.google_refresh_token
             )
             if not access_token_response.success:
                 await self.logger.log(

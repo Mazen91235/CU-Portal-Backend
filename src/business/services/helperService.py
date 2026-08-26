@@ -1,6 +1,6 @@
 import os
 import aiohttp
-from aiohttp import ClientResponse
+from aiohttp import FormData
 import asyncio
 import json
 from typing import TypeVar, cast
@@ -20,7 +20,12 @@ from core.entities.subject import Subject
 from core.entities.notification import Notification
 from core.entities.userNotification import UserNotification
 from core.dtos.baseDtos import BaseResponseDto
-from core.models.fileModels import FetchedModel, DownloadedFileModel, FileModel
+from core.models.fileModels import (
+    RequestResponseModel,
+    FetchedModel,
+    DownloadedFileModel,
+    FileModel,
+)
 from core.utils.entitiesHandler import EntitiesHandler
 from core.utils.fernetHandler import FernetHandler
 
@@ -781,7 +786,7 @@ class HelperService(IHelperService[U]):
         data: aiohttp.FormData | None = None,
         json_data: dict | None = None,
         max_retries=6,
-    ) -> BaseResponseDto[ClientResponse]:
+    ) -> BaseResponseDto[RequestResponseModel]:
         RATE_LIMIT_REASONS = [
             "userRateLimitExceeded",
             "rateLimitExceeded",
@@ -799,7 +804,20 @@ class HelperService(IHelperService[U]):
                         data=data,
                         json=json_data,
                     ) as response:
-                        json_response = await response.json()
+                        json_response = {}
+                        content = None
+                        try:
+                            json_response = await response.json()
+                        except Exception:
+                            pass
+                        try:
+                            content = await response.read()
+                        except Exception:
+                            pass
+                        response_model = RequestResponseModel(
+                            json_response=json_response,
+                            content=content,
+                        )
                         if response.status == 429:  # Too Many Requests
                             retry_after = int(response.headers.get("Retry-After", 1))
                             await asyncio.sleep(retry_after)
@@ -827,7 +845,7 @@ class HelperService(IHelperService[U]):
                         return BaseResponseDto(
                             success=True,
                             code=response.status,
-                            data=response,
+                            data=response_model,
                             message="Request successful",
                         )
             except Exception as ex:
@@ -848,8 +866,14 @@ class HelperService(IHelperService[U]):
             name=metadata.get("name", ""),
             mime_type=metadata.get("mimeType", ""),
             size=self._format_size(metadata.get("size", "0")),
-            web_content_link=metadata.get("webContentLink", ""),
-            web_view_link=metadata.get("webViewLink", ""),
+            web_content_link=metadata.get(
+                "webContentLink",
+                f"https://drive.google.com/uc?export=download&id={metadata.get('id', '')}",
+            ),
+            web_view_link=metadata.get(
+                "webViewLink",
+                f"https://drive.google.com/uc?export=view&id={metadata.get('id', '')}",
+            ),
             file_type=self.get_file_type(metadata.get("mimeType", "")),
         )
 
@@ -1086,7 +1110,7 @@ class HelperService(IHelperService[U]):
                         error=f"User with ID {user_id} not found in the database",
                     )
                 access_token_response = await self.get_google_access_token(
-                    FernetHandler.decrypt(user.google_refresh_token or "")
+                    user.google_refresh_token
                 )
                 if not access_token_response.success:
                     return BaseResponseDto(
@@ -1185,7 +1209,7 @@ class HelperService(IHelperService[U]):
                     message="Bad Response from Google Drive API, please try again later",
                     error="Empty response data for file ID: {file_id}",
                 )
-            metadata = await response_data.json()
+            metadata = response_data.json_response
             if not metadata:
                 return BaseResponseDto(
                     success=False,
@@ -1244,7 +1268,7 @@ class HelperService(IHelperService[U]):
                     response_data = response.data
                     if not response_data:
                         break
-                    json_response = await response_data.json()
+                    json_response = response_data.json_response
                     if not json_response:
                         return BaseResponseDto(
                             success=False,
@@ -1342,10 +1366,11 @@ class HelperService(IHelperService[U]):
                 method="POST",
                 url="https://oauth2.googleapis.com/token",
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
-                json_data=data,
+                data=FormData(data),
                 max_retries=max_retries,
             )
             if not response.success:
+                print(response)
                 return BaseResponseDto(
                     success=False,
                     code=response.code,
@@ -1362,7 +1387,7 @@ class HelperService(IHelperService[U]):
                     message="Bad Response from Google OAuth API, please try again later",
                     error="Empty response data while fetching Google access token",
                 )
-            json_response = await response_data.json()
+            json_response = response_data.json_response
             if not json_response or "access_token" not in json_response:
                 return BaseResponseDto(
                     success=False,
@@ -1383,7 +1408,7 @@ class HelperService(IHelperService[U]):
                 success=False,
                 code=500,
                 data=None,
-                message="An error occurred while fetching Connecting with Google API, please try again later",
+                message="An error occurred while Connecting with Google API, please try again later",
                 error=repr(ex),
             )
 
@@ -1451,7 +1476,15 @@ class HelperService(IHelperService[U]):
                     message="Bad Response from Google Drive API, please try again later",
                     error=f"Empty response data while downloading file for file ID: {file_id}",
                 )
-            content = await response_data.read()
+            content = response_data.content
+            if not content:
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="Bad Response from Google Drive API, please try again later",
+                    error=f"Empty content while downloading file for file ID: {file_id}",
+                )
             downloaded_file = DownloadedFileModel(
                 name=file_metadata.name,
                 size=file_metadata.size,
@@ -1464,6 +1497,7 @@ class HelperService(IHelperService[U]):
                 message="File downloaded successfully",
             )
         except Exception as ex:
+            print(f"Error downloading file from Google Drive: {repr(ex)}")
             return BaseResponseDto(
                 success=False,
                 code=500,
@@ -1522,7 +1556,7 @@ class HelperService(IHelperService[U]):
                     message="Bad Response from Google Drive API, please try again later",
                     error=f"Empty response data while setting file public for file ID: {file_id}",
                 )
-            json_response = await response_data.json()
+            json_response = response_data.json_response
             if not json_response or "id" not in json_response:
                 return BaseResponseDto(
                     success=False,
@@ -1608,7 +1642,7 @@ class HelperService(IHelperService[U]):
                     message="Bad Response from Google Drive API, please try again later",
                     error=f"Empty response data while uploading file: {name}",
                 )
-            json_response = await response_data.json()
+            json_response = response_data.json_response
             if not json_response or "id" not in json_response:
                 return BaseResponseDto(
                     success=False,

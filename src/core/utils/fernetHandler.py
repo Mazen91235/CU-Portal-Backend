@@ -10,14 +10,10 @@ class FernetHandler:
             raise ValueError("FERNET_KEY environment variable is not set.")
         return Fernet(fernet_key.encode())
 
-    @staticmethod
-    def encrypt(data: str) -> str:
-        return (
-            FernetHandler.get_fernet().encrypt(data.encode()).decode() if data else ""
-        )
+    @classmethod
+    def encrypt(cls, data: str) -> str:
+        return cls.get_fernet().encrypt(data.encode()).decode() if data else ""
 
-    @staticmethod
-    def decrypt(token: str) -> str:
-        return (
-            FernetHandler.get_fernet().decrypt(token.encode()).decode() if token else ""
-        )
+    @classmethod
+    def decrypt(cls, token: str) -> str:
+        return cls.get_fernet().decrypt(token.encode()).decode() if token else ""
