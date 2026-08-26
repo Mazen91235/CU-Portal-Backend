@@ -239,6 +239,52 @@ class BaseRepository(IBaseRepository):
                 error=repr(ex),
             )
 
+    async def find_distinct(
+        self,
+        predicate=None,
+        column=None,
+    ):
+        try:
+            session = self._resolve_session()
+            if column is None:
+                return BaseResponseDto(
+                    success=False,
+                    data=[],
+                    message="Column must be provided for distinct query",
+                    code=400,
+                )
+
+            query = select(column).distinct()
+
+            if predicate is not None:
+                query = query.where(predicate)
+
+            result = await session.execute(query)
+            distinct_values = result.scalars().all()
+
+            return BaseResponseDto(
+                success=True,
+                data=list(distinct_values),
+                message="Distinct Values Retrieved Successfully",
+                code=200,
+            )
+        except Exception as ex:
+            await self._log_error(
+                action="FindDistinct",
+                level="error",
+                code=500,
+                message=f"An error occurred while retrieving distinct values for {self._model.__name__}",
+                details={"error": repr(ex)},
+                source="BaseRepository",
+            )
+            return BaseResponseDto(
+                success=False,
+                data=[],
+                message="Distinct Query Failed",
+                code=500,
+                error=repr(ex),
+            )
+
     async def create(self, entity, session=None):
         try:
             if not session:

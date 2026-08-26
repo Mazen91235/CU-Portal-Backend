@@ -134,7 +134,9 @@ class RoleService(IRoleService):
                     success=False, code=result.code, data=None, message=result.message
                 )
             roles = result.data
-            return BaseResponseDto(success=True, code=200, data=roles, next_page=result.next_page)
+            return BaseResponseDto(
+                success=True, code=200, data=roles, next_page=result.next_page
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -714,7 +716,7 @@ class RoleService(IRoleService):
         except Exception as ex:
             await self.logger.log(
                 action="CountPermissions",
-                entity="RoleService",
+                entity="Role",
                 level="error",
                 code=500,
                 message="An error occurred while counting permissions",
@@ -744,7 +746,7 @@ class RoleService(IRoleService):
             if not current_exact_roles:
                 await self.logger.log(
                     action="ResetPermissions",
-                    entity="RoleService",
+                    entity="Role",
                     level="warning",
                     code=404,
                     message="No exact roles found to reset permissions.",
@@ -778,7 +780,7 @@ class RoleService(IRoleService):
                 if not created_exact_role:
                     await self.logger.log(
                         action="ResetPermissions",
-                        entity="RoleService",
+                        entity="Role",
                         level="error",
                         code=500,
                         message=f"Failed to create exact role '{permission}' without a specific error.",
@@ -811,7 +813,7 @@ class RoleService(IRoleService):
                 if not exact_role_to_remove:
                     await self.logger.log(
                         action="ResetPermissions",
-                        entity="RoleService",
+                        entity="Role",
                         level="warning",
                         code=404,
                         message=f"Exact role '{permission}' not found for removal.",
@@ -861,7 +863,7 @@ class RoleService(IRoleService):
                         if not exact_role:
                             await self.logger.log(
                                 action="ResetPermissions",
-                                entity="RoleService",
+                                entity="Role",
                                 level="warning",
                                 code=404,
                                 message=f"Exact role '{permission}' not found for addition to role '{exclusion_role}'.",
@@ -886,7 +888,7 @@ class RoleService(IRoleService):
                     if not role:
                         await self.logger.log(
                             action="ResetPermissions",
-                            entity="RoleService",
+                            entity="Role",
                             level="error",
                             code=500,
                             message=f"Failed to create role '{exclusion_role}' without a specific error.",
@@ -911,7 +913,7 @@ class RoleService(IRoleService):
                         if not exact_role:
                             await self.logger.log(
                                 action="ResetPermissions",
-                                entity="RoleService",
+                                entity="Role",
                                 level="warning",
                                 code=404,
                                 message=f"Exact role '{permission}' not found for addition to role '{exclusion_role}'.",
@@ -929,7 +931,7 @@ class RoleService(IRoleService):
                         if not exact_role:
                             await self.logger.log(
                                 action="ResetPermissions",
-                                entity="RoleService",
+                                entity="Role",
                                 level="warning",
                                 code=404,
                                 message=f"Exact role '{permission}' not found for removal from role '{exclusion_role}'.",
@@ -956,7 +958,7 @@ class RoleService(IRoleService):
                     if not updated_role:
                         await self.logger.log(
                             action="ResetPermissions",
-                            entity="RoleService",
+                            entity="Role",
                             level="error",
                             code=500,
                             message=f"Failed to update role '{exclusion_role}' without a specific error.",
@@ -970,7 +972,7 @@ class RoleService(IRoleService):
                         )
             await self.logger.log(
                 action="ResetPermissions",
-                entity="RoleService",
+                entity="Role",
                 level="info",
                 code=200,
                 message=f"Successfully reset permissions",
@@ -984,7 +986,7 @@ class RoleService(IRoleService):
         except Exception as ex:
             await self.logger.log(
                 action="ResetPermissions",
-                entity="RoleService",
+                entity="Role",
                 level="error",
                 code=500,
                 message="An error occurred while resetting permissions",
@@ -1011,7 +1013,7 @@ class RoleService(IRoleService):
                 if "View" not in perms:
                     await self.logger.log(
                         action="ValidatePermissions",
-                        entity="RoleService",
+                        entity="Role",
                         level="warning",
                         code=400,
                         message=f"Missing 'View' permission for category '{category}'",
@@ -1027,7 +1029,7 @@ class RoleService(IRoleService):
         except Exception as ex:
             await self.logger.log(
                 action="ValidatePermissions",
-                entity="RoleService",
+                entity="Role",
                 level="error",
                 code=500,
                 message="An error occurred while validating permissions",

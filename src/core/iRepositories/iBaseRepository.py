@@ -36,6 +36,14 @@ class IBaseRepository(ABC, Generic[T]):
         pass
 
     @abstractmethod
+    async def find_distinct(
+        self,
+        predicate: Any = None,
+        column: Any = None,
+    ) -> BaseResponseDto[List[Any]]:
+        pass
+
+    @abstractmethod
     async def create(
         self, entity: T, session: AsyncSession | None = None
     ) -> BaseResponseDto[T]:

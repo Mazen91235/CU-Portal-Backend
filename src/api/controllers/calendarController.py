@@ -13,7 +13,7 @@ class CalendarController(ICalendarController):
         self.calendar_service = calendar_service
         self.logger = logger
 
-    # Calendar Custom Functions
+    # Calendar Specific Functions
     async def get_calendar_events(self, request, date_from, date_to):
         try:
             query = Generator[CalendarSearchDto].generate(

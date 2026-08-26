@@ -12,3 +12,11 @@ class ILogController(
     @abstractmethod
     async def delete(self, request: Request, logs_count: int) -> Response:
         pass
+
+    @abstractmethod
+    async def get_log_actions(self, request: Request) -> Response:
+        pass
+
+    @abstractmethod
+    async def get_log_entities(self, request: Request) -> Response:
+        pass

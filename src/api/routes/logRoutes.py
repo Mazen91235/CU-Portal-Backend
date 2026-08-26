@@ -75,6 +75,40 @@ def create_log_admin_router(
         return await controller.count(request, query=query)
 
     @router.get(
+        "/actions",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Logs")),
+        ],
+        response_model=BaseResponseDto[list[str]],
+        status_code=200,
+        summary="Get Log Actions",
+        description="Get all available log actions",
+    )
+    async def get_log_actions(
+        request: Request,
+        controller: ILogController = Depends(_get_controller),
+    ):
+        return await controller.get_log_actions(request)
+
+    @router.get(
+        "/entities",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Logs")),
+        ],
+        response_model=BaseResponseDto[list[str]],
+        status_code=200,
+        summary="Get Log Entities",
+        description="Get all available log entities",
+    )
+    async def get_log_entities(
+        request: Request,
+        controller: ILogController = Depends(_get_controller),
+    ):
+        return await controller.get_log_entities(request)
+
+    @router.get(
         "/{log_id}",
         dependencies=[
             Depends(_is_logged_in),

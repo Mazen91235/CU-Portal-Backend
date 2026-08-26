@@ -12,3 +12,11 @@ class ILogService(
     @abstractmethod
     async def delete(self, logs_count: int) -> BaseResponseDto[bool]:
         pass
+
+    @abstractmethod
+    async def get_log_actions(self) -> BaseResponseDto[list[str]]:
+        pass
+
+    @abstractmethod
+    async def get_log_entities(self) -> BaseResponseDto[list[str]]:
+        pass
