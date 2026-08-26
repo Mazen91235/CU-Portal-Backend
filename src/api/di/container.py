@@ -19,6 +19,7 @@ from api.routes.announcementRoutes import (
     create_announcement_user_router,
     create_announcement_admin_router,
 )
+from api.routes.calendarRoutes import create_calendar_user_router
 from api.routes.subjectRoutes import (
     create_subject_admin_router,
     create_subject_user_router,
@@ -46,6 +47,7 @@ from api.controllers.materialController import MaterialController
 from api.controllers.subjectController import SubjectController
 from api.controllers.announcementController import AnnouncementController
 from api.controllers.taskController import TaskController
+from api.controllers.calendarController import CalendarController
 from api.controllers.notificationController import NotificationController
 from api.controllers.yearController import YearController
 from api.controllers.departmentController import DepartmentController
@@ -56,6 +58,7 @@ from business.contextVars.sessionContext import session_context
 from business.services.userService import UserService
 from business.services.roleService import RoleService
 from business.services.taskService import TaskService
+from business.services.calendarService import CalendarService
 from business.services.subjectService import SubjectService
 from business.services.announcementService import AnnouncementService
 from business.services.notificationService import NotificationService
@@ -313,6 +316,13 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
+    calendar_service = providers.Factory(
+        CalendarService,
+        task_repository=task_repository,
+        announcement_repository=announcement_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
     notification_service = providers.Factory(
         NotificationService,
         user_notification_repository=user_notification_repository,
@@ -360,6 +370,9 @@ class Container(containers.DeclarativeContainer):
     )
     task_controller = providers.Factory(
         TaskController, task_service=task_service, logger=logger
+    )
+    calendar_controller = providers.Factory(
+        CalendarController, calendar_service=calendar_service, logger=logger
     )
     notification_controller = providers.Factory(
         NotificationController, notification_service=notification_service, logger=logger
@@ -505,6 +518,13 @@ class Container(containers.DeclarativeContainer):
     task_admin_routes = providers.Factory(
         create_task_admin_router,
         controller_provider=task_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    calendar_user_routes = providers.Factory(
+        create_calendar_user_router,
+        controller_provider=calendar_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )

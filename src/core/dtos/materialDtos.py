@@ -47,7 +47,7 @@ class MaterialResponseDto(BaseModel):
     )
 
     created_at: datetime | None = Field(default=None, description="Creation timestamp")
-    modified_at: datetime | None = Field(
+    updated_at: datetime | None = Field(
         default=None, description="Last modification timestamp"
     )
 

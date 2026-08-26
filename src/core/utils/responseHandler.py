@@ -1,4 +1,5 @@
 from fastapi.responses import JSONResponse, RedirectResponse
+from pydantic import BaseModel
 
 
 class ResponseHandler:
@@ -6,6 +7,8 @@ class ResponseHandler:
     def generate_response(
         success: bool, code: int | None, message: str | None = None, data=None, **kwargs
     ):
+        if isinstance(data, BaseModel):
+            data = data.model_dump(mode="json")
         return JSONResponse(
             status_code=code or (200 if success else 500),
             content={

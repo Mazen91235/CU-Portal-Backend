@@ -64,7 +64,7 @@ class AnnouncementResponseDto(BaseModel):
     created_at: datetime | None = Field(
         default=None, description="Creation date of the announcement"
     )
-    modified_at: datetime | None = Field(
+    updated_at: datetime | None = Field(
         default=None, description="Last update date of the announcement"
     )
 
