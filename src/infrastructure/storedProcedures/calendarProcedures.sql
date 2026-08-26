@@ -15,7 +15,7 @@ BEGIN
     ),
     filtered_tasks AS (
         -- 2. Fetch Tasks (task_type = 'task') within range
-        SELECT t.*
+        SELECT t.*, json_build_object('id', s.id, 'name', s.name) AS subject
         FROM tasks t
         JOIN registered_subjects rs ON rs.subject_id = t.subject_id
         JOIN subjects s ON s.id = t.subject_id
@@ -25,7 +25,7 @@ BEGIN
     ),
     filtered_exams AS (
         -- 3. Fetch Exams (task_type = 'exam') within range
-        SELECT t.*
+        SELECT t.*, json_build_object('id', s.id, 'name', s.name) AS subject
         FROM tasks t
         JOIN registered_subjects rs ON rs.subject_id = t.subject_id
         JOIN subjects s ON s.id = t.subject_id
@@ -35,7 +35,7 @@ BEGIN
     ),
     filtered_announcements AS (
         -- 4. Fetch Announcements with non-null date within range
-        SELECT a.*
+        SELECT a.*, json_build_object('id', s.id, 'name', s.name) AS subject
         FROM announcements a
         JOIN registered_subjects rs ON rs.subject_id = a.subject_id
         JOIN subjects s ON s.id = a.subject_id
