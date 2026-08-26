@@ -125,6 +125,7 @@ class MessageController(IMessageController):
                 success=True,
                 code=200,
                 data=messages_mapped,
+                next_page=response.next_page,
             )
         except Exception as ex:
             await self.logger.log(

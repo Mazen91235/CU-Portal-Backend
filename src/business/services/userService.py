@@ -156,7 +156,7 @@ class UserService(IUserService):
                     message=result.message,
                 )
             users = result.data
-            return BaseResponseDto(success=True, data=users)
+            return BaseResponseDto(success=True, data=users, next_page=result.next_page)
         except Exception as ex:
             await self.logger.log(
                 action="Find",

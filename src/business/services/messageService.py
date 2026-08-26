@@ -139,7 +139,7 @@ class MessageService(IMessageService):
                     message=result.message,
                 )
             messages = result.data
-            return BaseResponseDto(success=True, data=messages)
+            return BaseResponseDto(success=True, data=messages, next_page=result.next_page)
         except Exception as ex:
             await self.logger.log(
                 action="Find",

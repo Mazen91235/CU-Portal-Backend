@@ -184,7 +184,7 @@ class LogService(ILogService):
                     message=result.message,
                 )
             logs = result.data
-            return BaseResponseDto(success=True, data=logs)
+            return BaseResponseDto(success=True, data=logs, next_page=result.next_page)
         except Exception as ex:
             await self.logger.log(
                 action="Find",

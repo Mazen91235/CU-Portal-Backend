@@ -141,7 +141,7 @@ class AnnouncementService(IAnnouncementService):
                 )
 
             announcements = result.data
-            return BaseResponseDto(success=True, data=announcements)
+            return BaseResponseDto(success=True, data=announcements, next_page=result.next_page)
 
         except Exception as ex:
             await self.logger.log(

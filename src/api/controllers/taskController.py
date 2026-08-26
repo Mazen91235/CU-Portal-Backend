@@ -150,6 +150,7 @@ class TaskController(ITaskController):
                 success=True,
                 code=200,
                 data=tasks_mapped,
+                next_page=response.next_page,
             )
 
         except Exception as e:

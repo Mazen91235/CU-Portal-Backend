@@ -150,7 +150,7 @@ class MaterialService(IMaterialService):
                     message=result.message,
                 )
             materials = result.data
-            return BaseResponseDto(success=True, data=materials)
+            return BaseResponseDto(success=True, data=materials, next_page=result.next_page)
         except Exception as ex:
             await self.logger.log(
                 action="Find",

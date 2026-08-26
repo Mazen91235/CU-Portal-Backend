@@ -17,8 +17,6 @@ from core.dtos.subjectDtos import (
     SubjectResponseDto,
 )
 
-from core.models.queryModel import QueryModel
-
 
 class SubjectController(ISubjectController):
     def __init__(
@@ -141,6 +139,7 @@ class SubjectController(ISubjectController):
                 code=200,
                 message="Subjects retrieved successfully",
                 data=subjects_mapped,
+                next_page=response.next_page,
             )
         except Exception as e:
             await self.logger.log(

@@ -150,6 +150,7 @@ class ExamController(IExamController):
                 success=True,
                 code=200,
                 data=exams_mapped,
+                next_page=response.next_page,
             )
 
         except Exception as e:

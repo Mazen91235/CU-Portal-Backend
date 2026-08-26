@@ -144,6 +144,7 @@ class MaterialController(IMaterialController):
                 success=True,
                 code=200,
                 data=materials_mapped,
+                next_page=response.next_page,
             )
         except Exception as e:
             await self.logger.log(

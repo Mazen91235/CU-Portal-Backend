@@ -128,7 +128,9 @@ class YearService(IYearService):
                     data=None,
                     message=result.message,
                 )
-            return BaseResponseDto(success=True, data=result.data)
+            return BaseResponseDto(
+                success=True, data=result.data, next_page=result.next_page
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Find",

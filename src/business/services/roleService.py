@@ -134,7 +134,7 @@ class RoleService(IRoleService):
                     success=False, code=result.code, data=None, message=result.message
                 )
             roles = result.data
-            return BaseResponseDto(success=True, code=200, data=roles)
+            return BaseResponseDto(success=True, code=200, data=roles, next_page=result.next_page)
         except Exception as ex:
             await self.logger.log(
                 action="Find",

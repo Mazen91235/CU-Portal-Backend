@@ -137,7 +137,7 @@ class TaskService(ITaskService):
                     success=False, code=result.code, data=None, message=result.message
                 )
             tasks = result.data
-            return BaseResponseDto(success=True, code=200, data=tasks)
+            return BaseResponseDto(success=True, code=200, data=tasks, next_page=result.next_page)
         except Exception as ex:
             await self.logger.log(
                 action="Find",

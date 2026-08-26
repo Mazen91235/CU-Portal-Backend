@@ -171,6 +171,7 @@ class LogController(ILogController):
                 success=True,
                 code=200,
                 data=logs_mapped,
+                next_page=response.next_page,
             )
         except Exception as e:
             await self.logger.log(

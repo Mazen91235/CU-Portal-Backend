@@ -176,16 +176,17 @@ class BaseRepository(IBaseRepository):
                         query = query.order_by(ob)
 
             # Pagination
-            query = query.offset((page - 1) * limit).limit(limit)
+            query = query.offset((page - 1) * limit).limit(limit + 1)
 
             result = await session.execute(query)
             entities = result.scalars().all()
 
             return BaseResponseDto(
                 success=True,
-                data=list(entities),
+                data=list(entities[:-1]) if len(entities) > limit else list(entities),
                 message="Found Successfully",
                 code=200,
+                next_page=len(entities) > limit,
             )
         except Exception as ex:
             await self._log_error(

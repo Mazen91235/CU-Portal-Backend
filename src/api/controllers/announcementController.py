@@ -150,6 +150,7 @@ class AnnouncementController(IAnnouncementController):
                 success=True,
                 code=200,
                 data=announcements_mapped,
+                next_page=response.next_page,
             )
         except Exception as e:
             await self.logger.log(

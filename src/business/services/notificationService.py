@@ -164,7 +164,7 @@ class NotificationService(INotificationService):
             notifications = [
                 un.notification for un in user_notifications if un.notification
             ]
-            return BaseResponseDto(success=True, data=notifications)
+            return BaseResponseDto(success=True, data=notifications, next_page=result.next_page)
         except Exception as ex:
             await self.logger.log(
                 action="Find",

@@ -18,6 +18,9 @@ class BaseResponseDto(BaseModel, Generic[T]):
     data: T | None = Field(
         default=None, description="The actual data returned by the operation"
     )
+    next_page: bool | None = Field(
+        default=None, description="Indicates if there is a next page of data"
+    )
 
     model_config = {
         "from_attributes": True,
