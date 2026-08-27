@@ -65,6 +65,7 @@ class SubjectService(ISubjectService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
             )
             if not result.success:
@@ -120,6 +121,7 @@ class SubjectService(ISubjectService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
                 page,
                 limit,
@@ -128,7 +130,9 @@ class SubjectService(ISubjectService):
                 return BaseResponseDto(
                     success=False, code=result.code, data=None, message=result.message
                 )
-            return BaseResponseDto(success=True, data=result.data, next_page=result.next_page)
+            return BaseResponseDto(
+                success=True, data=result.data, next_page=result.next_page
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -598,22 +602,7 @@ class SubjectService(ISubjectService):
                     data=None,
                     message=response.message,
                 )
-            available_courses = response.data
-            if not available_courses:
-                await self.logger.log(
-                    action="GetAvailable",
-                    entity="Subject",
-                    level="warning",
-                    code=404,
-                    message="No available courses found for the logged in user.",
-                    source="UserService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="No available courses found for the logged in user.",
-                )
+            available_courses = response.data or []
             available_courses = cast(list[Subject], available_courses)
             await self.logger.log(
                 action="GetAvailable",

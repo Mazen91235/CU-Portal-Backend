@@ -12,9 +12,6 @@ from core.dtos.baseDtos import BaseSearchDto
 
 class RoleCreateDto(BaseModel):
     name: str = Field(..., min_length=1, max_length=60, description="Name of Role")
-    permissions: list[str] = Field(
-        default_factory=list, description="List of permissions associated with the role"
-    )
 
 
 class RoleResponseDto(BaseModel):
@@ -36,11 +33,9 @@ class RoleResponseDto(BaseModel):
 
 
 class RoleUpdateDto(BaseModel):
-    name: str = Field(
-        ..., min_length=1, max_length=60, description="Name of Role"
-    )
-    permissions: list[str] = Field(
-        default_factory=list, description="List of permissions associated with the role"
+    name: str = Field(..., min_length=1, max_length=60, description="Name of Role")
+    permissions: list[str] | None = Field(
+        default=None, description="List of permissions associated with the role"
     )
 
 

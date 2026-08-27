@@ -127,23 +127,8 @@ class TaskController(ITaskController):
 
             tasks = response.data
 
-            if not tasks:
-                await self.logger.log(
-                    action="Find",
-                    entity="Task",
-                    level="info",
-                    code=404,
-                    message="Tasks not found",
-                    source="TaskController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Tasks not found",
-                )
-
             tasks_mapped = Mapper[Task, TaskResponseDto].map_list(
-                tasks, TaskResponseDto, True
+                tasks or [], TaskResponseDto, True
             )
 
             return ResponseHandler.generate_response(

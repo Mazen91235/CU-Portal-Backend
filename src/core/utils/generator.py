@@ -64,6 +64,7 @@ class Generator(Generic[T]):
                 annotation = field_def.annotation
                 inner_type = Generator._unwrap_list_type(annotation)
 
+                # Nested List of Pydantic Models
                 if inner_type and isinstance(value, list):
                     if (
                         inner_type not in TypesHandler.PRIMITIVE_TYPES
@@ -76,11 +77,22 @@ class Generator(Generic[T]):
                         ]
                     else:
                         init_kwargs[key] = value
+
+                # Single Nested Pydantic Model
+                elif (
+                    isinstance(annotation, type)
+                    and Generator._is_pydantic(annotation)
+                    and isinstance(value, dict)
+                ):
+                    init_kwargs[key] = Generator.generate(annotation, value)
+
                 else:
                     init_kwargs[key] = value
 
-            # Use model_construct to bypass validation & lazy descriptors
-            return cls.model_construct(**init_kwargs)
+            # Passes set fields into __fields_set__ to retain unset awareness
+            return cls.model_construct(
+                _fields_set=set(init_kwargs.keys()), **init_kwargs
+            )
 
         # ---------------------------------------------------------------------
         # PATH B: SQLAlchemy ORM Model
@@ -91,11 +103,9 @@ class Generator(Generic[T]):
             valid_relationships = set(mapper.relationships.keys())
 
             for key, value in data.items():
-                # Process Column Attributes
                 if key in valid_columns:
                     init_kwargs[key] = value
 
-                # Process Nested Relationships
                 elif key in valid_relationships:
                     rel_property = mapper.relationships[key]
                     target_cls = rel_property.mapper.class_
@@ -109,7 +119,6 @@ class Generator(Generic[T]):
                     elif isinstance(value, dict):
                         init_kwargs[key] = Generator.generate(target_cls, value)
 
-            # Instantiates the ORM object directly without lazy-load triggers
             return cls(**init_kwargs)
 
         # ---------------------------------------------------------------------
@@ -127,7 +136,11 @@ class Generator(Generic[T]):
         search_criteria = query.data
 
         if isinstance(search_criteria, BaseModel):
-            dict_payload = search_criteria.model_dump(exclude_unset=True)
+            # Exclude fields that were not explicitly passed by the client
+            dict_payload = search_criteria.model_dump(
+                exclude_unset=True,
+                exclude_none=False,  # Retains explicit null values if user passed {"field": null}
+            )
         elif isinstance(search_criteria, dict):
             dict_payload = search_criteria
         else:

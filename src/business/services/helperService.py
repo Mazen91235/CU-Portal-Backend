@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from business.contextVars.requestContext import request_context
 from business.contextVars.userContext import user_context
+from business.contextVars.permissionsContext import permissions_context
 from core.iServices.iHelperService import IHelperService
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.user import User
@@ -28,6 +29,7 @@ from core.models.fileModels import (
 )
 from core.utils.entitiesHandler import EntitiesHandler
 from core.utils.fernetHandler import FernetHandler
+from core.utils.timezoneHandler import TimezoneHandler
 
 U = TypeVar("U")  # EntitySearchDto Type
 
@@ -122,48 +124,7 @@ class HelperService(IHelperService[U]):
 
     async def get_logged_in_user_permissions(self):
         try:
-            user_response = await self.get_logged_in_user()
-            if not user_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=user_response.code,
-                    data=None,
-                    message=user_response.message,
-                )
-            user = user_response.data
-            if not user:
-                return BaseResponseDto(
-                    success=False,
-                    code=401,
-                    data=None,
-                    message="No logged-in user found",
-                )
-            dynamic_includes = self.generate_dynamic_includes(
-                Role, ["role_links.exact_role"]
-            )
-            role_response = await self.role_repository.find_one(
-                Role.id == user.role_id, dynamic_includes
-            )
-            if not role_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=role_response.code,
-                    data=None,
-                    message=role_response.message,
-                )
-            role = role_response.data
-            if not role:
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message=f"Role with ID {user.role_id} not found",
-                )
-            permissions = (
-                [permission.name for permission in role.exact_roles]
-                if role.exact_roles
-                else []
-            )
+            permissions = permissions_context.get(None)
             return BaseResponseDto(success=True, data=permissions)
         except Exception as ex:
             return BaseResponseDto(
@@ -632,6 +593,47 @@ class HelperService(IHelperService[U]):
                 order_by_arr.append(order_item)
         return order_by_arr
 
+    async def generate_dynamic_join_entities(self, cls, entities):
+        request = request_context.get(None)
+        if not request or not request.state or not request.state.restrict_courses:
+            return (None, [])
+        logged_in_user_response = await self.get_logged_in_user()
+        if not logged_in_user_response.success:
+            return (None, [])
+        logged_in_user = logged_in_user_response.data
+        if not logged_in_user:
+            return (None, [])
+
+        user_subject_link = EntitiesHandler.ENTITIES.get("UserSubjectLink")
+
+        predicate = and_(getattr(user_subject_link, "user_id") == logged_in_user.id)
+
+        join_entities_arr = [
+            (
+                user_subject_link,
+                getattr(cls, "subject_id") == getattr(user_subject_link, "subject_id"),
+            )
+        ]
+        for entity in entities or []:
+            if (
+                not isinstance(entity, str)
+                or not entity.strip()
+                or entity.lower() == cls.__name__.lower()
+            ):
+                continue
+
+            entity_cls = EntitiesHandler.ENTITIES.get(entity)
+            if not entity_cls:
+                continue
+            join_entities_arr.append(
+                (
+                    entity_cls,
+                    getattr(entity_cls, "subject_id")
+                    == getattr(user_subject_link, "subject_id"),
+                )
+            )
+        return (predicate, join_entities_arr)
+
     def generate_dynamic_predicate(
         self, cls, data, query_fields, is_and, starts_with, is_exact
     ):
@@ -641,7 +643,7 @@ class HelperService(IHelperService[U]):
             query_fields = []
         to_dict = getattr(data, "model_dump", None)
         if callable(to_dict):
-            data_dict = cast(dict, to_dict())
+            data_dict = cast(dict, to_dict(exclude_unset=True, exclude_none=False))
         elif isinstance(data, dict):
             data_dict = data
         else:
@@ -649,39 +651,47 @@ class HelperService(IHelperService[U]):
 
         conditions = []
         for key, value in data_dict.items():
+            is_range_key = key.endswith("_from") or key.endswith("_to")
+            field_name = key.rsplit("_", 1)[0] if is_range_key else key
+
             if value is None:
+                conditions.append(getattr(cls, field_name).is_(None))
                 continue
+
             if isinstance(value, str):
                 value = value.strip()
                 if not value:
                     continue
 
-            is_range_key = key.endswith("_from") or key.endswith("_to")
-            field_name = key.rsplit("_", 1)[0] if is_range_key else key
             if field_name == "query" and len(query_fields) > 0:
+                query_conditions = []
                 for query_field in query_fields:
                     column = getattr(cls, query_field, None)
                     if not column:
                         continue
                     if starts_with:
-                        conditions.append(
+                        query_conditions.append(
                             func.lower(column).ilike(func.lower(f"{value}%"))
                         )
                     elif is_exact:
-                        conditions.append(column == value)
+                        query_conditions.append(column == value)
                     else:
-                        conditions.append(
+                        query_conditions.append(
                             func.lower(column).ilike(func.lower(f"%{value}%"))
                         )
+                if len(query_conditions) > 0:
+                    conditions.append(or_(*query_conditions))
                 continue
+
             column = getattr(cls, field_name, None)
+
             if not column:
                 continue
 
             if key.endswith("_from"):
-                conditions.append(column >= value)
+                conditions.append(column >= TimezoneHandler.from_isoformat(value))
             elif key.endswith("_to"):
-                conditions.append(column <= value)
+                conditions.append(column <= TimezoneHandler.from_isoformat(value))
             elif isinstance(value, str):
                 if not self._is_string_column(column):
                     conditions.append(column == value)

@@ -111,23 +111,8 @@ class FacultyController(IFacultyController):
                 )
 
             faculties = response.data
-            if not faculties:
-                await self.logger.log(
-                    action="Find",
-                    entity="Faculty",
-                    level="info",
-                    code=404,
-                    message="Faculties not found",
-                    source="FacultyController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Faculties not found",
-                )
-
             faculties_mapped = Mapper[Faculty, FacultyResponseDto].map_list(
-                faculties, FacultyResponseDto, True
+                faculties or [], FacultyResponseDto, True
             )
 
             return ResponseHandler.generate_response(

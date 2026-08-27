@@ -25,7 +25,7 @@ class IHelperService(ABC, Generic[U]):
     @abstractmethod
     async def get_logged_in_user_permissions(
         self,
-    ) -> BaseResponseDto[list[str]]:
+    ) -> BaseResponseDto[set[str]]:
         pass
 
     @abstractmethod
@@ -70,6 +70,12 @@ class IHelperService(ABC, Generic[U]):
     def generate_dynamic_order_by(
         self, entity_name: str, order_by: list[str] | None
     ) -> list[Any]:
+        pass
+
+    @abstractmethod
+    async def generate_dynamic_join_entities(
+        self, cls: Type[T], entities: list[str] | None
+    ) -> tuple[Any, list[Any]]:
         pass
 
     @abstractmethod

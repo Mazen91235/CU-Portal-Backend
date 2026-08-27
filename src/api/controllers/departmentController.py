@@ -111,23 +111,8 @@ class DepartmentController(IDepartmentController):
                 )
 
             departments = response.data
-            if not departments:
-                await self.logger.log(
-                    action="Find",
-                    entity="Department",
-                    level="info",
-                    code=404,
-                    message="Departments not found",
-                    source="DepartmentController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Departments not found",
-                )
-
             departments_mapped = Mapper[Department, DepartmentResponseDto].map_list(
-                departments, DepartmentResponseDto, True
+                departments or [], DepartmentResponseDto, True
             )
             return ResponseHandler.generate_response(
                 success=True,

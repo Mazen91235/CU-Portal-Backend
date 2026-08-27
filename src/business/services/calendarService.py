@@ -127,7 +127,7 @@ class CalendarService(ICalendarService):
                             if task.get("subject")
                             else ""
                         ),
-                        due=deadline.strftime("%Y-%m-%d"),
+                        due=deadline.isoformat() if deadline else None,
                         location=(
                             task.get("details", {}).get("location", "")
                             if task.get("details")
@@ -157,7 +157,7 @@ class CalendarService(ICalendarService):
                             if exam.get("subject")
                             else ""
                         ),
-                        due=deadline.strftime("%Y-%m-%d"),
+                        due=deadline.isoformat() if deadline else None,
                         location=(
                             exam.get("details", {}).get("location", "")
                             if exam.get("details")
@@ -187,7 +187,7 @@ class CalendarService(ICalendarService):
                             if announcement.get("subject")
                             else ""
                         ),
-                        due=(date.strftime("%Y-%m-%d") if date else None),
+                        due=(date.isoformat() if date else None),
                         location=(
                             announcement.get("details", {}).get("location", "")
                             if announcement.get("details")

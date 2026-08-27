@@ -63,6 +63,7 @@ class DepartmentService(IDepartmentService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
             )
             if not result.success:
@@ -121,6 +122,7 @@ class DepartmentService(IDepartmentService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
                 page,
                 limit,

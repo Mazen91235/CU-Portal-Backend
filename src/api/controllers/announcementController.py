@@ -127,24 +127,10 @@ class AnnouncementController(IAnnouncementController):
                 )
 
             announcements = response.data
-            if not announcements:
-                await self.logger.log(
-                    action="Find",
-                    entity="Announcement",
-                    level="info",
-                    code=404,
-                    message="Announcements not found",
-                    source="AnnouncementController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Announcements not found",
-                )
 
             announcements_mapped = Mapper[
                 Announcement, AnnouncementResponseDto
-            ].map_list(announcements, AnnouncementResponseDto, True)
+            ].map_list(announcements or [], AnnouncementResponseDto, True)
 
             return ResponseHandler.generate_response(
                 success=True,

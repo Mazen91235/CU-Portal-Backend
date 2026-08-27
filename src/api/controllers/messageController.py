@@ -103,23 +103,8 @@ class MessageController(IMessageController):
                 )
 
             messages = response.data
-            if not messages:
-                await self.logger.log(
-                    action="Find",
-                    entity="Message",
-                    level="info",
-                    code=404,
-                    message="Messages not found",
-                    source="MessageController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Messages not found",
-                )
-
             messages_mapped = Mapper[Message, MessageResponseDto].map_list(
-                messages, MessageResponseDto, True
+                messages or [], MessageResponseDto, True
             )
             return ResponseHandler.generate_response(
                 success=True,

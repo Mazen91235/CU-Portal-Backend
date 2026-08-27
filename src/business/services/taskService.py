@@ -51,6 +51,11 @@ class TaskService(ITaskService):
             predicate = self.helper_service.generate_dynamic_predicate(
                 Task, data, ["name"], is_and, starts_with, is_exact
             )
+            predicate = (
+                and_(predicate, Task.task_type == "task")
+                if predicate is not None
+                else Task.task_type == "task"
+            )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Task, includes
             )
@@ -60,12 +65,20 @@ class TaskService(ITaskService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Task", order_by
             )
-
+            dynamic_join_predicate, dynamic_join_entities = (
+                await self.helper_service.generate_dynamic_join_entities(Task, [])
+            )
+            if dynamic_join_predicate is not None:
+                if predicate is None:
+                    predicate = dynamic_join_predicate
+                else:
+                    predicate = and_(predicate, dynamic_join_predicate)
             result = await self.task_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                dynamic_join_entities,
                 descending,
             )
 
@@ -112,6 +125,11 @@ class TaskService(ITaskService):
             predicate = self.helper_service.generate_dynamic_predicate(
                 Task, data, ["name"], is_and, starts_with, is_exact
             )
+            predicate = (
+                and_(predicate, Task.task_type == "task")
+                if predicate is not None
+                else Task.task_type == "task"
+            )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Task, includes
             )
@@ -122,11 +140,21 @@ class TaskService(ITaskService):
                 "Task", order_by
             )
 
+            dynamic_join_predicate, dynamic_join_entities = (
+                await self.helper_service.generate_dynamic_join_entities(Task, [])
+            )
+            if dynamic_join_predicate is not None:
+                if predicate is None:
+                    predicate = dynamic_join_predicate
+                else:
+                    predicate = and_(predicate, dynamic_join_predicate)
+
             result = await self.task_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                dynamic_join_entities,
                 descending,
                 page,
                 limit,
@@ -137,7 +165,9 @@ class TaskService(ITaskService):
                     success=False, code=result.code, data=None, message=result.message
                 )
             tasks = result.data
-            return BaseResponseDto(success=True, code=200, data=tasks, next_page=result.next_page)
+            return BaseResponseDto(
+                success=True, code=200, data=tasks, next_page=result.next_page
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Find",

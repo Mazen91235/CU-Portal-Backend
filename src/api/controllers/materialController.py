@@ -121,23 +121,8 @@ class MaterialController(IMaterialController):
 
             materials = response.data
 
-            if not materials:
-                await self.logger.log(
-                    action="Find",
-                    entity="Material",
-                    level="info",
-                    code=404,
-                    message="Materials not found",
-                    source="MaterialController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Materials not found",
-                )
-
             materials_mapped = Mapper[Material, MaterialResponseDto].map_list(
-                materials, MaterialResponseDto, True
+                materials or [], MaterialResponseDto, True
             )
 
             return ResponseHandler.generate_response(

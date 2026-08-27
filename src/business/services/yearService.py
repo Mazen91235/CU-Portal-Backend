@@ -59,6 +59,7 @@ class YearService(IYearService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
             )
             if not result.success:
@@ -117,6 +118,7 @@ class YearService(IYearService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
                 page,
                 limit,

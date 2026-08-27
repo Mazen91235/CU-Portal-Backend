@@ -4,6 +4,7 @@ from core.iServices.bases.iUpdatableService import IUpdatableService
 from core.entities.user import User
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.userDtos import (
+    UserGetUserWithDetailsDto,
     UserHasPermissionsDto,
     UserSearchDto,
     UserSignUpResponseDto,
@@ -26,6 +27,13 @@ class IUserService(
         pass
 
     @abstractmethod
+    async def get_user_with_details(
+        self,
+        user_id: int,
+    ) -> BaseResponseDto[UserGetUserWithDetailsDto]:
+        pass
+
+    @abstractmethod
     async def verify_email(self, token: str) -> BaseResponseDto[bool]:
         pass
 
@@ -36,9 +44,11 @@ class IUserService(
         pass
 
     @abstractmethod
-    async def change_google_account(self) -> BaseResponseDto[UserLoginWithGoogleResponseDto]:
+    async def change_google_account(
+        self,
+    ) -> BaseResponseDto[UserLoginWithGoogleResponseDto]:
         pass
-    
+
     @abstractmethod
     async def authenticate_with_google(self) -> BaseResponseDto[UserLoginResponseDto]:
         pass

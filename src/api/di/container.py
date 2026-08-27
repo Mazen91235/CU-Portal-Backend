@@ -34,9 +34,15 @@ from api.routes.messageRoutes import (
     create_message_public_router,
     create_message_admin_router,
 )
-from api.routes.yearRoutes import create_year_admin_router
-from api.routes.departmentRoutes import create_department_admin_router
-from api.routes.facultyRoutes import create_faculty_admin_router
+from api.routes.yearRoutes import create_year_user_router, create_year_admin_router
+from api.routes.departmentRoutes import (
+    create_department_user_router,
+    create_department_admin_router,
+)
+from api.routes.facultyRoutes import (
+    create_faculty_user_router,
+    create_faculty_admin_router,
+)
 from api.controllers.userController import UserController
 from api.controllers.roleController import RoleController
 from api.controllers.examController import ExamController
@@ -343,7 +349,6 @@ class Container(containers.DeclarativeContainer):
     auth_middleware = providers.Factory(
         AuthMiddleware,
         user_service=user_service,
-        role_service=role_service,
         logger=logger,
     )
 
@@ -461,9 +466,23 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    year_user_routes = providers.Factory(
+        create_year_user_router,
+        controller_provider=year_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
     year_admin_routes = providers.Factory(
         create_year_admin_router,
         controller_provider=year_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    department_user_routes = providers.Factory(
+        create_department_user_router,
+        controller_provider=department_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
@@ -544,6 +563,13 @@ class Container(containers.DeclarativeContainer):
     message_admin_routes = providers.Factory(
         create_message_admin_router,
         controller_provider=message_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    faculty_user_routes = providers.Factory(
+        create_faculty_user_router,
+        controller_provider=faculty_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )

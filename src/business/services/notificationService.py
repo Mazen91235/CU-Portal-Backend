@@ -134,6 +134,7 @@ class NotificationService(INotificationService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
                 page,
                 limit,

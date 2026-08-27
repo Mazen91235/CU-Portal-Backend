@@ -118,23 +118,8 @@ class RoleController(IRoleController):
 
             roles = response.data
 
-            if not roles:
-                await self.logger.log(
-                    action="Find",
-                    entity="Role",
-                    level="info",
-                    code=404,
-                    message="Roles not found",
-                    source="RoleController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Roles not found",
-                )
-
             roles_mapped = Mapper[Role, RoleResponseDto].map_list(
-                roles, RoleResponseDto, True
+                roles or [], RoleResponseDto, True
             )
 
             return ResponseHandler.generate_response(
@@ -162,7 +147,8 @@ class RoleController(IRoleController):
     async def create(self, request, data):
         try:
             await self.role_service.begin_transaction()
-            response = await self.role_service.create(data)
+            role = Mapper[RoleCreateDto, Role].map(data, Role)
+            response = await self.role_service.create(role)
 
             if not response.success:
                 await self.role_service.rollback_transaction()
@@ -335,6 +321,37 @@ class RoleController(IRoleController):
         except Exception as e:
             await self.logger.log(
                 action="CountPermissions",
+                entity="Role",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="RoleController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def get_permissions(self, request):
+        try:
+            response = await self.role_service.get_permissions()
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            permissions = response.data
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=permissions or set(),
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="GetPermissions",
                 entity="Role",
                 level="error",
                 code=500,

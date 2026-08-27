@@ -148,23 +148,8 @@ class LogController(ILogController):
                 )
 
             logs = response.data
-            if not logs:
-                await self.logger.log(
-                    action="Find",
-                    entity="Log",
-                    level="info",
-                    code=404,
-                    message="Logs not found",
-                    source="LogController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Logs not found",
-                )
-
             logs_mapped = Mapper[Log, LogResponseDto].map_list(
-                logs, LogResponseDto, True
+                logs or [], LogResponseDto, True
             )
 
             return ResponseHandler.generate_response(

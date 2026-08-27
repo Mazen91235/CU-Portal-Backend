@@ -69,11 +69,20 @@ class MaterialService(IMaterialService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Material", order_by
             )
+            dynamic_join_predicate, dynamic_join_entities = (
+                await self.helper_service.generate_dynamic_join_entities(Material, [])
+            )
+            if dynamic_join_predicate is not None:
+                if predicate is None:
+                    predicate = dynamic_join_predicate
+                else:
+                    predicate = and_(predicate, dynamic_join_predicate)
             result = await self.material_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                dynamic_join_entities,
                 descending,
             )
             if not result.success:
@@ -133,11 +142,21 @@ class MaterialService(IMaterialService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Material", order_by
             )
+            dynamic_join_predicate, dynamic_join_entities = (
+                await self.helper_service.generate_dynamic_join_entities(Material, [])
+            )
+            if dynamic_join_predicate is not None:
+                if predicate is None:
+                    predicate = dynamic_join_predicate
+                else:
+                    predicate = and_(predicate, dynamic_join_predicate)
+
             result = await self.material_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                dynamic_join_entities,
                 descending,
                 page,
                 limit,
@@ -150,7 +169,9 @@ class MaterialService(IMaterialService):
                     message=result.message,
                 )
             materials = result.data
-            return BaseResponseDto(success=True, data=materials, next_page=result.next_page)
+            return BaseResponseDto(
+                success=True, data=materials, next_page=result.next_page
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -1234,6 +1255,22 @@ class MaterialService(IMaterialService):
                         code=400,
                         data=None,
                         message=f"Material '{existing_material.name}' is already in the destination folder '{destination_material.name}'.",
+                    )
+                if existing_material.id == destination_material.id:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Cannot move material {material_id} into itself",
+                        details={"error": "Cannot move material into itself"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Cannot move material '{existing_material.name}' into itself.",
                     )
                 existing_material.parent_id = destination_material.id
                 update_response = await self.material_repository.update(

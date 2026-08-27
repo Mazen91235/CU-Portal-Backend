@@ -64,24 +64,9 @@ class NotificationController(INotificationController):
 
             notifications = response.data
 
-            if not notifications:
-                await self.logger.log(
-                    action="Find",
-                    entity="Notification",
-                    level="info",
-                    code=404,
-                    message="Notifications not found",
-                    source="NotificationController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Notifications not found",
-                )
-
             notifications_mapped = Mapper[
                 Notification, NotificationResponseDto
-            ].map_list(notifications, NotificationResponseDto, True)
+            ].map_list(notifications or [], NotificationResponseDto, True)
 
             return ResponseHandler.generate_response(
                 success=True,

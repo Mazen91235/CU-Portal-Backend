@@ -13,6 +13,7 @@ from core.entities.role import Role
 from core.entities.token import Token
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.userDtos import (
+    UserGetUserWithDetailsDto,
     UserLoginWithGoogleResponseDto,
     UserSignUpResponseDto,
     UserLoginResponseDto,
@@ -26,6 +27,7 @@ from core.utils.stringHandler import StringHandler
 from core.utils.validator import Validator
 from core.utils.jwtHandler import JWTHandler
 from core.utils.oauthHandler import OAuthHandler
+from core.utils.generator import Generator
 
 
 class UserService(IUserService):
@@ -85,6 +87,7 @@ class UserService(IUserService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
             )
             if not result.success:
@@ -144,6 +147,7 @@ class UserService(IUserService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
                 page,
                 limit,
@@ -986,6 +990,48 @@ class UserService(IUserService):
                 message="An error occurred while logging in user",
             )
 
+    async def get_user_with_details(self, user_id):
+        try:
+            response = await self.user_repository.execute_stored_function(
+                "get_user_with_details",
+                {"p_user_id": user_id},
+            )
+            if not response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=response.code,
+                    data=None,
+                    message=response.message,
+                )
+            response_data = response.data
+            if not response_data:
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="User not found",
+                )
+            result = Generator[UserGetUserWithDetailsDto].generate(
+                UserGetUserWithDetailsDto, response_data
+            )
+            return BaseResponseDto(success=True, data=result)
+        except Exception as ex:
+            await self.logger.log(
+                action="GetUserWithDetails",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while fetching user details",
+                details={"error": repr(ex)},
+                source="UserService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while fetching user details",
+            )
+
     async def verify_email(self, token):
         try:
             token_response = await self.token_repository.find_one(
@@ -1559,7 +1605,8 @@ class UserService(IUserService):
                         message="An error occurred while updating your Google account information, please try again.",
                     )
                 response = UserLoginResponseDto(
-                    redirect_url=(redirect_url or "") + "/user/settings/profile",
+                    redirect_url=(redirect_url or "")
+                    + f"/user/settings/profile?success=Successfully%20changed%20your%20Google%20account.",
                 )
                 return BaseResponseDto(success=True, code=200, data=response)
             user_response = await self.user_repository.find_one(
@@ -2575,7 +2622,9 @@ class UserService(IUserService):
                         data=False,
                         message=f"You are not allowed to update your own user record through this endpoint.",
                     )
-                if user.status:
+                if user.status and (
+                    not record.role_id or record.role_id == user.role_id
+                ):
                     await self.logger.log(
                         action="UpdateMany",
                         entity="User",
@@ -2590,50 +2639,56 @@ class UserService(IUserService):
                         data=False,
                         message=f"User with ID {user.id} has already been approved, and their status cannot be updated again.",
                     )
-                user.status = record.approved
-                role_response = await self.role_repository.find_one(
-                    Role.id == record.role_id, ["role_links.exact_role"]
-                )
-                if not role_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=role_response.code,
-                        data=False,
-                        message=role_response.message,
+                user.status = record.approved if not user.status else user.status
+                if record.role_id:
+                    dynamic_includes = self.helper_service.generate_dynamic_includes(
+                        Role, ["role_links.exact_role"]
                     )
-                role = role_response.data
-                if not role:
-                    await self.logger.log(
-                        action="UpdateMany",
-                        entity="Role",
-                        level="warning",
-                        code=404,
-                        message=f"Role with ID {record.role_id} not found for updating user with ID {user.id}",
-                        source="UserService",
+                    role_response = await self.role_repository.find_one(
+                        Role.id == record.role_id, dynamic_includes
                     )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=False,
-                        message=f"Role with ID {record.role_id} not found.",
-                    )
-                role_permissions = [perm.name for perm in role.exact_roles]
-                if not set(role_permissions).issubset(set(logged_in_user_permissions)):
-                    await self.logger.log(
-                        action="UpdateMany",
-                        entity="User",
-                        level="warning",
-                        code=403,
-                        message=f"Logged in user does not have sufficient permissions to assign role with ID {record.role_id} to user with ID {user.id}",
-                        source="UserService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=403,
-                        data=False,
-                        message=f"You do not have sufficient permissions to assign the role specified for user with ID {user.id}.",
-                    )
-                user.role = role
+                    if not role_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=role_response.code,
+                            data=False,
+                            message=role_response.message,
+                        )
+                    role = role_response.data
+                    if not role:
+                        await self.logger.log(
+                            action="UpdateMany",
+                            entity="Role",
+                            level="warning",
+                            code=404,
+                            message=f"Role with ID {record.role_id} not found for updating user with ID {user.id}",
+                            source="UserService",
+                        )
+                        return BaseResponseDto(
+                            success=False,
+                            code=404,
+                            data=False,
+                            message=f"Role with ID {record.role_id} not found.",
+                        )
+                    role_permissions = [perm.name for perm in role.exact_roles]
+                    if not set(role_permissions).issubset(
+                        set(logged_in_user_permissions)
+                    ):
+                        await self.logger.log(
+                            action="UpdateMany",
+                            entity="User",
+                            level="warning",
+                            code=403,
+                            message=f"Logged in user does not have sufficient permissions to assign role with ID {record.role_id} to user with ID {user.id}",
+                            source="UserService",
+                        )
+                        return BaseResponseDto(
+                            success=False,
+                            code=403,
+                            data=False,
+                            message=f"You do not have sufficient permissions to assign the role specified for user with ID {user.id}.",
+                        )
+                    user.role = role
                 pending_user_response = await self.pending_user_repository.find_one(
                     PendingUser.user_id == user.id
                 )
@@ -2645,31 +2700,17 @@ class UserService(IUserService):
                         message=pending_user_response.message,
                     )
                 pending_user = pending_user_response.data
-                if not pending_user:
-                    await self.logger.log(
-                        action="UpdateMany",
-                        entity="PendingUser",
-                        level="warning",
-                        code=404,
-                        message=f"Pending user record not found for user with ID {user.id} while updating their status",
-                        source="UserService",
+                if pending_user:
+                    delete_pending_user_response = (
+                        await self.pending_user_repository.delete(pending_user)
                     )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=False,
-                        message=f"Pending user record not found for user with ID {user.id}.",
-                    )
-                delete_pending_user_response = (
-                    await self.pending_user_repository.delete(pending_user)
-                )
-                if not delete_pending_user_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=delete_pending_user_response.code,
-                        data=False,
-                        message=delete_pending_user_response.message,
-                    )
+                    if not delete_pending_user_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=delete_pending_user_response.code,
+                            data=False,
+                            message=delete_pending_user_response.message,
+                        )
                 if not user.status:
                     delete_user_response = await self.user_repository.delete(user)
                     if not delete_user_response.success:
@@ -2678,6 +2719,17 @@ class UserService(IUserService):
                             code=delete_user_response.code,
                             data=False,
                             message=delete_user_response.message,
+                        )
+                else:
+                    update_user_response = await self.user_repository.update(
+                        user, ["status", "role_id"]
+                    )
+                    if not update_user_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=update_user_response.code,
+                            data=False,
+                            message=update_user_response.message,
                         )
             await self.logger.log(
                 action="UpdateMany",
@@ -2712,7 +2764,95 @@ class UserService(IUserService):
 
     async def suspend(self, user_id):
         try:
-            user_response = await self.user_repository.find_one(User.id == user_id)
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="error",
+                    code=logged_in_user_response.code or 500,
+                    message="Failed to retrieve logged in user for suspending user",
+                    details={"error": logged_in_user_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_response.code,
+                    data=None,
+                    message=logged_in_user_response.message,
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="warning",
+                    code=404,
+                    message="Logged in user not found for suspending user",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Logged in user not found, please log in again.",
+                )
+            if logged_in_user.id == user_id:
+                await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="warning",
+                    code=403,
+                    message=f"User with ID {logged_in_user.id} attempted to suspend their own account, which is not allowed",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message=f"You are not allowed to suspend your own account.",
+                )
+            logged_in_user_permissions_response = (
+                await self.helper_service.get_logged_in_user_permissions()
+            )
+            if not logged_in_user_permissions_response.success:
+                await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="error",
+                    code=logged_in_user_permissions_response.code or 500,
+                    message=f"Failed to retrieve logged in user permissions for suspending user with ID {user_id}",
+                    details={"error": logged_in_user_permissions_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_permissions_response.code,
+                    data=None,
+                    message=logged_in_user_permissions_response.message,
+                )
+            logged_in_user_permissions = logged_in_user_permissions_response.data
+            if not logged_in_user_permissions:
+                await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message=f"Logged in user permissions are None after retrieval for suspending user with ID {user_id}",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while retrieving your permissions, please try again.",
+                )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                User, ["role.role_links.exact_role"]
+            )
+            user_response = await self.user_repository.find_one(
+                User.id == user_id, dynamic_includes
+            )
             if not user_response.success:
                 return BaseResponseDto(
                     success=False,
@@ -2735,6 +2875,26 @@ class UserService(IUserService):
                     code=404,
                     data=None,
                     message=f"User not found.",
+                )
+            user_permissions = (
+                [perm.name for perm in user.role.exact_roles]
+                if user.role and user.role.exact_roles
+                else []
+            )
+            if not set(user_permissions).issubset(set(logged_in_user_permissions)):
+                await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="warning",
+                    code=403,
+                    message=f"Logged in user does not have sufficient permissions to suspend user with ID {user_id}",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message=f"You do not have sufficient permissions to suspend this user.",
                 )
             if not user.status:
                 await self.logger.log(
@@ -2793,8 +2953,43 @@ class UserService(IUserService):
 
     async def unsuspend(self, user_id):
         try:
+            logged_in_user_permissions_response = (
+                await self.helper_service.get_logged_in_user_permissions()
+            )
+            if not logged_in_user_permissions_response.success:
+                await self.logger.log(
+                    action="UnsuspendUser",
+                    entity="User",
+                    level="error",
+                    code=logged_in_user_permissions_response.code or 500,
+                    message=f"Failed to retrieve logged in user permissions for unsuspending user with ID {user_id}",
+                    details={"error": logged_in_user_permissions_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=logged_in_user_permissions_response.code,
+                    data=None,
+                    message=logged_in_user_permissions_response.message,
+                )
+            logged_in_user_permissions = logged_in_user_permissions_response.data
+            if not logged_in_user_permissions:
+                await self.logger.log(
+                    action="UnsuspendUser",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message=f"Logged in user permissions are None after retrieval for unsuspending user with ID {user_id}",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while retrieving your permissions, please try again.",
+                )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                User, ["pending_user"]
+                User, ["pending_user", "role.role_links.exact_role"]
             )
             user_response = await self.user_repository.find_one(
                 User.id == user_id, dynamic_includes
@@ -2821,6 +3016,26 @@ class UserService(IUserService):
                     code=404,
                     data=None,
                     message=f"User not found.",
+                )
+            user_permissions = (
+                [perm.name for perm in user.role.exact_roles]
+                if user.role and user.role.exact_roles
+                else []
+            )
+            if not set(user_permissions).issubset(set(logged_in_user_permissions)):
+                await self.logger.log(
+                    action="UnsuspendUser",
+                    entity="User",
+                    level="warning",
+                    code=403,
+                    message=f"Logged in user does not have sufficient permissions to unsuspend user with ID {user_id}",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message=f"You do not have sufficient permissions to unsuspend this user.",
                 )
             if user.status:
                 await self.logger.log(

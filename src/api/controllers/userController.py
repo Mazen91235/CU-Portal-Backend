@@ -34,21 +34,7 @@ class UserController(IUserController):
     # CRUD Functions
     async def find_one(self, request, id):
         try:
-            entity_search_dto = Generator[UserSearchDto].generate(
-                UserSearchDto, {"id": id}
-            )
-            response = await self.user_service.find_one(
-                entity_search_dto,
-                [
-                    "role.exact_roles",
-                    "faculty",
-                    "department",
-                    "year",
-                    "pending_user",
-                    "notifications",
-                    "subjects",
-                ],
-            )
+            response = await self.user_service.get_user_with_details(id)
             if not response.success:
                 return ResponseHandler.generate_response(
                     success=False,
@@ -70,11 +56,10 @@ class UserController(IUserController):
                     code=404,
                     message="User not found",
                 )
-            user_mapped = Mapper[User, UserResponseDto].map(user, UserResponseDto, True)
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
-                data=user_mapped,
+                data=user,
             )
         except Exception as e:
             await self.logger.log(
@@ -129,23 +114,8 @@ class UserController(IUserController):
 
             users = response.data
 
-            if not users:
-                await self.logger.log(
-                    action="Find",
-                    entity="User",
-                    level="info",
-                    code=404,
-                    message="Users not found",
-                    source="UserController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Users not found",
-                )
-
             users_mapped = Mapper[User, UserResponseDto].map_list(
-                users, UserResponseDto, True
+                users or [], UserResponseDto, True
             )
 
             return ResponseHandler.generate_response(
@@ -384,7 +354,7 @@ class UserController(IUserController):
                 code=500,
                 message="An error occurred while processing the request, please try again later",
             )
-            
+
     async def change_google_account(self, request):
         try:
             await self.user_service.begin_transaction()

@@ -13,7 +13,8 @@ class IBaseRepository(ABC, Generic[T]):
         predicate: Any = None,
         includes: List[Any] = [],
         selects: List[Any] = [],
-        order_by: list[Any] = [],
+        order_by: List[Any] = [],
+        join_entities: List[Any] = [],
         descending: bool = False,
     ) -> BaseResponseDto[T]:
         pass
@@ -24,7 +25,8 @@ class IBaseRepository(ABC, Generic[T]):
         predicate: Any = None,
         includes: List[Any] = [],
         selects: List[Any] = [],
-        order_by: list[Any] = [],
+        order_by: List[Any] = [],
+        join_entities: List[Any] = [],
         descending: bool = False,
         page: int = 1,
         limit: int = 50,
