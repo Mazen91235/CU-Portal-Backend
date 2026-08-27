@@ -121,7 +121,7 @@ def create_app() -> FastAPI:
     faculty_user_routes = container.faculty_user_routes()
     department_user_routes = container.department_user_routes()
     year_user_routes = container.year_user_routes()
-    
+
     exam_admin_routes = container.exam_admin_routes()
     message_public_routes = container.message_public_routes()
     message_admin_routes = container.message_admin_routes()
@@ -163,6 +163,7 @@ def create_app() -> FastAPI:
             "http://localhost:3000",
             "http://localhost:5173",
             "http://localhost:8000",
+            "https://cu-portal-dev.vercel.app",
         ],
         allow_methods=["*"],
         allow_headers=["*"],
