@@ -22,7 +22,7 @@ class CookieHandler:
         domain: str | None = None,
         secure: bool = True,
         httponly: bool = True,
-        samesite: Literal["lax"] = "lax",
+        samesite: Literal["lax", "none"] = "none",
     ):
         if not value:
             response.delete_cookie(key=key, path=path, domain=domain)
