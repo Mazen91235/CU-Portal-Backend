@@ -689,9 +689,10 @@ class HelperService(IHelperService[U]):
                 continue
 
             if key.endswith("_from"):
-                conditions.append(column >= TimezoneHandler.from_isoformat(value))
+                # Column isn't null and >= value
+                conditions.append(column.isnot(None) & (column >= TimezoneHandler.from_isoformat(value)))
             elif key.endswith("_to"):
-                conditions.append(column <= TimezoneHandler.from_isoformat(value))
+                conditions.append(ccolumn <= TimezoneHandler.from_isoformat(value))
             elif isinstance(value, str):
                 if not self._is_string_column(column):
                     conditions.append(column == value)
