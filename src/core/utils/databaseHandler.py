@@ -40,7 +40,9 @@ class DatabaseHandler:
         return {
             "connect_args": {
                 "statement_cache_size": 0,
+                "prepared_statement_cache_size": 0,
+                "prepared_statement_name_func": lambda *args: "",  # Force anonymous prepared statements
             },
-            "poolclass": NullPool,  # Use NullPool for asyncpg to avoid connection issues
+            "poolclass": NullPool,
             "json_serializer": lambda obj: json.dumps(obj, default=str),
         }
