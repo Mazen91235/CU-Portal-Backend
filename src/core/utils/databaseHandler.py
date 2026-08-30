@@ -23,7 +23,7 @@ class DatabaseHandler:
         db = os.environ.get("POSTGRES_DB")
 
         if all([user, password, host, port, db]):
-            return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}"
+            return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}?prepared_statement_cache_size=0"
 
         # Local/test fallback so the API remains runnable without external infra.
         sqlite_path = os.environ.get("SQLITE_DB_PATH") or str(
@@ -41,7 +41,6 @@ class DatabaseHandler:
             "connect_args": {
                 "statement_cache_size": 0,
             },
-            "prepared_statement_cache_size": 0,  # Required for Transaction Pooler
             "poolclass": NullPool,  # Use NullPool for asyncpg to avoid connection issues
             "json_serializer": lambda obj: json.dumps(obj, default=str),
         }
