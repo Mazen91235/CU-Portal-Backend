@@ -1,14 +1,19 @@
 import asyncio
+import json
 from typing import Callable
 from fastapi import Request, Response, Depends, HTTPException
 from fastapi.routing import APIRoute
-from core.iMiddlewares.iRequestLimitMiddleware import IRequestLimitMiddleware
-from core.iLoggers.iBaseLogger import IBaseLogger
+from fastapi.responses import JSONResponse
 from business.contextVars.userContext import user_context
 from business.contextVars.sessionContext import session_context
+from core.iMiddlewares.iRequestLimitMiddleware import IRequestLimitMiddleware
+from core.iLoggers.iBaseLogger import IBaseLogger
+from core.utils.cachingHandler import CachingHandler
+from core.utils.responseHandler import ResponseHandler
 
 DEFAULT_TIMEOUT_SECONDS = 10.0
 
+caching_handler = CachingHandler()
 
 def set_timeout(seconds: float):
     """Route-level dependency marker: overrides the default request timeout."""
@@ -54,6 +59,32 @@ async def _enforce_active_user(request: Request):
     return None
 
 
+class CacheHitException(Exception):
+    def __init__(self, response: JSONResponse):
+        self.response = response
+
+
+async def _check_cache(request: Request):
+    try:
+        if request.method.upper() == "GET":
+            token = request.cookies.get("token", "")
+            cache_key = f"{token}:{request.url.path}?{request.url.query}"
+            cached_response = await caching_handler.get(cache_key)
+            if cached_response:
+                response = ResponseHandler.generate_response(
+                    success=cached_response["success"],
+                    code=cached_response["code"],
+                    message=cached_response["message"],
+                    data=cached_response["data"],
+                )
+                raise CacheHitException(response)
+        return None
+    except CacheHitException as ex:
+        raise ex
+    except Exception:
+        return None
+
+
 class CustomRoute(APIRoute):
     def __init__(self, *args, dependencies=None, **kwargs):
         dependencies = list(dependencies) if dependencies else []
@@ -70,6 +101,8 @@ class CustomRoute(APIRoute):
 
         if not skip_active_check:
             dependencies.append(Depends(_enforce_active_user))
+
+        dependencies.append(Depends(_check_cache))
 
         self.timeout_seconds = timeout_seconds
 
@@ -90,9 +123,31 @@ class CustomRoute(APIRoute):
 
             try:
                 await _rate_limit(request)
-                return await asyncio.wait_for(
+                response = await asyncio.wait_for(
                     original_route_handler(request), timeout=timeout_seconds
                 )
+                if (
+                    request.method.upper() == "GET"
+                    and str(response.status_code)[0] == "2"
+                    and issubclass(type(response), JSONResponse)
+                ):
+                    token = request.cookies.get("token", "")
+                    cache_key = f"{token}:{request.url.path}?{request.url.query}"
+                    body_bytes = getattr(response, "body", b"{}")
+                    body = json.loads(body_bytes.decode("utf-8"))
+                    await caching_handler.set(
+                        cache_key,
+                        {
+                            "success": body.get("success", True),
+                            "code": response.status_code,
+                            "message": body.get("message", ""),
+                            "data": body.get("data", None),
+                        },
+                        expire=120,
+                    )
+                return response
+            except CacheHitException as ex:
+                return ex.response
             except asyncio.TimeoutError:
                 try:
                     logger: IBaseLogger = request.app.state.container.logger()

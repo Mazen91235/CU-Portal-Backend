@@ -37,7 +37,11 @@ class DatabaseHandler:
         if resolved_url.startswith("sqlite"):
             return {}
         return {
-            "pool_size": 20,
+            "connect_args": {
+                "prepared_statement_cache_size": 0,  # Required for Transaction Pooler
+                "statement_cache_size": 0,
+            },
+            "pool_size": 5,  # Keep SQLAlchemy local engine pool small (e.g. 5)
             "max_overflow": 10,
             "json_serializer": lambda obj: json.dumps(obj, default=str),
         }
