@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 import os
 import json
 from pathlib import Path
+from sqlalchemy.pool import NullPool
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -38,10 +39,9 @@ class DatabaseHandler:
             return {}
         return {
             "connect_args": {
-                "prepared_statement_cache_size": 0,  # Required for Transaction Pooler
                 "statement_cache_size": 0,
             },
-            "pool_size": 5,  # Keep SQLAlchemy local engine pool small (e.g. 5)
-            "max_overflow": 10,
+            "prepared_statement_cache_size": 0,  # Required for Transaction Pooler
+            "poolclass": NullPool,  # Use NullPool for asyncpg to avoid connection issues
             "json_serializer": lambda obj: json.dumps(obj, default=str),
         }
