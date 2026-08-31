@@ -19,5 +19,10 @@ class CachingHandler:
     async def set(self, key: str, value: dict, expire: int | None = None) -> None:
         await self.redis_client.set(key, json.dumps(value), ex=expire)
 
-    async def delete(self, key: str) -> None:
-        await self.redis_client.delete(key)
+    async def delete(self, *keys: str) -> None:
+        await self.redis_client.delete(*keys)
+
+    async def invalidate_module_cache(self, module: str) -> None:
+        keys = await self.redis_client.keys(f"*/{module}*")
+        if keys:
+            await self.redis_client.delete(*keys)

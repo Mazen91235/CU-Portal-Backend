@@ -93,6 +93,19 @@ async def _check_cache(request: Request):
         return None
 
 
+def extract_module_from_path(path: str) -> str:
+    if "/user/" in path:
+        if not "/" in path.split("/user/")[1]:
+            return "user/"
+        return path.split("/user/")[1].split("/")[0]
+    elif "/admin/" in path:
+        return path.split("/admin/")[1].split("/")[0]
+    elif "/auth/" in path:
+        return path.split("/auth/")[1].split("/")[0]
+    else:
+        return ""
+
+
 class CustomRoute(APIRoute):
     def __init__(self, *args, dependencies=None, **kwargs):
         dependencies = list(dependencies) if dependencies else []
@@ -143,16 +156,27 @@ class CustomRoute(APIRoute):
                     cache_key = f"{token}:{request.url.path}?{request.url.query}"
                     body_bytes = getattr(response, "body", b"{}")
                     body = json.loads(body_bytes.decode("utf-8"))
-                    await caching_handler.set(
-                        cache_key,
-                        {
-                            "success": body.get("success", True),
-                            "code": response.status_code,
-                            "message": body.get("message", ""),
-                            "data": body.get("data", None),
-                        },
-                        expire=CACHE_TTL,
+                    asyncio.create_task(
+                        caching_handler.set(
+                            cache_key,
+                            {
+                                "success": body.get("success", True),
+                                "code": response.status_code,
+                                "message": body.get("message", ""),
+                                "data": body.get("data", None),
+                            },
+                            expire=CACHE_TTL,
+                        )
                     )
+                elif (
+                    request.method.upper() in ["POST", "PATCH", "PUT", "DELETE"]
+                    and str(response.status_code)[0] == "2"
+                ):
+                    module = extract_module_from_path(request.url.path)
+                    if module:
+                        asyncio.create_task(
+                            caching_handler.invalidate_module_cache(module)
+                        )
                 return response
             except CacheHitException as ex:
                 return ex.response
