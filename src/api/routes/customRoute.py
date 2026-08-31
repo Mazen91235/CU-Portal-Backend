@@ -1,5 +1,7 @@
+import os
 import asyncio
 import json
+from dotenv import load_dotenv
 from typing import Callable
 from fastapi import Request, Response, Depends, HTTPException
 from fastapi.routing import APIRoute
@@ -11,9 +13,15 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.cachingHandler import CachingHandler
 from core.utils.responseHandler import ResponseHandler
 
-DEFAULT_TIMEOUT_SECONDS = 10.0
+load_dotenv()  # Load environment variables from .env file
+
+DEFAULT_TIMEOUT_SECONDS = int(
+    os.environ.get("DEFAULT_TIMEOUT_SECONDS", "10")
+)  # Default request timeout in seconds
+CACHE_TTL = int(os.environ.get("CACHE_TTL", "120"))  # Default cache TTL in seconds
 
 caching_handler = CachingHandler()
+
 
 def set_timeout(seconds: float):
     """Route-level dependency marker: overrides the default request timeout."""
@@ -143,7 +151,7 @@ class CustomRoute(APIRoute):
                             "message": body.get("message", ""),
                             "data": body.get("data", None),
                         },
-                        expire=120,
+                        expire=CACHE_TTL,
                     )
                 return response
             except CacheHitException as ex:
