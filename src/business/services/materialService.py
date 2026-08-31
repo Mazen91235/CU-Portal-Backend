@@ -69,20 +69,12 @@ class MaterialService(IMaterialService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Material", order_by
             )
-            dynamic_join_predicate, dynamic_join_entities = (
-                await self.helper_service.generate_dynamic_join_entities(Material, [])
-            )
-            if dynamic_join_predicate is not None:
-                if predicate is None:
-                    predicate = dynamic_join_predicate
-                else:
-                    predicate = and_(predicate, dynamic_join_predicate)
             result = await self.material_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                dynamic_join_entities,
+                [],
                 descending,
             )
             if not result.success:
@@ -142,21 +134,12 @@ class MaterialService(IMaterialService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Material", order_by
             )
-            dynamic_join_predicate, dynamic_join_entities = (
-                await self.helper_service.generate_dynamic_join_entities(Material, [])
-            )
-            if dynamic_join_predicate is not None:
-                if predicate is None:
-                    predicate = dynamic_join_predicate
-                else:
-                    predicate = and_(predicate, dynamic_join_predicate)
-
             result = await self.material_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                dynamic_join_entities,
+                [],
                 descending,
                 page,
                 limit,
