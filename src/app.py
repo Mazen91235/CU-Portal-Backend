@@ -123,6 +123,7 @@ def create_app() -> FastAPI:
     year_user_routes = container.year_user_routes()
 
     exam_admin_routes = container.exam_admin_routes()
+    file_public_routes = container.file_public_routes()
     message_public_routes = container.message_public_routes()
     message_admin_routes = container.message_admin_routes()
     faculty_admin_routes = container.faculty_admin_routes()
@@ -155,6 +156,7 @@ def create_app() -> FastAPI:
     app.include_router(main_user_routes)
     app.include_router(main_admin_routes)
     app.include_router(auth_routes)
+    app.include_router(file_public_routes)
     app.include_router(message_public_routes)
 
     app.add_middleware(

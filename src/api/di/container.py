@@ -30,6 +30,7 @@ from api.routes.materialRoutes import (
     create_material_user_router,
     create_material_admin_router,
 )
+from api.routes.fileRoutes import create_file_public_router
 from api.routes.messageRoutes import (
     create_message_public_router,
     create_message_admin_router,
@@ -47,6 +48,7 @@ from api.controllers.userController import UserController
 from api.controllers.roleController import RoleController
 from api.controllers.examController import ExamController
 from api.controllers.facultyController import FacultyController
+from api.controllers.fileController import FileController
 from api.controllers.messageController import MessageController
 from api.controllers.logController import LogController
 from api.controllers.materialController import MaterialController
@@ -391,6 +393,10 @@ class Container(containers.DeclarativeContainer):
         MaterialController, material_service=material_service, logger=logger
     )
 
+    file_controller = providers.Factory(
+        FileController, helper_service=helper_service, logger=logger
+    )
+
     message_controller = providers.Factory(
         MessageController, message_service=message_service, logger=logger
     )
@@ -554,6 +560,10 @@ class Container(containers.DeclarativeContainer):
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
+    file_public_routes = providers.Factory(
+        create_file_public_router, controller_provider=file_controller.provider
+    )
+
     message_public_routes = providers.Factory(
         create_message_public_router,
         controller_provider=message_controller.provider,
@@ -564,7 +574,6 @@ class Container(containers.DeclarativeContainer):
         create_message_admin_router,
         controller_provider=message_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
-        validation_middleware_provider=validation_middleware.provider,
     )
 
     faculty_user_routes = providers.Factory(

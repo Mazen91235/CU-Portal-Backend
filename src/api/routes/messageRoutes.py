@@ -50,9 +50,7 @@ def create_message_public_router(controller_provider, validation_middleware_prov
     return router
 
 
-def create_message_admin_router(
-    controller_provider, auth_middleware_provider, validation_middleware_provider
-):
+def create_message_admin_router(controller_provider, auth_middleware_provider):
     router = APIRouter(
         prefix="/messages", tags=["Admin Messages"], route_class=CustomRoute
     )
@@ -62,9 +60,6 @@ def create_message_admin_router(
 
     def _get_auth_middleware() -> IAuthMiddleware:
         return auth_middleware_provider()
-
-    def _get_validation_middleware() -> IValidationMiddleware:
-        return validation_middleware_provider()
 
     async def _is_logged_in(
         request: Request,
@@ -81,17 +76,6 @@ def create_message_admin_router(
             return await auth_middleware.is_authorized(request, *permissions)
 
         return authorize
-
-    def _validate(*keys):
-        async def validate_request(
-            request: Request,
-            validation_middleware: IValidationMiddleware = Depends(
-                _get_validation_middleware
-            ),
-        ):
-            return await validation_middleware.validate(request, *keys)
-
-        return validate_request
 
     @router.get(
         "/{message_id}",
