@@ -165,10 +165,8 @@ class NotificationService(INotificationService):
             notifications = [
                 un.notification for un in user_notifications if un.notification
             ]
-            for notification, user_notification in zip(
-                notifications, user_notifications
-            ):
-                notification.seen = user_notification.seen
+            for i in range(len(notifications)):
+                notifications[i].seen = user_notifications[i].seen
             return BaseResponseDto(
                 success=True, data=notifications, next_page=result.next_page
             )
