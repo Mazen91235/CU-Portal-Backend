@@ -34,5 +34,5 @@ class QueryModel(BaseModel, Generic[U]):
         default=None, ge=1, description="Page number for pagination"
     )
     limit: int | None = Field(
-        default=None, ge=1, le=50, description="Number of items per page for pagination"
+        default=None, ge=1, description="Number of items per page for pagination"
     )

@@ -60,7 +60,8 @@ class NotificationService(INotificationService):
     ):
         try:
             includes = includes or []
-            includes.append("notification")
+            if "notification" not in includes:
+                includes.append("notification")
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
