@@ -84,6 +84,7 @@ async def _check_cache(request: Request):
                     code=cached_response["code"],
                     message=cached_response["message"],
                     data=cached_response["data"],
+                    next_page=cached_response["next_page"],
                 )
                 raise CacheHitException(response)
         return None
@@ -164,6 +165,7 @@ class CustomRoute(APIRoute):
                                 "code": response.status_code,
                                 "message": body.get("message", ""),
                                 "data": body.get("data", None),
+                                "next_page": body.get("next_page", False),
                             },
                             expire=CACHE_TTL,
                         )
