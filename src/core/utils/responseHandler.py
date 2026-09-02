@@ -6,7 +6,12 @@ from pydantic import BaseModel
 class ResponseHandler:
     @staticmethod
     def generate_response(
-        success: bool, code: int | None, message: str | None = None, data=None, **kwargs
+        success: bool,
+        code: int | None,
+        message: str | None = None,
+        data=None,
+        next_page: bool | None = None,
+        **kwargs,
     ):
         if isinstance(data, BaseModel):
             data = data.model_dump(mode="json")
@@ -16,6 +21,7 @@ class ResponseHandler:
                 "success": success,
                 "message": message,
                 "data": data,
+                "next_page": True if next_page else False,
                 **kwargs,
             },
         )
