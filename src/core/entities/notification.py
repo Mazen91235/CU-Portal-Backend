@@ -50,6 +50,15 @@ class Notification(Base):
         nullable=True,
     )
 
+    # Not Mapped
+    @property
+    def seen(self) -> Optional[bool]:
+        return getattr(self, "_seen", None)
+
+    @seen.setter
+    def seen(self, value: Optional[bool]) -> None:
+        setattr(self, "_seen", value)
+
     # Relationships
     users: AssociationProxy[set["User"]] = association_proxy(
         "user_notifications",
@@ -62,7 +71,7 @@ class Notification(Base):
         "UserNotification",
         back_populates="notification",
         cascade="all, delete-orphan",
-        collection_class=set
+        collection_class=set,
     )
 
     # Attributes

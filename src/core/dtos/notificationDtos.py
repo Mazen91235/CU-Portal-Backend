@@ -13,7 +13,12 @@ class NotificationResponseDto(BaseModel):
     notification_type: Notification.NotificationType | None = Field(
         default=None, description="Type of the notification (e.g., task, announcement)"
     )
-    parent_id: int | None = Field(default=None, description="ID of the related parent entity")
+    seen: bool | None = Field(
+        default=None, description="Whether the notification has been seen"
+    )
+    parent_id: int | None = Field(
+        default=None, description="ID of the related parent entity"
+    )
     url: str | None = Field(default=None, description="URL to redirect to")
     created_at: datetime | None = Field(default=None, description="Creation timestamp")
 
