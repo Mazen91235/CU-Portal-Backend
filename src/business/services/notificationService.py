@@ -147,24 +147,13 @@ class NotificationService(INotificationService):
                     message=result.message,
                 )
             user_notifications = result.data
-            if not user_notifications:
-                await self.logger.log(
-                    action="Find",
-                    entity="Notification",
-                    level="info",
-                    code=404,
-                    message="No notifications found for the user",
-                    source="NotificationService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="No notifications found for the user",
-                )
             notifications = [
-                un.notification for un in user_notifications if un.notification
+                un.notification for un in (user_notifications or []) if un.notification
             ]
+            if not user_notifications or not notifications:
+                return BaseResponseDto(
+                    success=True, data=[], next_page=result.next_page
+                )
             for i in range(len(notifications)):
                 notifications[i].seen = user_notifications[i].seen
             return BaseResponseDto(
