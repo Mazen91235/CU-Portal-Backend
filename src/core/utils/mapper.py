@@ -136,6 +136,9 @@ class Mapper(Generic[T, U]):
             ):
                 source_attrs.append("google_details_token")
 
+            if hasattr(src, "seen") and "seen" not in source_attrs:
+                source_attrs.append("seen")
+
         target_fields = (
             cls.model_fields.keys() if issubclass(cls, BaseModel) else dir(cls)
         )
