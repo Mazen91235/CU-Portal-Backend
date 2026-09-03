@@ -40,15 +40,9 @@ class Announcement(Base):
     date: Mapped[Optional[datetime]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
-    urls: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
-    links: Mapped[list[dict[str, str]]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
-    )
+    )  # includes urls, links, and other additional details
 
     # Timestamps
     created_at: Mapped[Optional[datetime]] = mapped_column(

@@ -1,4 +1,5 @@
 import io
+import urllib.parse
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -34,8 +35,17 @@ class ResponseHandler:
     def generate_streaming_response(
         content: bytes, filename: str, content_type: str = "application/octet-stream"
     ):
+        # 1. Percent-encode the filename for UTF-8 compatibility (RFC 5987)
+        encoded_filename = urllib.parse.quote(filename)
+
+        # 2. Create an ASCII-safe fallback for older HTTP parsers
+        ascii_filename = (
+            filename.encode("ascii", "ignore").decode("ascii") or "download"
+        )
+
         headers = {
-            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Disposition": f"attachment; filename=\"{ascii_filename}\"; filename*=UTF-8''{encoded_filename}",
         }
+
         stream = io.BytesIO(content)
         return StreamingResponse(stream, media_type=content_type, headers=headers)

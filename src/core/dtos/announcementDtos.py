@@ -32,15 +32,8 @@ class AnnouncementCreateDto(BaseModel):
     year_id: int | None = Field(
         default=None, gt=0, description="ID of the academic year"
     )
-    urls: list[str] = Field(
-        default_factory=list,
-        description="List of Google Drive file URLs attached to the announcement",
-    )
-    links: list[dict[str, str]] = Field(
-        default_factory=list, description="List of external links"
-    )
     details: dict[str, Any] = Field(
-        default_factory=dict, description="Additional details dictionary"
+        default_factory=dict, description="Additional details dictionary (eg. urls, links)"
     )
 
 
@@ -50,12 +43,6 @@ class AnnouncementResponseDto(BaseModel):
     content: str | None = Field(default=None, description="Content of the announcement")
     date: datetime | None = Field(
         default=None, description="Scheduled date of the announcement"
-    )
-    urls: list[str] | None = Field(
-        default_factory=list, description="List of attached file URLs"
-    )
-    links: list[dict[str, str]] | None = Field(
-        default_factory=list, description="List of attached links"
     )
     details: dict | None = Field(
         default_factory=dict, description="Additional details (e.g., files_data)"
@@ -117,15 +104,8 @@ class AnnouncementUpdateDto(BaseModel):
     year_id: int | None = Field(
         default=None, gt=0, description="ID of the academic year"
     )
-    urls: list[str] = Field(
-        default_factory=list,
-        description="List of Google Drive file URLs attached to the announcement",
-    )
-    links: list[dict[str, str]] = Field(
-        default_factory=list, description="List of external links"
-    )
     details: dict[str, Any] = Field(
-        default_factory=dict, description="Additional details dictionary"
+        default_factory=dict, description="Additional details dictionary (eg. urls, links)"
     )
 
 

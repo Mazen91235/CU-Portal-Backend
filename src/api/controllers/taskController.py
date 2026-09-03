@@ -38,6 +38,7 @@ class TaskController(ITaskController):
                     "faculty",
                     "department",
                     "year",
+                    "attachments",
                 ],
             )
 

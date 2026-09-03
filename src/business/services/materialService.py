@@ -1028,10 +1028,7 @@ class MaterialService(IMaterialService):
                         message=delete_response.message,
                     )
             for attachment_id in attachment_ids:
-                    await self.helper_service.delete_attachment(
-                        attachment_id=attachment_id
-                    )
-                )
+                await self.helper_service.delete_attachment(attachment_id=attachment_id)
             return BaseResponseDto(
                 success=True,
                 code=200,
@@ -2278,6 +2275,7 @@ class MaterialService(IMaterialService):
                     author_id=author_id,
                     source_name="material_id",
                     source_id=created_material.id,
+                    fetched=True,
                 )
                 if not attachment_response.success:
                     await self.logger.log(

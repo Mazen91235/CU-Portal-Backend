@@ -36,15 +36,9 @@ class TaskCreateDto(BaseModel):
     year_id: int | None = Field(
         default=None, description="ID of the year this task belongs to"
     )
-    urls: list[str] = Field(
-        default_factory=list, description="List of Google Drive file URLs"
-    )
-    links: list[dict[str, str]] = Field(
-        default_factory=list, description="List of external links"
-    )
     details: dict = Field(
         default_factory=dict,
-        description="Additional details about the task (stored as JSON)",
+        description="Additional details about the task (stored as JSON) (eg. urls, links, description)",
     )
 
 
@@ -55,13 +49,9 @@ class TaskResponseDto(BaseModel):
         default=None, description="Type of the entry (e.g., 'Exam', 'Task')"
     )
     url: str | None = Field(default=None, description="Submission URL for the task")
-    urls: list[str] | None = Field(default=None, description="List of file URLs")
-    links: list[dict[str, str]] | None = Field(
-        default=None, description="List of external links"
-    )
     details: dict | None = Field(
         default=None,
-        description="Additional details about the task including description and files",
+        description="Additional details about the task including description and files (eg. urls, links, description)",
     )
     deadline: datetime | None = Field(
         default=None, description="Deadline datetime of the task"
@@ -125,14 +115,8 @@ class TaskUpdateDto(BaseModel):
     year_id: int | None = Field(
         default=None, description="ID of the year this task belongs to"
     )
-    urls: list[str] = Field(
-        default_factory=list, description="List of Google Drive file URLs"
-    )
-    links: list[dict[str, str]] = Field(
-        default_factory=list, description="List of external links"
-    )
     details: dict = Field(
-        default_factory=dict, description="Additional details about the task"
+        default_factory=dict, description="Additional details about the task (eg. urls, links, description)"
     )
 
 

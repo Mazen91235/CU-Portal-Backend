@@ -39,16 +39,10 @@ class Task(Base):
     task_type: Mapped[Optional[str]] = mapped_column(
         String(10), nullable=True
     )  # e.g., "Exam", "Assignment", "Project", "Task"
-    urls: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
-    links: Mapped[list[dict[str, str]]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
     url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
-    )
+    )  # includes urls, links, and other additional details
     deadline: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     due_date: Mapped[Optional[datetime]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
