@@ -30,6 +30,7 @@ from api.routes.materialRoutes import (
     create_material_user_router,
     create_material_admin_router,
 )
+from api.routes.attachmentRoutes import create_attachment_public_router
 from api.routes.fileRoutes import create_file_public_router
 from api.routes.messageRoutes import (
     create_message_public_router,
@@ -44,6 +45,10 @@ from api.routes.facultyRoutes import (
     create_faculty_user_router,
     create_faculty_admin_router,
 )
+from api.middlewares.authMiddleware import AuthMiddleware
+from api.middlewares.validationMiddleware import ValidationMiddleware
+from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
+from business.contextVars.sessionContext import session_context
 from api.controllers.userController import UserController
 from api.controllers.roleController import RoleController
 from api.controllers.examController import ExamController
@@ -59,10 +64,7 @@ from api.controllers.calendarController import CalendarController
 from api.controllers.notificationController import NotificationController
 from api.controllers.yearController import YearController
 from api.controllers.departmentController import DepartmentController
-from api.middlewares.authMiddleware import AuthMiddleware
-from api.middlewares.validationMiddleware import ValidationMiddleware
-from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
-from business.contextVars.sessionContext import session_context
+from api.controllers.attachmentController import AttachmentController
 from business.services.userService import UserService
 from business.services.roleService import RoleService
 from business.services.taskService import TaskService
@@ -77,8 +79,9 @@ from business.services.facultyService import FacultyService
 from business.services.yearService import YearService
 from business.services.departmentService import DepartmentService
 from business.services.requestLimitService import RequestLimitService
-from business.services.helperService import HelperService
 from business.services.examService import ExamService
+from business.services.attachmentService import AttachmentService
+from business.services.helperService import HelperService
 from business.loggers.baseLogger import BaseLogger
 from infrastructure.repositories.baseRepository import BaseRepository
 from core.entities.log import Log
@@ -101,6 +104,7 @@ from core.entities.userNotification import UserNotification
 from core.entities.notification import Notification
 from core.entities.message import Message
 from core.entities.faculty import Faculty
+from core.entities.attachment import Attachment
 from core.utils.databaseHandler import DatabaseHandler
 
 DB_URL = DatabaseHandler.get_db_url()
@@ -217,6 +221,12 @@ class Container(containers.DeclarativeContainer):
         BaseRepository,
         session=db_session,
         model=Faculty,
+        session_factory=session_factory,
+    )
+    attachment_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Attachment,
         session_factory=session_factory,
     )
 
@@ -346,6 +356,17 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
+    attachment_service = providers.Factory(
+        AttachmentService,
+        attachment_repository=attachment_repository,
+        announcement_repository=announcement_repository,
+        material_repository=material_repository,
+        pending_user_repository=pending_user_repository,
+        task_repository=task_repository,
+        user_repository=user_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
 
     # --- 5. Middlewares ---
     auth_middleware = providers.Factory(
@@ -426,6 +447,10 @@ class Container(containers.DeclarativeContainer):
 
     role_controller = providers.Factory(
         RoleController, role_service=role_service, logger=logger
+    )
+
+    attachment_controller = providers.Factory(
+        AttachmentController, attachment_service=attachment_service, logger=logger
     )
 
     # --- 7. Routes ---
@@ -560,6 +585,13 @@ class Container(containers.DeclarativeContainer):
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
+
+    attachment_public_routes = providers.Factory(
+        create_attachment_public_router,
+        controller_provider=attachment_controller.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
     file_public_routes = providers.Factory(
         create_file_public_router, controller_provider=file_controller.provider
     )

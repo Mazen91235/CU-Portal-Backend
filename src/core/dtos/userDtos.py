@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from core.dtos.notificationDtos import NotificationResponseDto
     from core.dtos.logDtos import LogResponseDto
     from core.dtos.subjectDtos import SubjectResponseDto
+    from core.dtos.attachmentDtos import AttachmentResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
 
@@ -120,7 +121,12 @@ class UserResponseDto(BaseModel):
     subjects: list[SubjectResponseDto] | None = Field(
         default=None, description="Subjects associated with the user"
     )
-
+    avatar: AttachmentResponseDto | None = Field(
+        default=None, description="Avatar attachment associated with the user"
+    )
+    attachments: list[AttachmentResponseDto] | None = Field(
+        default=None, description="Attachments associated with the user"
+    )
     # Pydantic Configuration
     model_config = {
         "from_attributes": True,

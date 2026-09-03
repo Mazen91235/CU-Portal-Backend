@@ -114,6 +114,16 @@ class User(Base):
         setattr(self, "_google_details_token", value)
 
     # Relationships
+    avatar_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("attachments.id", ondelete="SET NULL", name="fk_attachment_user"),
+        nullable=True,
+    )
+    avatar: Mapped[Optional["Attachment"]] = relationship(
+        "Attachment",
+        back_populates="user",
+        foreign_keys=[avatar_id],
+    )
     year_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("years.id", ondelete="CASCADE", name="fk_year_user"),
@@ -153,13 +163,22 @@ class User(Base):
         cascade="all, delete-orphan",
     )
     materials: Mapped[set["Material"]] = relationship(
-        "Material", back_populates="author", cascade="all, delete-orphan", collection_class=set
+        "Material",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     tasks: Mapped[set["Task"]] = relationship(
-        "Task", back_populates="author", cascade="all, delete-orphan", collection_class=set
+        "Task",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     announcements: Mapped[set["Announcement"]] = relationship(
-        "Announcement", back_populates="author", cascade="all, delete-orphan", collection_class=set
+        "Announcement",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     notifications: AssociationProxy[set["Notification"]] = association_proxy(
         "user_notifications",
@@ -172,10 +191,13 @@ class User(Base):
         "UserNotification",
         back_populates="user",
         cascade="all, delete-orphan",
-        collection_class=set
+        collection_class=set,
     )
     events: Mapped[set["Event"]] = relationship(
-        "Event", back_populates="author", cascade="all, delete-orphan", collection_class=set
+        "Event",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     going_events: AssociationProxy[set["Event"]] = association_proxy(
         "user_events",
@@ -188,10 +210,13 @@ class User(Base):
         "UserEvent",
         back_populates="user",
         cascade="all, delete-orphan",
-        collection_class=set
+        collection_class=set,
     )
     notes: Mapped[set["Note"]] = relationship(
-        "Note", back_populates="author", cascade="all, delete-orphan", collection_class=set
+        "Note",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     logs: Mapped[set["Log"]] = relationship(
         "Log", back_populates="user", cascade="all, delete-orphan", collection_class=set
@@ -207,13 +232,20 @@ class User(Base):
         "UserSubjectLink",
         back_populates="user",
         cascade="all, delete-orphan",
-        collection_class=set
+        collection_class=set,
     )
     request_limits: Mapped[set["RequestLimit"]] = relationship(
-        "RequestLimit", back_populates="user", cascade="all, delete-orphan", collection_class=set
+        "RequestLimit",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     attachments: Mapped[set["Attachment"]] = relationship(
-        "Attachment", back_populates="author", cascade="all, delete-orphan", collection_class=set
+        "Attachment",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        foreign_keys="Attachment.author_id",
+        collection_class=set,
     )
 
     # Indexes

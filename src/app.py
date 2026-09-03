@@ -19,6 +19,7 @@ from business.contextVars.sessionContext import session_context
 # Imports for Model Rebuild and Open-API Schema Generation
 from core.dtos.baseDtos import *
 from core.dtos.announcementDtos import *
+from core.dtos.attachmentDtos import *
 from core.dtos.departmentDtos import *
 from core.dtos.exactRoleDtos import *
 from core.dtos.examDtos import *
@@ -123,6 +124,7 @@ def create_app() -> FastAPI:
     year_user_routes = container.year_user_routes()
 
     exam_admin_routes = container.exam_admin_routes()
+    attachment_public_routes = container.attachment_public_routes()
     file_public_routes = container.file_public_routes()
     message_public_routes = container.message_public_routes()
     message_admin_routes = container.message_admin_routes()
@@ -156,6 +158,7 @@ def create_app() -> FastAPI:
     app.include_router(main_user_routes)
     app.include_router(main_admin_routes)
     app.include_router(auth_routes)
+    app.include_router(attachment_public_routes)
     app.include_router(file_public_routes)
     app.include_router(message_public_routes)
 

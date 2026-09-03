@@ -40,7 +40,7 @@ class Attachment(Base):
     url: Mapped[str] = mapped_column(String(255), nullable=False)
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
-    )  # includes file_data, link_title
+    )  # includes file_data, fetched, link_title
     author_google_refresh_token: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True
     )
@@ -64,7 +64,15 @@ class Attachment(Base):
         ForeignKey("users.id", ondelete="CASCADE", name="fk_user_attachment"),
         nullable=False,
     )
-    author: Mapped["User"] = relationship("User", back_populates="attachments")
+    author: Mapped["User"] = relationship(
+        "User", back_populates="attachments", foreign_keys=[author_id]
+    )
+    user: Mapped[Optional["User"]] = relationship(
+        "User",
+        back_populates="avatar",
+        cascade="all, delete-orphan",
+        foreign_keys="User.avatar_id",
+    )
     pending_user_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey(
@@ -137,7 +145,8 @@ class Attachment(Base):
     # Indexes
     __table_args__ = (
         Index(
-            "idx_attachment_author_id",
+            "idx_attachment_author_id_url",
             "author_id",
+            "url",
         ),
     )

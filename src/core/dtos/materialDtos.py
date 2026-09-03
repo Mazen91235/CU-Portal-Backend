@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from .subjectDtos import SubjectResponseDto
     from .userDtos import UserResponseDto
+    from .attachmentDtos import AttachmentResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
 
@@ -66,6 +67,9 @@ class MaterialResponseDto(BaseModel):
 
     children: list[MaterialResponseDto] | None = Field(
         default=None, description="List of child materials (for hierarchy)"
+    )
+    attachment: AttachmentResponseDto | None = Field(
+        default=None, description="Attachment associated with the material"
     )
 
     # Pydantic Configuration

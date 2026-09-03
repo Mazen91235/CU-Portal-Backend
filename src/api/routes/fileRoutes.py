@@ -1,9 +1,6 @@
 from fastapi import APIRouter, Request, Depends
 from api.routes.customRoute import CustomRoute
 from core.iControllers.iFileController import IFileController
-from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
-from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
-from core.utils.cookieHandler import cookie_scheme
 
 
 def create_file_public_router(controller_provider):
