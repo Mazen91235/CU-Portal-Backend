@@ -20,6 +20,7 @@ from core.entities.year import Year
 from core.entities.subject import Subject
 from core.entities.notification import Notification
 from core.entities.userNotification import UserNotification
+from core.entities.attachment import Attachment
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import (
     RequestResponseModel,
@@ -30,6 +31,7 @@ from core.models.fileModels import (
 from core.utils.entitiesHandler import EntitiesHandler
 from core.utils.fernetHandler import FernetHandler
 from core.utils.timezoneHandler import TimezoneHandler
+from core.utils.validator import Validator
 
 U = TypeVar("U")  # EntitySearchDto Type
 
@@ -45,6 +47,7 @@ class HelperService(IHelperService[U]):
         department_repository: IBaseRepository[Department],
         year_repository: IBaseRepository[Year],
         subject_repository: IBaseRepository[Subject],
+        attachment_repository: IBaseRepository[Attachment],
         session_factory: async_sessionmaker[AsyncSession] | None = None,
     ):
         self.notification_repository = notification_repository
@@ -55,6 +58,7 @@ class HelperService(IHelperService[U]):
         self.department_repository = department_repository
         self.year_repository = year_repository
         self.subject_repository = subject_repository
+        self.attachment_repository = attachment_repository
         self.smtp_name = os.environ.get("SMTP_FROM_NAME", "")
         self.smtp_email = os.environ.get("SMTP_FROM_EMAIL", "")
         self.brevo_api_url = os.environ.get("BREVO_API_URL", "")
@@ -690,9 +694,15 @@ class HelperService(IHelperService[U]):
 
             if key.endswith("_from"):
                 # Column isn't null and >= value
-                conditions.append(column.isnot(None) & (column >= TimezoneHandler.from_isoformat(value)))
+                conditions.append(
+                    column.isnot(None)
+                    & (column >= TimezoneHandler.from_isoformat(value))
+                )
             elif key.endswith("_to"):
-                conditions.append(ccolumn <= TimezoneHandler.from_isoformat(value))
+                conditions.append(
+                    column.isnot(None)
+                    & (column <= TimezoneHandler.from_isoformat(value))
+                )
             elif isinstance(value, str):
                 if not self._is_string_column(column):
                     conditions.append(column == value)
@@ -1813,5 +1823,262 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while copying the file on Google Drive",
+                error=repr(ex),
+            )
+
+    # Attachment Functions
+    async def create_attachment(
+        self,
+        is_file,
+        url,
+        author_id,
+        source_name,
+        source_id,
+        link_title=None,
+        fetched=None,
+    ):
+        try:
+            if not url:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="URL is required",
+                    error="No URL provided for creating attachment",
+                )
+            if not hasattr(Attachment, source_name):
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"Invalid source name: {source_name}",
+                    error=f"Attachment entity does not have a field named '{source_name}'",
+                )
+            author_response = await self.user_repository.find_one(User.id == author_id)
+            if not author_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=author_response.code,
+                    data=None,
+                    message=author_response.message,
+                )
+            author = author_response.data
+            if not author:
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Author not found",
+                )
+            existing_attachment_response = await self.attachment_repository.find_one(
+                and_(
+                    Attachment.author_id == author_id,
+                    getattr(Attachment, source_name) == source_id,
+                    Attachment.url == url,
+                )
+            )
+            if not existing_attachment_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_attachment_response.code,
+                    data=None,
+                    message=existing_attachment_response.message,
+                )
+            existing_attachment = existing_attachment_response.data
+            if existing_attachment:
+                return BaseResponseDto(
+                    success=True,
+                    code=200,
+                    data=existing_attachment,
+                    message="Attachment already exists",
+                )
+            details = {}
+            if is_file:
+                if not Validator.is_valid_drive_url(url):
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message="Invalid Google Drive URL",
+                        error=f"Provided URL is not a valid Google Drive URL: {url}",
+                    )
+                file_id = self.get_file_id_from_url(url)
+                if not file_id:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message="Invalid Google Drive URL",
+                        error=f"Could not extract file ID from URL: {url}",
+                    )
+                fetched_response = await self.fetch_from_drive(file_id)
+                if not fetched_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=fetched_response.code or 500,
+                        data=None,
+                        message=fetched_response.message
+                        or "Failed to fetch file from Google Drive",
+                        error=fetched_response.error
+                        or f"Failed to fetch file with ID: {file_id} from Google Drive",
+                    )
+                fetched_data = fetched_response.data
+                if not fetched_data:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message="File not found on Google Drive",
+                        error=f"File with ID: {file_id} not found on Google Drive",
+                    )
+                if len(fetched_data.children) > 0:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message="The provided Google Drive URL points to a folder, not a file",
+                        error=f"Google Drive URL points to a folder with ID: {file_id}",
+                    )
+                fetched_file = fetched_data.data
+                details["file_data"] = fetched_file.model_dump(mode="json")
+                if fetched is not None:
+                    details["fetched"] = fetched
+            else:
+                if not Validator.is_valid_external_url(url):
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message="Invalid URL",
+                        error=f"Invalid URL: {url}",
+                    )
+                link_title = link_title or ""
+                details["link_title"] = link_title
+            attachment = Attachment(
+                is_file=is_file,
+                url=url,
+                details=details,
+                author_google_refresh_token=author.google_refresh_token,
+                author_id=author_id,
+            )
+            setattr(attachment, source_name, source_id)
+            create_attachment_response = await self.attachment_repository.create(
+                attachment
+            )
+            if not create_attachment_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_attachment_response.code,
+                    data=None,
+                    message=create_attachment_response.message,
+                )
+            created_attachment = create_attachment_response.data
+            if not created_attachment:
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="Failed to create attachment",
+                    error="Attachment creation returned no data",
+                )
+            return BaseResponseDto(
+                success=True,
+                code=201,
+                data=created_attachment,
+                message="Attachment created successfully",
+                error=None,
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while creating the attachment, please try again later",
+                error=repr(ex),
+            )
+
+    async def delete_attachment(
+        self,
+        attachment_id=None,
+        attachment=None,
+    ):
+        try:
+            if not attachment_id and not attachment:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Attachment ID or Attachment object is required",
+                    error="No attachment ID or object provided for deletion",
+                )
+            if not attachment:
+                attachment_response = await self.attachment_repository.find_one(
+                    Attachment.id == attachment_id
+                )
+                if not attachment_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code,
+                        data=None,
+                        message=attachment_response.message,
+                        error=attachment_response.error,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message="Attachment not found",
+                        error=f"Attachment with ID {attachment_id} does not exist",
+                    )
+            to_be_removed = (
+                attachment.url
+                if attachment.is_file and not attachment.details.get("fetched", False)
+                else None
+            )
+            delete_response = await self.attachment_repository.delete(attachment)
+            if not delete_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=delete_response.code,
+                    data=None,
+                    message=delete_response.message,
+                )
+            if to_be_removed:
+                access_token_response = await self.get_google_access_token(
+                    attachment.author_google_refresh_token or ""
+                )
+                if not access_token_response.success or not access_token_response.data:
+                    return BaseResponseDto(
+                        success=True,
+                        code=200,
+                    )
+                access_token = access_token_response.data
+                file_id = self.get_file_id_from_url(to_be_removed)
+                if not file_id:
+                    return BaseResponseDto(
+                        success=True,
+                        code=200,
+                    )
+                delete_file_response = await self.delete_file_from_drive(
+                    access_token, file_id
+                )
+                if not delete_file_response.success:
+                    return BaseResponseDto(
+                        success=True,
+                        code=200,
+                    )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                message="Attachment deleted successfully",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while deleting the attachment, please try again later",
                 error=repr(ex),
             )

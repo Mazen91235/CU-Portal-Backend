@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, Any, Type
 from core.entities.user import User
 from core.entities.notification import Notification
+from core.entities.attachment import Attachment
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import FetchedModel, DownloadedFileModel, FileModel
 
@@ -213,4 +214,26 @@ class IHelperService(ABC, Generic[U]):
         new_name: str | None = None,
         max_retries: int = 6,
     ) -> BaseResponseDto[FileModel]:
+        pass
+
+    # Attachment Functions
+    @abstractmethod
+    async def create_attachment(
+        self,
+        is_file: bool,
+        url: str,
+        author_id: int,
+        source_name: str,
+        source_id: int,
+        link_title: str | None = None,
+        fetched: bool | None = None,
+    ) -> BaseResponseDto[Attachment]:
+        pass
+
+    @abstractmethod
+    async def delete_attachment(
+        self,
+        attachment_id: int | None = None,
+        attachment: Attachment | None = None,
+    ) -> BaseResponseDto:
         pass
