@@ -98,14 +98,6 @@ class User(Base):
 
     # Not Mapped
     @property
-    def url(self) -> Optional[str]:
-        return getattr(self, "_url", None)
-
-    @url.setter
-    def url(self, value: Optional[str]) -> None:
-        setattr(self, "_url", value)
-
-    @property
     def google_details_token(self) -> Optional[str]:
         return getattr(self, "_google_details_token", None)
 

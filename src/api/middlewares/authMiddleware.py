@@ -45,7 +45,7 @@ class AuthMiddleware(IAuthMiddleware):
 
             user_response = await self.user_service.find_one(
                 user_search_dto,
-                ["role.role_links.exact_role"],
+                ["role.role_links.exact_role", "avatar"],
                 is_and=True,
             )
 

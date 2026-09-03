@@ -37,6 +37,7 @@ class MaterialController(IMaterialController):
                 entity_search_dto,
                 [
                     "author",
+                    "attachment",
                 ],
             )
             if not response.success:

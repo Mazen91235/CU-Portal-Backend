@@ -117,7 +117,7 @@ class Event(Base):
     )
     logo_id: Mapped[Optional[int]] = mapped_column(
         Integer,
-        ForeignKey("attachments.id", ondelete="CASCADE", name="fk_attachment_event"),
+        ForeignKey("attachments.id", ondelete="SET NULL", name="fk_attachment_event"),
         nullable=False,
     )
     logo: Mapped[Optional["Attachment"]] = relationship(
@@ -126,7 +126,7 @@ class Event(Base):
     attachments: Mapped[set["Attachment"]] = relationship(
         "Attachment",
         back_populates="event",
-        cascade="all, delete-orphan",
+        cascade="save-update, merge",
         foreign_keys="Attachment.event_id",
         collection_class=set
     )

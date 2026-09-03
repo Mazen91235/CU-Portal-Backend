@@ -31,9 +31,6 @@ class UserCreateDto(BaseModel):
         ..., min_length=1, max_length=13, description="Phone number of User"
     )
     gender: str = Field(..., min_length=1, max_length=6, description="Gender of User")
-    url: str | None = Field(
-        None, max_length=255, description="URL of User Approval Image (if any)"
-    )
     is_early_access: bool = Field(
         default=False, description="Whether the user is an early access user"
     )
@@ -48,7 +45,7 @@ class UserCreateDto(BaseModel):
     )
     details: dict = Field(
         default_factory=dict,
-        description="Additional details about the user (stored as JSON)",
+        description="Additional details about the user (stored as JSON like approval url, avatar, etc.)",
     )
 
 

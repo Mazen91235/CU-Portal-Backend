@@ -107,7 +107,10 @@ class Task(Base):
     )
     author: Mapped["User"] = relationship("User", back_populates="tasks")
     attachments: Mapped[set["Attachment"]] = relationship(
-        "Attachment", back_populates="task", cascade="all, delete-orphan", collection_class=set
+        "Attachment",
+        back_populates="task",
+        cascade="save-update, merge",
+        collection_class=set,
     )
 
     # Indexes

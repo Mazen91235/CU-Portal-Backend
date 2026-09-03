@@ -28,7 +28,6 @@ class PendingUser(Base):
 
     # Columns
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    url: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Timestamps
     created_at: Mapped[Optional[datetime]] = mapped_column(
@@ -53,7 +52,10 @@ class PendingUser(Base):
         "User", back_populates="pending_user", cascade="save-update, merge"
     )
     attachment: Mapped[Optional["Attachment"]] = relationship(
-        "Attachment", back_populates="pending_user", cascade="save-update, merge"
+        "Attachment",
+        back_populates="pending_user",
+        cascade="save-update, merge",
+        uselist=False,
     )
 
     # Indexes

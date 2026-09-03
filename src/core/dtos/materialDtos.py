@@ -21,12 +21,12 @@ class MaterialCreateDto(BaseModel):
         max_length=30,
         description="Type of the material (file, folder, youtube, drive, external.)",
     )
-    url: str | None = Field(
-        default=None, max_length=255, description="Drive URL of the material"
-    )
     subject_id: int = Field(..., description="ID of the associated subject")
     parent_id: int | None = Field(
         default=None, description="ID of the parent material (for hierarchy)"
+    )
+    details: dict | None = Field(
+        default=None, description="Additional metadata about the material (like url)"
     )
 
 
@@ -39,9 +39,6 @@ class MaterialResponseDto(BaseModel):
         default=None,
         max_length=30,
         description="Type of the material (file, folder, youtube, drive, external.)",
-    )
-    url: str | None = Field(
-        default=None, max_length=255, description="Drive URL of the material"
     )
     details: dict | None = Field(
         default=None, description="Additional metadata about the material"
@@ -80,8 +77,12 @@ class MaterialResponseDto(BaseModel):
 
 class MaterialUpdateDto(BaseModel):
     name: str = Field(..., max_length=200, description="Updated name of the material")
-    material_type: str = Field(..., max_length=30, description="Updated type of the material")
-    url: str | None = Field(default=None, max_length=255, description="Updated URL")
+    material_type: str = Field(
+        ..., max_length=30, description="Updated type of the material"
+    )
+    details: dict | None = Field(
+        default=None, description="Updated additional metadata about the material (like url)"
+    )
 
 
 class MaterialsDeleteDto(BaseModel):

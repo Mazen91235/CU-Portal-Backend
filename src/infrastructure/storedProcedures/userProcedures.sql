@@ -143,13 +143,15 @@ BEGIN
         'faculty', CASE WHEN f.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', f.id, 'name', f.name) ELSE NULL END,
         'department', CASE WHEN d.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', d.id, 'name', d.name) ELSE NULL END,
         'year', CASE WHEN y.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', y.id, 'year', y.year) ELSE NULL END,
-        'role', CASE WHEN r.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', r.id, 'name', r.name) ELSE NULL END
+        'role', CASE WHEN r.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', r.id, 'name', r.name) ELSE NULL END,
+        'avatar', CASE WHEN u.avatar_id IS NOT NULL THEN JSON_BUILD_OBJECT('id', a.id, 'url', a.url, 'details', a.details) ELSE NULL END
     ) INTO v_user_json
     FROM users u
     LEFT JOIN faculties f ON f.id = u.faculty_id
     LEFT JOIN departments d ON d.id = u.department_id
     LEFT JOIN years y ON y.id = u.year_id
     LEFT JOIN roles r ON r.id = u.role_id
+    LEFT JOIN attachments a ON a.id = u.avatar_id
     WHERE u.id = p_user_id;
 
     IF v_user_json IS NULL THEN

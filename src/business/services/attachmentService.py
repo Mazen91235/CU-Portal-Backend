@@ -172,7 +172,7 @@ class AttachmentService(IAttachmentService):
             users = users_response.data or []
             for user in users:
                 url = user.details.get("avatar", "")
-                if not url:
+                if not url or "lh3" in url or "googleusercontent" in url:
                     continue
                 attachment_response = await self.helper_service.create_attachment(
                     is_file=True,
@@ -181,6 +181,75 @@ class AttachmentService(IAttachmentService):
                     source_name="user_id",
                     source_id=user.id,
                 )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Seed",
+                        entity="Attachment",
+                        level="error",
+                        code=attachment_response.code or 500,
+                        message=attachment_response.message
+                        or "An error occurred while creating attachment for user avatar, please try again.",
+                        details={"error": attachment_response.error},
+                        source="AttachmentService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Seed",
+                        entity="Attachment",
+                        level="error",
+                        code=500,
+                        message="Attachment creation response did not contain an attachment object.",
+                        source="AttachmentService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="Attachment creation response did not contain an attachment object.",
+                    )
+                user.avatar_id = attachment.id
+                update_user_response = await self.user_repository.update(
+                    user, ["avatar_id"]
+                )
+                if not update_user_response.success:
+                    await self.logger.log(
+                        action="Seed",
+                        entity="Attachment",
+                        level="error",
+                        code=update_user_response.code or 500,
+                        message=update_user_response.message
+                        or "An error occurred while updating user with avatar attachment, please try again.",
+                        source="AttachmentService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=update_user_response.code,
+                        data=None,
+                        message=update_user_response.message,
+                    )
+                updated_user = update_user_response.data
+                if not updated_user:
+                    await self.logger.log(
+                        action="Seed",
+                        entity="Attachment",
+                        level="error",
+                        code=500,
+                        message="User update response did not contain an updated user object.",
+                        source="AttachmentService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="User update response did not contain an updated user object.",
+                    )
             await self.logger.log(
                 action="Seed",
                 entity="Attachment",

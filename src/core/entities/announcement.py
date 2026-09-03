@@ -105,7 +105,10 @@ class Announcement(Base):
         "Subject", back_populates="announcements"
     )
     attachments: Mapped[set["Attachment"]] = relationship(
-        "Attachment", back_populates="announcement", cascade="all, delete-orphan", collection_class=set
+        "Attachment",
+        back_populates="announcement",
+        cascade="save-update, merge",
+        collection_class=set,
     )
 
     # Indexes

@@ -28,7 +28,7 @@ def create_attachment_public_router(
     @router.post(
         "/seed",
         dependencies=[
-            Depends(_validate_api_key),
+            # Depends(_validate_api_key),
             Depends(set_timeout(1800)),
         ],  # Set a timeout of 30 minutes for the seed operation
         summary="Seed Attachments",

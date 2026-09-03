@@ -329,7 +329,7 @@ class UserService(IUserService):
             needs_approval = not allowed_domain
             url = None
             if needs_approval:
-                if not data.url:
+                if not data.details.get("url"):
                     await self.logger.log(
                         action="Create",
                         entity="User",
@@ -429,6 +429,7 @@ class UserService(IUserService):
                         data=None,
                         message=f"The uploaded file exceeds the maximum allowed size of {User.MAX_ALLOWED_FILE_SIZE_MB} MB, please try again with a smaller file.",
                     )
+            data.details.pop("url", None)
             email_exists_response = await self.user_repository.find_one(
                 User.email == data.email
             )
@@ -654,101 +655,19 @@ class UserService(IUserService):
                     data=None,
                     message="Unauthorized, please log in to update your profile.",
                 )
-            avatar = logged_in_user.details.get("avatar", logged_in_user.google_avatar)
+            avatar = logged_in_user.avatar
             should_remove = None
             if (
                 data.details
                 and data.details.get("avatar")
-                and data.details.get("avatar") != avatar
+                and data.details.get("avatar") != logged_in_user.google_avatar
+                and (not avatar or data.details.get("avatar") != avatar.url)
             ):
-                file_id = self.helper_service.get_file_id_from_url(
-                    data.details.get("avatar", "")
-                )
-                if not file_id:
-                    await self.logger.log(
-                        action="Update",
-                        entity="User",
-                        level="warning",
-                        code=400,
-                        message="Invalid file URL provided for avatar",
-                        source="UserService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid file uploaded for avatar, please try again with a valid file.",
-                    )
-                file_response = await self.helper_service.fetch_from_drive(file_id)
-                if not file_response.success:
-                    await self.logger.log(
-                        action="Update",
-                        entity="User",
-                        level="warning",
-                        code=file_response.code or 500,
-                        message="Failed to fetch file from Google Drive",
-                        details={"error": file_response.error},
-                        source="UserService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=file_response.code,
-                        data=None,
-                        message=file_response.message,
-                    )
-                file = file_response.data
-                if not file:
-                    await self.logger.log(
-                        action="Update",
-                        entity="User",
-                        level="warning",
-                        code=400,
-                        message="File not found on Google Drive",
-                        source="UserService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="The uploaded file could not be found, please try again.",
-                    )
-                if not self.helper_service.verify_file_type(
-                    file.data.mime_type, "image"
-                ):
-                    await self.logger.log(
-                        action="Update",
-                        entity="User",
-                        level="warning",
-                        code=400,
-                        message="Uploaded file is not an image",
-                        source="UserService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Only image files are allowed for the avatar.",
-                    )
-                if not self.helper_service.verify_file_size(
-                    file.data.size, User.MAX_ALLOWED_FILE_SIZE_B
-                ):
-                    await self.logger.log(
-                        action="Update",
-                        entity="User",
-                        level="warning",
-                        code=400,
-                        message="Uploaded file exceeds maximum allowed size",
-                        source="UserService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message=f"The uploaded file exceeds the maximum allowed size of {User.MAX_ALLOWED_FILE_SIZE_MB} MB, please try again with a smaller file.",
-                    )
                 should_remove = avatar
+                avatar.url = data.details.get("avatar")
             logged_in_user.name = data.name
             logged_in_user.details = data.details
+            logged_in_user.details.pop("avatar", None)
             update_user_response = await self.user_repository.update(
                 logged_in_user, ["name", "details"]
             )
@@ -775,40 +694,76 @@ class UserService(IUserService):
                     data=None,
                     message="An error occurred while updating user, please try again.",
                 )
-            while should_remove:
-                file_id = self.helper_service.get_file_id_from_url(should_remove)
-                should_remove = None
-                if file_id:
-                    access_token_response = (
-                        await self.helper_service.get_google_access_token(
-                            logged_in_user.google_refresh_token or ""
-                        )
+            if should_remove:
+                await self.helper_service.delete_attachment(attachment=should_remove)
+                created_attachment_response = (
+                    await self.helper_service.create_attachment(
+                        is_file=True,
+                        url=avatar.url or "",
+                        author_id=logged_in_user.id,
+                        source_name="user_id",
+                        source_id=logged_in_user.id,
                     )
-                    if (
-                        not access_token_response.success
-                        or not access_token_response.data
-                    ):
-                        break
-                    access_token = access_token_response.data
-                    remove_file_response = (
-                        await self.helper_service.delete_file_from_drive(
-                            access_token, file_id
-                        )
+                )
+                if not created_attachment_response.success:
+                    await self.logger.log(
+                        action="Update",
+                        entity="User",
+                        level="warning",
+                        code=created_attachment_response.code or 500,
+                        message="Failed to create attachment for new avatar",
+                        details={"error": created_attachment_response.error},
+                        source="UserService",
                     )
-                    if (
-                        not remove_file_response.success
-                        or not remove_file_response.data
-                    ):
-                        await self.logger.log(
-                            action="Update",
-                            entity="User",
-                            level="warning",
-                            code=400,
-                            message="Failed to remove old avatar from Google Drive",
-                            details={"error": remove_file_response.error},
-                            source="UserService",
-                        )
-                        break
+                    return BaseResponseDto(
+                        success=False,
+                        code=created_attachment_response.code,
+                        data=None,
+                        message=created_attachment_response.message,
+                    )
+                created_attachment = created_attachment_response.data
+                if not created_attachment:
+                    await self.logger.log(
+                        action="Update",
+                        entity="User",
+                        level="warning",
+                        code=500,
+                        message="Failed to create attachment for new avatar, no attachment returned after creation",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while creating attachment for new avatar, please try again.",
+                    )
+                logged_in_user.avatar_id = created_attachment.id
+                update_user_with_avatar_response = await self.user_repository.update(
+                    logged_in_user, ["avatar_id"]
+                )
+                if not update_user_with_avatar_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=update_user_with_avatar_response.code,
+                        data=None,
+                        message=update_user_with_avatar_response.message,
+                    )
+                updated_user = update_user_with_avatar_response.data
+                if not updated_user:
+                    await self.logger.log(
+                        action="Update",
+                        entity="User",
+                        level="error",
+                        code=500,
+                        message="Failed to update user with new avatar, no user returned after update",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while updating user with new avatar, please try again.",
+                    )
             await self.logger.log(
                 action="Update",
                 entity="User",
@@ -1199,7 +1154,6 @@ class UserService(IUserService):
             if pending_approval_url:
                 pending_user = PendingUser(
                     user_id=created_user.id,
-                    url=pending_approval_url,
                 )
                 create_pending_user_response = (
                     await self.pending_user_repository.create(pending_user)
@@ -1226,6 +1180,47 @@ class UserService(IUserService):
                         code=500,
                         data=False,
                         message="An error occurred while creating pending user after email verification",
+                    )
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=True,
+                    url=pending_approval_url,
+                    author_id=created_user.id,
+                    source_name="pending_user_id",
+                    source_id=created_pending_user.id,
+                )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="VerifyEmail",
+                        entity="Attachment",
+                        level="error",
+                        code=attachment_response.code or 500,
+                        message=attachment_response.message
+                        or "An error occurred while creating attachment for pending user",
+                        details={"error": attachment_response.error},
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code,
+                        data=False,
+                        message=attachment_response.message
+                        or "An error occurred while creating attachment for pending user",
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="VerifyEmail",
+                        entity="Attachment",
+                        level="error",
+                        code=500,
+                        message="Failed to create attachment for pending user after email verification",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=False,
+                        message="An error occurred while creating attachment for pending user after email verification",
                     )
             await self.logger.log(
                 action="VerifyEmail",
@@ -2581,8 +2576,11 @@ class UserService(IUserService):
                     message=f"You do not have the 'Assign Roles' permission required to update user roles.",
                 )
             for record in data.data_to_update:
+                dynamic_includes = self.helper_service.generate_dynamic_includes(
+                    User, ["pending_user.attachment", "attachment"]
+                )
                 user_response = await self.user_repository.find_one(
-                    User.id == record.id
+                    User.id == record.id, dynamic_includes
                 )
                 if not user_response.success:
                     return BaseResponseDto(
@@ -2639,6 +2637,21 @@ class UserService(IUserService):
                         data=False,
                         message=f"User with ID {user.id} has already been approved, and their status cannot be updated again.",
                     )
+                if not user.status and not user.pending_user:
+                    await self.logger.log(
+                        action="UpdateMany",
+                        entity="User",
+                        level="warning",
+                        code=400,
+                        message=f"User with ID {user.id} is suspended not pending approval, and their status cannot be updated",
+                        source="UserService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=False,
+                        message=f"User with ID {user.id} is suspended not pending approval, and their status cannot be updated.",
+                    )
                 user.status = record.approved if not user.status else user.status
                 if record.role_id:
                     dynamic_includes = self.helper_service.generate_dynamic_includes(
@@ -2689,20 +2702,10 @@ class UserService(IUserService):
                             message=f"You do not have sufficient permissions to assign the role specified for user with ID {user.id}.",
                         )
                     user.role = role
-                pending_user_response = await self.pending_user_repository.find_one(
-                    PendingUser.user_id == user.id
-                )
-                if not pending_user_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=pending_user_response.code,
-                        data=False,
-                        message=pending_user_response.message,
-                    )
-                pending_user = pending_user_response.data
-                if pending_user:
+                if user.pending_user:
+                    attachment = user.pending_user.attachment
                     delete_pending_user_response = (
-                        await self.pending_user_repository.delete(pending_user)
+                        await self.pending_user_repository.delete(user.pending_user)
                     )
                     if not delete_pending_user_response.success:
                         return BaseResponseDto(
@@ -2711,7 +2714,12 @@ class UserService(IUserService):
                             data=False,
                             message=delete_pending_user_response.message,
                         )
+                    if attachment:
+                        await self.helper_service.delete_attachment(
+                            attachment=attachment
+                        )
                 if not user.status:
+                    attachment = user.attachment
                     delete_user_response = await self.user_repository.delete(user)
                     if not delete_user_response.success:
                         return BaseResponseDto(
@@ -2719,6 +2727,10 @@ class UserService(IUserService):
                             code=delete_user_response.code,
                             data=False,
                             message=delete_user_response.message,
+                        )
+                    if attachment:
+                        await self.helper_service.delete_attachment(
+                            attachment=attachment
                         )
                 else:
                     update_user_response = await self.user_repository.update(

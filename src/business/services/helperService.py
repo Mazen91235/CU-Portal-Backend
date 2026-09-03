@@ -21,6 +21,8 @@ from core.entities.subject import Subject
 from core.entities.notification import Notification
 from core.entities.userNotification import UserNotification
 from core.entities.attachment import Attachment
+from core.entities.event import Event
+from core.entities.eventOrganizer import EventOrganizer
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import (
     RequestResponseModel,
@@ -1084,6 +1086,14 @@ class HelperService(IHelperService[U]):
                     message=f"File not found on Google Drive for URL: {url}",
                     error="No file data returned from Google Drive",
                 )
+            if len(file_data.children) > 0:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"The provided URL points to a folder, not a file: {url}",
+                    error="URL points to a folder instead of a file",
+                )
             return BaseResponseDto(
                 success=True,
                 code=200,
@@ -1837,6 +1847,13 @@ class HelperService(IHelperService[U]):
         link_title=None,
         fetched=None,
     ):
+        custom_sources = {
+            "user_id": lambda: Attachment.user.has(User.id == source_id),
+            "event_logo_id": lambda: Attachment.event_logo.has(Event.id == source_id),
+            "event_organizer_logo_id": lambda: Attachment.event_organizer_logo.has(
+                EventOrganizer.id == source_id
+            ),
+        }
         try:
             if not url:
                 return BaseResponseDto(
@@ -1846,7 +1863,9 @@ class HelperService(IHelperService[U]):
                     message="URL is required",
                     error="No URL provided for creating attachment",
                 )
-            if not hasattr(Attachment, source_name):
+            if source_name not in custom_sources and not hasattr(
+                Attachment, source_name
+            ):
                 return BaseResponseDto(
                     success=False,
                     code=400,
@@ -1870,10 +1889,16 @@ class HelperService(IHelperService[U]):
                     data=None,
                     message="Author not found",
                 )
+            if source_name in custom_sources:
+                existing_attachment_predicate = custom_sources[source_name]()
+            else:
+                existing_attachment_predicate = (
+                    getattr(Attachment, source_name) == source_id
+                )
             existing_attachment_response = await self.attachment_repository.find_one(
                 and_(
                     Attachment.author_id == author_id,
-                    getattr(Attachment, source_name) == source_id,
+                    existing_attachment_predicate,
                     Attachment.url == url,
                 )
             )
@@ -1902,45 +1927,25 @@ class HelperService(IHelperService[U]):
                         message="Invalid Google Drive URL",
                         error=f"Provided URL is not a valid Google Drive URL: {url}",
                     )
-                file_id = self.get_file_id_from_url(url)
-                if not file_id:
+                file_exists_response = await self.verify_file_exists_on_drive(url)
+                if not file_exists_response.success:
                     return BaseResponseDto(
                         success=False,
-                        code=400,
+                        code=file_exists_response.code,
                         data=None,
-                        message="Invalid Google Drive URL",
-                        error=f"Could not extract file ID from URL: {url}",
+                        message=file_exists_response.message,
+                        error=file_exists_response.error,
                     )
-                fetched_response = await self.fetch_from_drive(file_id)
-                if not fetched_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=fetched_response.code or 500,
-                        data=None,
-                        message=fetched_response.message
-                        or "Failed to fetch file from Google Drive",
-                        error=fetched_response.error
-                        or f"Failed to fetch file with ID: {file_id} from Google Drive",
-                    )
-                fetched_data = fetched_response.data
-                if not fetched_data:
+                file_exists = file_exists_response.data
+                if not file_exists:
                     return BaseResponseDto(
                         success=False,
                         code=404,
                         data=None,
                         message="File not found on Google Drive",
-                        error=f"File with ID: {file_id} not found on Google Drive",
+                        error=f"File at URL {url} does not exist on Google Drive",
                     )
-                if len(fetched_data.children) > 0:
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="The provided Google Drive URL points to a folder, not a file",
-                        error=f"Google Drive URL points to a folder with ID: {file_id}",
-                    )
-                fetched_file = fetched_data.data
-                details["file_data"] = fetched_file.model_dump(mode="json")
+                details["file_data"] = file_exists.model_dump(mode="json")
                 if fetched is not None:
                     details["fetched"] = fetched
             else:
@@ -1961,7 +1966,8 @@ class HelperService(IHelperService[U]):
                 author_google_refresh_token=author.google_refresh_token,
                 author_id=author_id,
             )
-            setattr(attachment, source_name, source_id)
+            if source_name not in custom_sources:
+                setattr(attachment, source_name, source_id)
             create_attachment_response = await self.attachment_repository.create(
                 attachment
             )
@@ -1986,7 +1992,6 @@ class HelperService(IHelperService[U]):
                 code=201,
                 data=created_attachment,
                 message="Attachment created successfully",
-                error=None,
             )
         except Exception as ex:
             return BaseResponseDto(

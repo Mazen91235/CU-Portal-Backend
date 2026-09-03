@@ -115,7 +115,7 @@ class Validator:
     def is_valid_url_based_on_type(url: str, type: str) -> bool:
         if type == "youtube":
             return Validator.is_valid_youtube_url(url)
-        elif type == "drive":
+        elif type == "drive" or type == "file":
             return Validator.is_valid_drive_url(url)
         elif type == "external":
             return Validator.is_valid_external_url(url)
