@@ -74,12 +74,6 @@ class IHelperService(ABC, Generic[U]):
         pass
 
     @abstractmethod
-    async def generate_dynamic_join_entities(
-        self, cls: Type[T], entities: list[str] | None
-    ) -> tuple[Any, list[Any]]:
-        pass
-
-    @abstractmethod
     def generate_dynamic_predicate(
         self,
         cls: Type[T],

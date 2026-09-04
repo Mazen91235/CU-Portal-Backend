@@ -65,7 +65,6 @@ class SubjectService(ISubjectService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                [],
                 descending,
             )
             if not result.success:
@@ -122,7 +121,6 @@ class SubjectService(ISubjectService):
                     dynamic_includes,
                     dynamic_selects,
                     dynamic_order_by,
-                    [],
                     descending,
                     page,
                     limit,

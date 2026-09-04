@@ -87,21 +87,11 @@ class BaseRepository(IBaseRepository):
         includes=None,
         selects=None,
         order_by=None,
-        join_entities=None,
         descending=False,
     ):
         try:
             session = self._resolve_session()
             query = select(self._model)
-
-            # Handling Joins
-            if join_entities:
-                for join_entity in join_entities:
-                    query = query.join(
-                        join_entity[0],
-                        join_entity[1],
-                        isouter=join_entity[2] if len(join_entity) > 2 else False,
-                    )
 
             # Handling Predicates
             if predicate is not None:
@@ -156,7 +146,6 @@ class BaseRepository(IBaseRepository):
         includes=None,
         selects=None,
         order_by=None,
-        join_entities=None,
         descending=False,
         page=1,
         limit=50,
@@ -164,15 +153,6 @@ class BaseRepository(IBaseRepository):
         try:
             session = self._resolve_session()
             query = select(self._model)
-
-            # Handling Joins
-            if join_entities:
-                for join_entity in join_entities:
-                    query = query.join(
-                        join_entity[0],
-                        join_entity[1],
-                        isouter=join_entity[2] if len(join_entity) > 2 else False,
-                    )
 
             # Handling Predicates
             if predicate is not None:

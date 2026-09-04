@@ -65,20 +65,11 @@ class TaskService(ITaskService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Task", order_by
             )
-            dynamic_join_predicate, dynamic_join_entities = (
-                await self.helper_service.generate_dynamic_join_entities(Task, [])
-            )
-            if dynamic_join_predicate is not None:
-                if predicate is None:
-                    predicate = dynamic_join_predicate
-                else:
-                    predicate = and_(predicate, dynamic_join_predicate)
             result = await self.task_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                dynamic_join_entities,
                 descending,
             )
 
@@ -139,22 +130,11 @@ class TaskService(ITaskService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Task", order_by
             )
-
-            dynamic_join_predicate, dynamic_join_entities = (
-                await self.helper_service.generate_dynamic_join_entities(Task, [])
-            )
-            if dynamic_join_predicate is not None:
-                if predicate is None:
-                    predicate = dynamic_join_predicate
-                else:
-                    predicate = and_(predicate, dynamic_join_predicate)
-
             result = await self.task_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                dynamic_join_entities,
                 descending,
                 page,
                 limit,

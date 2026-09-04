@@ -74,6 +74,8 @@ class CacheHitException(Exception):
 
 async def _check_cache(request: Request):
     try:
+        if os.environ.get("TESTING", "false").lower() == "true":
+            return None
         if request.method.upper() == "GET":
             token = request.cookies.get("token", "")
             cache_key = f"{token}:{request.url.path}?{request.url.query}"
@@ -90,6 +92,44 @@ async def _check_cache(request: Request):
         return None
     except CacheHitException as ex:
         raise ex
+    except Exception:
+        return None
+
+
+async def _update_cache(request: Request, response: Response):
+    try:
+        if os.environ.get("TESTING", "false").lower() == "true":
+            return None
+        if (
+            request.method.upper() == "GET"
+            and str(response.status_code)[0] == "2"
+            and issubclass(type(response), JSONResponse)
+        ):
+            token = request.cookies.get("token", "")
+            cache_key = f"{token}:{request.url.path}?{request.url.query}"
+            body_bytes = getattr(response, "body", b"{}")
+            body = json.loads(body_bytes.decode("utf-8"))
+            asyncio.create_task(
+                caching_handler.set(
+                    cache_key,
+                    {
+                        "success": body.get("success", True),
+                        "code": response.status_code,
+                        "message": body.get("message", ""),
+                        "data": body.get("data", None),
+                        "next_page": body.get("next_page", False),
+                    },
+                    expire=CACHE_TTL,
+                )
+            )
+        elif (
+            request.method.upper() in ["POST", "PATCH", "PUT", "DELETE"]
+            and str(response.status_code)[0] == "2"
+        ):
+            module = extract_module_from_path(request.url.path)
+            if module:
+                asyncio.create_task(caching_handler.invalidate_module_cache(module))
+        return None
     except Exception:
         return None
 
@@ -148,37 +188,7 @@ class CustomRoute(APIRoute):
                 response = await asyncio.wait_for(
                     original_route_handler(request), timeout=timeout_seconds
                 )
-                if (
-                    request.method.upper() == "GET"
-                    and str(response.status_code)[0] == "2"
-                    and issubclass(type(response), JSONResponse)
-                ):
-                    token = request.cookies.get("token", "")
-                    cache_key = f"{token}:{request.url.path}?{request.url.query}"
-                    body_bytes = getattr(response, "body", b"{}")
-                    body = json.loads(body_bytes.decode("utf-8"))
-                    asyncio.create_task(
-                        caching_handler.set(
-                            cache_key,
-                            {
-                                "success": body.get("success", True),
-                                "code": response.status_code,
-                                "message": body.get("message", ""),
-                                "data": body.get("data", None),
-                                "next_page": body.get("next_page", False),
-                            },
-                            expire=CACHE_TTL,
-                        )
-                    )
-                elif (
-                    request.method.upper() in ["POST", "PATCH", "PUT", "DELETE"]
-                    and str(response.status_code)[0] == "2"
-                ):
-                    module = extract_module_from_path(request.url.path)
-                    if module:
-                        asyncio.create_task(
-                            caching_handler.invalidate_module_cache(module)
-                        )
+                await _update_cache(request, response)
                 return response
             except CacheHitException as ex:
                 return ex.response

@@ -63,7 +63,6 @@ class RoleService(IRoleService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                [],
                 descending,
             )
 
@@ -125,7 +124,6 @@ class RoleService(IRoleService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                [],
                 descending,
                 page,
                 limit,

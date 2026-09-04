@@ -68,8 +68,9 @@ class AuthMiddleware(IAuthMiddleware):
                     detail="Unauthorized: Invalid or Expired refresh token",
                 )
 
+            user_context.set(user)
+
             if not user.refresh_token or not user.refresh_expire_at:
-                user_context.set(user)
                 return None
 
             if (
@@ -89,8 +90,6 @@ class AuthMiddleware(IAuthMiddleware):
                         message="Refresh token expiration extended successfully",
                         source="AuthMiddleware",
                     )
-
-            user_context.set(user)
 
             user_permissions = (
                 set([perm.name for perm in user.role.exact_roles])

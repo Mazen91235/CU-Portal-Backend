@@ -5,6 +5,7 @@ import asyncio
 import json
 from typing import TypeVar, cast
 from sqlalchemy import and_, func, or_
+from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from business.contextVars.requestContext import request_context
@@ -18,9 +19,13 @@ from core.entities.faculty import Faculty
 from core.entities.department import Department
 from core.entities.year import Year
 from core.entities.subject import Subject
+from core.entities.userSubjectLink import UserSubjectLink
 from core.entities.notification import Notification
 from core.entities.userNotification import UserNotification
 from core.entities.attachment import Attachment
+from core.entities.announcement import Announcement
+from core.entities.material import Material
+from core.entities.task import Task
 from core.entities.event import Event
 from core.entities.eventOrganizer import EventOrganizer
 from core.dtos.baseDtos import BaseResponseDto
@@ -599,54 +604,15 @@ class HelperService(IHelperService[U]):
                 order_by_arr.append(order_item)
         return order_by_arr
 
-    async def generate_dynamic_join_entities(self, cls, entities):
-        request = request_context.get(None)
-        if not request or not request.state or not request.state.restrict_courses:
-            return (None, [])
-        logged_in_user_response = await self.get_logged_in_user()
-        if not logged_in_user_response.success:
-            return (None, [])
-        logged_in_user = logged_in_user_response.data
-        if not logged_in_user:
-            return (None, [])
-
-        user_subject_link = EntitiesHandler.ENTITIES.get("UserSubjectLink")
-
-        predicate = and_(getattr(user_subject_link, "user_id") == logged_in_user.id)
-
-        join_entities_arr = [
-            (
-                user_subject_link,
-                getattr(cls, "subject_id") == getattr(user_subject_link, "subject_id"),
-            )
-        ]
-        for entity in entities or []:
-            if (
-                not isinstance(entity, str)
-                or not entity.strip()
-                or entity.lower() == cls.__name__.lower()
-            ):
-                continue
-
-            entity_cls = EntitiesHandler.ENTITIES.get(entity)
-            if not entity_cls:
-                continue
-            join_entities_arr.append(
-                (
-                    entity_cls,
-                    getattr(entity_cls, "subject_id")
-                    == getattr(user_subject_link, "subject_id"),
-                )
-            )
-        return (predicate, join_entities_arr)
-
     def generate_dynamic_predicate(
         self, cls, data, query_fields, is_and, starts_with, is_exact
     ):
-        if not data or not cls:
+        if not cls:
             return None
         if not query_fields:
             query_fields = []
+        if not data:
+            data = {}
         to_dict = getattr(data, "model_dump", None)
         if callable(to_dict):
             data_dict = cast(dict, to_dict(exclude_unset=True, exclude_none=False))
@@ -719,10 +685,37 @@ class HelperService(IHelperService[U]):
             else:
                 conditions.append(column == value)
 
-        if not conditions:
-            return None
+        result = None
 
-        return and_(*conditions) if is_and else or_(*conditions)
+        if conditions:
+            result = and_(*conditions) if is_and else or_(*conditions)
+
+        request = request_context.get(None)
+        user = user_context.get(None)
+
+        if not request or not user:
+            return result
+
+        if request.state.restrict_courses:
+            user_subjects_subquery = (
+                select(UserSubjectLink.subject_id)
+                .where(UserSubjectLink.user_id == user.id)
+                .scalar_subquery()
+            )
+            if hasattr(cls, "subject_id"):
+                if result is not None:
+                    result = and_(
+                        result,
+                        getattr(cls, "subject_id").isnot(None),
+                        getattr(cls, "subject_id").in_(user_subjects_subquery),
+                    )
+                else:
+                    result = and_(
+                        getattr(cls, "subject_id").isnot(None),
+                        getattr(cls, "subject_id").in_(user_subjects_subquery),
+                    )
+
+        return result
 
     # Notification Functions
     async def _send_notification(
