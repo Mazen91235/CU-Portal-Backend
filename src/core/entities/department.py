@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from .subject import Subject
     from .task import Task
     from .announcement import Announcement
+    from .event import Event
     from .week import Week
 
 
@@ -67,30 +68,24 @@ class Department(Base):
     faculty: Mapped["Faculty"] = relationship(
         "Faculty", back_populates="departments", cascade="save-update, merge"
     )
-    users: Mapped[list["User"]] = relationship(
-        "User", back_populates="department", cascade="all, delete-orphan"
+    users: Mapped[set["User"]] = relationship(
+        "User", back_populates="department", cascade="all, delete-orphan", collection_class=set
     )
-    subjects: Mapped[list["Subject"]] = relationship(
-        "Subject", back_populates="department", cascade="all, delete-orphan"
+    subjects: Mapped[set["Subject"]] = relationship(
+        "Subject", back_populates="department", cascade="all, delete-orphan", collection_class=set
     )
-    tasks: Mapped[list["Task"]] = relationship(
-        "Task", back_populates="department", cascade="all, delete-orphan"
+    tasks: Mapped[set["Task"]] = relationship(
+        "Task", back_populates="department", cascade="all, delete-orphan", collection_class=set
     )
-    announcements: Mapped[list["Announcement"]] = relationship(
-        "Announcement", back_populates="department", cascade="all, delete-orphan"
+    announcements: Mapped[set["Announcement"]] = relationship(
+        "Announcement", back_populates="department", cascade="all, delete-orphan", collection_class=set
     )
-    weeks: Mapped[list["Week"]] = relationship(
-        "Week", back_populates="department", cascade="all, delete-orphan"
+    weeks: Mapped[set["Week"]] = relationship(
+        "Week", back_populates="department", cascade="all, delete-orphan", collection_class=set
     )
-    # roadmaps: Mapped[list["Roadmap"]] = relationship(
-    #     "Roadmap", back_populates="department", cascade="all, delete-orphan"
-    # )
-    # questions: Mapped[list["Question"]] = relationship(
-    #     "Question", back_populates="department", cascade="all, delete-orphan"
-    # )
-    # timetables: Mapped[list["Timetable"]] = relationship(
-    #     "Timetable", back_populates="department", cascade="all, delete-orphan"
-    # )
+    events: Mapped[set["Event"]] = relationship(
+        "Event", back_populates="department", cascade="all, delete-orphan", collection_class=set
+    )
 
     # Indexes
     __table_args__ = (

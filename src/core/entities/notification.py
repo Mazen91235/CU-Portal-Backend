@@ -12,6 +12,8 @@ from .base import (
     TimezoneHandler,
     TypedDict,
     Literal,
+    AssociationProxy,
+    association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
@@ -19,6 +21,7 @@ from .base import (
 
 if TYPE_CHECKING:
     from .user import User
+    from .userNotification import UserNotification
 
 
 class Notification(Base):
@@ -28,7 +31,7 @@ class Notification(Base):
     # Columns
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     content: Mapped[str] = mapped_column(String(200), nullable=False)
-    type: Mapped[Optional[str]] = mapped_column(
+    notification_type: Mapped[Optional[str]] = mapped_column(
         String(20), nullable=True
     )  # e.g., 'task', 'announcement', 'event'
     parent_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -47,14 +50,34 @@ class Notification(Base):
         nullable=True,
     )
 
+    # Not Mapped
+    @property
+    def seen(self) -> Optional[bool]:
+        return getattr(self, "_seen", None)
+
+    @seen.setter
+    def seen(self, value: Optional[bool]) -> None:
+        setattr(self, "_seen", value)
+
     # Relationships
-    users: Mapped[list["User"]] = relationship(
-        "User", secondary="user_notifications", back_populates="notifications"
+    users: AssociationProxy[set["User"]] = association_proxy(
+        "user_notifications",
+        "user",
+        creator=lambda user: __import__(
+            "core.entities.userNotification", fromlist=["UserNotification"]
+        ).UserNotification(user=user),
+    )
+    user_notifications: Mapped[set["UserNotification"]] = relationship(
+        "UserNotification",
+        back_populates="notification",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
 
     # Attributes
-    class Type(str, Enum):
+    class NotificationType(str, Enum):
         TASK = "task"
         EXAM = "exam"
         ANNOUNCEMENT = "announcement"
         MATERIAL = "material"
+        EVENT = "event"

@@ -40,7 +40,7 @@ class Attachment(Base):
     url: Mapped[str] = mapped_column(String(255), nullable=False)
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
-    )  # includes file_data, link_title
+    )  # includes file_data, fetched, link_title
     author_google_refresh_token: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True
     )
@@ -65,89 +65,88 @@ class Attachment(Base):
         nullable=False,
     )
     author: Mapped["User"] = relationship(
-        "User", back_populates="attachments", cascade="all, delete-orphan"
+        "User", back_populates="attachments", foreign_keys=[author_id]
+    )
+    user: Mapped[Optional["User"]] = relationship(
+        "User",
+        back_populates="avatar",
+        cascade="save-update, merge",
+        foreign_keys="User.avatar_id",
     )
     pending_user_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey(
-            "pending_users.id", ondelete="CASCADE", name="fk_pending_user_attachment"
+            "pending_users.id", ondelete="SET NULL", name="fk_pending_user_attachment"
         ),
         nullable=True,
     )
     pending_user: Mapped[Optional["PendingUser"]] = relationship(
-        "PendingUser", back_populates="attachment", cascade="all, delete-orphan"
+        "PendingUser", back_populates="attachment"
     )
     material_id: Mapped[Optional[int]] = mapped_column(
         Integer,
-        ForeignKey("materials.id", ondelete="CASCADE", name="fk_material_attachment"),
+        ForeignKey("materials.id", ondelete="SET NULL", name="fk_material_attachment"),
         nullable=True,
     )
     material: Mapped[Optional["Material"]] = relationship(
-        "Material", back_populates="attachment", cascade="save-update, merge"
+        "Material", back_populates="attachment"
     )
     task_id: Mapped[Optional[int]] = mapped_column(
         Integer,
-        ForeignKey("tasks.id", ondelete="CASCADE", name="fk_task_attachment"),
+        ForeignKey("tasks.id", ondelete="SET NULL", name="fk_task_attachment"),
         nullable=True,
     )
-    task: Mapped[Optional["Task"]] = relationship(
-        "Task", back_populates="attachments", cascade="save-update, merge"
-    )
+    task: Mapped[Optional["Task"]] = relationship("Task", back_populates="attachments")
     announcement_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey(
-            "announcements.id", ondelete="CASCADE", name="fk_announcement_attachment"
+            "announcements.id", ondelete="SET NULL", name="fk_announcement_attachment"
         ),
         nullable=True,
     )
     announcement: Mapped[Optional["Announcement"]] = relationship(
-        "Announcement", back_populates="attachments", cascade="save-update, merge"
-    )
-    event_logo_id: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        ForeignKey("events.id", ondelete="CASCADE", name="fk_event_logo_attachment"),
-        nullable=True,
+        "Announcement", back_populates="attachments"
     )
     event_logo: Mapped[Optional["Event"]] = relationship(
-        "Event", back_populates="logo", cascade="save-update, merge"
+        "Event",
+        back_populates="logo",
+        cascade="save-update, merge",
+        foreign_keys="Event.logo_id",
     )
     event_id: Mapped[Optional[int]] = mapped_column(
         Integer,
-        ForeignKey("events.id", ondelete="CASCADE", name="fk_event_attachment"),
+        ForeignKey("events.id", ondelete="SET NULL", name="fk_event_attachment"),
         nullable=True,
     )
     event: Mapped[Optional["Event"]] = relationship(
-        "Event", back_populates="attachments", cascade="save-update, merge"
-    )
-    event_organizer_logo_id: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        ForeignKey(
-            "event_organizers.id",
-            ondelete="CASCADE",
-            name="fk_event_organizer_logo_attachment",
-        ),
-        nullable=True,
+        "Event", back_populates="attachments", foreign_keys=[event_id]
     )
     event_organizer_logo: Mapped[Optional["EventOrganizer"]] = relationship(
-        "EventOrganizer", back_populates="logo", cascade="save-update, merge"
+        "EventOrganizer",
+        back_populates="logo",
+        cascade="save-update, merge",
+        foreign_keys="EventOrganizer.logo_id",
     )
     event_organizer_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey(
             "event_organizers.id",
-            ondelete="CASCADE",
+            ondelete="SET NULL",
             name="fk_event_organizer_attachment",
         ),
         nullable=True,
     )
     event_organizer: Mapped[Optional["EventOrganizer"]] = relationship(
-        "EventOrganizer", back_populates="attachments", cascade="save-update, merge"
+        "EventOrganizer",
+        back_populates="attachments",
+        foreign_keys=[event_organizer_id],
     )
 
     # Indexes
     __table_args__ = (
         Index(
-            "idx_attachment_author_id",
+            "idx_attachment_author_id_url",
             "author_id",
+            "url",
         ),
     )

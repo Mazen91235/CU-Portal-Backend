@@ -4,6 +4,7 @@ from fastapi import Request
 from starlette.config import Config
 from authlib.integrations.starlette_client import OAuth
 
+
 config = Config(".env")  # read config from .env file
 oauth = OAuth(config)
 google = oauth.register(

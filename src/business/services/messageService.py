@@ -81,7 +81,7 @@ class MessageService(IMessageService):
                 level="error",
                 code=500,
                 message=f"An error occurred while finding message",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MessageService",
             )
             return BaseResponseDto(
@@ -139,7 +139,7 @@ class MessageService(IMessageService):
                     message=result.message,
                 )
             messages = result.data
-            return BaseResponseDto(success=True, data=messages)
+            return BaseResponseDto(success=True, data=messages, next_page=result.next_page)
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -147,7 +147,7 @@ class MessageService(IMessageService):
                 level="error",
                 code=500,
                 message=f"An error occurred while finding messages",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MessageService",
             )
             return BaseResponseDto(
@@ -251,7 +251,7 @@ class MessageService(IMessageService):
                 level="error",
                 code=500,
                 message="An error occurred while creating message",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="MessageService",
             )
             return BaseResponseDto(

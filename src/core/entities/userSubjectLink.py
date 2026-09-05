@@ -47,9 +47,7 @@ class UserSubjectLink(Base):
         ForeignKey("users.id", ondelete="CASCADE", name="fk_user_user_subject_link"),
         nullable=False,
     )
-    user: Mapped["User"] = relationship(
-        "User", backref="user_subject_links_associations"
-    )
+    user: Mapped["User"] = relationship("User", back_populates="user_subject_links")
     subject_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey(
@@ -58,5 +56,5 @@ class UserSubjectLink(Base):
         nullable=False,
     )
     subject: Mapped["Subject"] = relationship(
-        "Subject", backref="user_subject_links_associations"
+        "Subject", back_populates="user_subject_links"
     )

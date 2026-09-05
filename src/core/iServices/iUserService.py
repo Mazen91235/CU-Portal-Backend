@@ -4,13 +4,15 @@ from core.iServices.bases.iUpdatableService import IUpdatableService
 from core.entities.user import User
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.userDtos import (
+    UserGetUserWithDetailsDto,
     UserHasPermissionsDto,
     UserSearchDto,
     UserSignUpResponseDto,
-    UserLoginWithGoogleDto,
+    UserLoginWithGoogleResponseDto,
     UserLoginResponseDto,
     UserStatisticsResponseDto,
     UserTokenDetailsResponseDto,
+    UserResendTokenResponseDto,
     UserUpdateAcademicDataDto,
     UserUpdateUsersDto,
 )
@@ -25,11 +27,26 @@ class IUserService(
         pass
 
     @abstractmethod
+    async def get_user_with_details(
+        self,
+        user_id: int,
+    ) -> BaseResponseDto[UserGetUserWithDetailsDto]:
+        pass
+
+    @abstractmethod
     async def verify_email(self, token: str) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod
-    async def login_with_google(self) -> BaseResponseDto[UserLoginWithGoogleDto]:
+    async def login_with_google(
+        self,
+    ) -> BaseResponseDto[UserLoginWithGoogleResponseDto]:
+        pass
+
+    @abstractmethod
+    async def change_google_account(
+        self,
+    ) -> BaseResponseDto[UserLoginWithGoogleResponseDto]:
         pass
 
     @abstractmethod
@@ -47,7 +64,9 @@ class IUserService(
         pass
 
     @abstractmethod
-    async def resend_token(self, token: str) -> BaseResponseDto[bool]:
+    async def resend_token(
+        self, token: str
+    ) -> BaseResponseDto[UserResendTokenResponseDto]:
         pass
 
     @abstractmethod
@@ -72,6 +91,14 @@ class IUserService(
 
     @abstractmethod
     async def update_many(self, data: UserUpdateUsersDto) -> BaseResponseDto[bool]:
+        pass
+
+    @abstractmethod
+    async def suspend(self, user_id: int) -> BaseResponseDto[bool]:
+        pass
+
+    @abstractmethod
+    async def unsuspend(self, user_id: int) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod

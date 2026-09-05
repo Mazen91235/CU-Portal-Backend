@@ -76,7 +76,7 @@ class FacultyService(IFacultyService):
                 level="error",
                 code=500,
                 message="An error occurred while finding faculty",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="FacultyService",
             )
             return BaseResponseDto(
@@ -129,7 +129,7 @@ class FacultyService(IFacultyService):
                     message=result.message,
                 )
             faculties = result.data
-            return BaseResponseDto(success=True, data=faculties)
+            return BaseResponseDto(success=True, data=faculties, next_page=result.next_page)
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -137,7 +137,7 @@ class FacultyService(IFacultyService):
                 level="error",
                 code=500,
                 message="An error occurred while finding faculties",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="FacultyService",
             )
             return BaseResponseDto(
@@ -218,7 +218,7 @@ class FacultyService(IFacultyService):
                 level="error",
                 code=500,
                 message="An error occurred while creating faculty",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="FacultyService",
             )
             return BaseResponseDto(
@@ -329,7 +329,7 @@ class FacultyService(IFacultyService):
                 level="error",
                 code=500,
                 message="An error occurred while updating faculty",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="FacultyService",
             )
             return BaseResponseDto(
@@ -413,7 +413,7 @@ class FacultyService(IFacultyService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting faculty",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="FacultyService",
             )
             return BaseResponseDto(

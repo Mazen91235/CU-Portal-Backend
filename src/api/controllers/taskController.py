@@ -1,11 +1,10 @@
+from typing import cast
 from core.iControllers.iTaskController import ITaskController
 from core.iServices.iTaskService import ITaskService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
-from core.utils.parser import Parser
-import json
 
 # Entities & DTOs
 from core.entities.task import Task
@@ -16,7 +15,6 @@ from core.dtos.taskDtos import (
     TaskSearchDto,
     TaskDeleteDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class TaskController(ITaskController):
@@ -25,18 +23,10 @@ class TaskController(ITaskController):
         self.logger = logger
 
     # CRUD Functions
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         try:
-            task_id = request.path_params.get("task_id")
-            if not task_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Task ID is required",
-                )
-
             entity_search_dto = Generator[TaskSearchDto].generate(
-                TaskSearchDto, {"id": int(task_id)}
+                TaskSearchDto, {"id": id}
             )
 
             response = await self.task_service.find_one(
@@ -47,6 +37,7 @@ class TaskController(ITaskController):
                     "faculty",
                     "department",
                     "year",
+                    "attachments",
                 ],
             )
 
@@ -89,7 +80,7 @@ class TaskController(ITaskController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="TaskController",
             )
             return ResponseHandler.generate_response(
@@ -98,12 +89,8 @@ class TaskController(ITaskController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def find(self, request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[TaskSearchDto],
-            )
             entity_search_dto = Generator[TaskSearchDto].generate_from_query(
                 TaskSearchDto, query
             )
@@ -140,29 +127,15 @@ class TaskController(ITaskController):
 
             tasks = response.data
 
-            if not tasks:
-                await self.logger.log(
-                    action="Find",
-                    entity="Task",
-                    level="info",
-                    code=404,
-                    message="Tasks not found",
-                    source="TaskController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Tasks not found",
-                )
-
             tasks_mapped = Mapper[Task, TaskResponseDto].map_list(
-                tasks, TaskResponseDto, True
+                tasks or [], TaskResponseDto, True
             )
 
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 data=tasks_mapped,
+                next_page=response.next_page,
             )
 
         except Exception as e:
@@ -172,7 +145,7 @@ class TaskController(ITaskController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="TaskController",
             )
             return ResponseHandler.generate_response(
@@ -181,11 +154,9 @@ class TaskController(ITaskController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def create(self, request):
+    async def create(self, request, data):
         try:
             await self.task_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[TaskCreateDto].generate(TaskCreateDto, payload)
             task = Mapper[TaskCreateDto, Task].map(data, Task)
 
             response = await self.task_service.create(task)
@@ -236,7 +207,7 @@ class TaskController(ITaskController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="TaskController",
             )
             return ResponseHandler.generate_response(
@@ -245,23 +216,11 @@ class TaskController(ITaskController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update(self, request):
+    async def update(self, request, id, data):
         try:
             await self.task_service.begin_transaction()
-            task_id = request.path_params.get("task_id")
-
-            if not task_id:
-                await self.task_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Task ID is required",
-                )
-
-            payload = await request.json()
-            payload["id"] = int(task_id)
-            data = Generator[TaskUpdateDto].generate(TaskUpdateDto, payload)
-            task = Mapper[TaskUpdateDto, Task].map(data, Task)
+            task = cast(Task, Mapper[TaskUpdateDto, Task].map(data, Task))
+            task.id = id
 
             response = await self.task_service.update(task)
 
@@ -310,7 +269,7 @@ class TaskController(ITaskController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="TaskController",
             )
             return ResponseHandler.generate_response(
@@ -319,23 +278,10 @@ class TaskController(ITaskController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def delete(self, request):
+    async def delete(self, request, id):
         try:
             await self.task_service.begin_transaction()
-
-            task_id = request.path_params.get("task_id")
-
-            if not task_id:
-                await self.task_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Task ID is required",
-                )
-
-            data = Generator[TaskDeleteDto].generate(
-                TaskDeleteDto, {"id": int(task_id)}
-            )
+            data = Generator[TaskDeleteDto].generate(TaskDeleteDto, {"id": id})
             entity = Mapper[TaskDeleteDto, Task].map(data, Task)
 
             response = await self.task_service.delete(entity)
@@ -363,7 +309,7 @@ class TaskController(ITaskController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="TaskController",
             )
             return ResponseHandler.generate_response(

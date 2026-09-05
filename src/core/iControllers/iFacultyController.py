@@ -1,7 +1,8 @@
-from abc import abstractmethod
-from fastapi import Request, Response
 from core.iControllers.bases.iCrudController import ICrudController
+from core.dtos.facultyDtos import FacultyCreateDto, FacultyUpdateDto, FacultySearchDto
 
 
-class IFacultyController(ICrudController):
+class IFacultyController(
+    ICrudController[FacultyCreateDto, FacultyUpdateDto, FacultySearchDto]
+):
     pass

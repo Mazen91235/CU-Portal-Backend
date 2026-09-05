@@ -1,18 +1,26 @@
 from fastapi import APIRouter, Request, Depends
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iExamController import IExamController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.examDtos import ExamResponseDto
+from core.dtos.examDtos import (
+    ExamCreateDto,
+    ExamResponseDto,
+    ExamUpdateDto,
+    ExamSearchDto,
+)
+from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_exam_user_router(
     controller_provider,
     auth_middleware_provider,
     validation_middleware_provider,
-    rate_limit_provider,
 ):
-    router = APIRouter(prefix="/exams", tags=["User Exams"])
+    router = APIRouter(prefix="/exams", tags=["User Exams"], route_class=CustomRoute)
 
     def _get_controller() -> IExamController:
         return controller_provider()
@@ -26,8 +34,9 @@ def create_exam_user_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     async def _is_ready(
         request: Request,
@@ -53,10 +62,12 @@ def create_exam_user_router(
         summary="Find Exam",
         description="Find a specific exam by its ID if enrolled in the subject",
     )
-    async def find_one(
-        request: Request, controller: IExamController = Depends(_get_controller)
+    async def find_one_exam(
+        exam_id: int,
+        request: Request,
+        controller: IExamController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=exam_id)
 
     @router.get(
         "/",
@@ -70,10 +81,14 @@ def create_exam_user_router(
         summary="Find Exams",
         description="Find all exams for the currently logged-in user based on enrolled subjects",
     )
-    async def find(
-        request: Request, controller: IExamController = Depends(_get_controller)
+    async def find_exams(
+        request: Request,
+        query: QueryModel[ExamSearchDto] = Depends(
+            Parser.parse_query(QueryModel[ExamSearchDto])
+        ),
+        controller: IExamController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     return router
 
@@ -81,7 +96,7 @@ def create_exam_user_router(
 def create_exam_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/exams", tags=["Admin Exams"])
+    router = APIRouter(prefix="/exams", tags=["Admin Exams"], route_class=CustomRoute)
 
     def _get_controller() -> IExamController:
         return controller_provider()
@@ -95,8 +110,9 @@ def create_exam_admin_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     async def _is_ready(
         request: Request,
@@ -143,10 +159,12 @@ def create_exam_admin_router(
         summary="Find Exam",
         description="Find an exam by its ID (Admin View)",
     )
-    async def find_one(
-        request: Request, controller: IExamController = Depends(_get_controller)
+    async def find_one_exam(
+        exam_id: int,
+        request: Request,
+        controller: IExamController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=exam_id)
 
     @router.get(
         "/",
@@ -161,16 +179,20 @@ def create_exam_admin_router(
         summary="Find Exams",
         description="Find exams based on query parameters (Admin View)",
     )
-    async def find(
-        request: Request, controller: IExamController = Depends(_get_controller)
+    async def find_exams(
+        request: Request,
+        query: QueryModel[ExamSearchDto] = Depends(
+            Parser.parse_query(QueryModel[ExamSearchDto])
+        ),
+        controller: IExamController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     @router.post(
         "/",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("Manage Exams")),
+            Depends(_is_authorized("Add Exams")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
             Depends(_validate("name", "deadline", "subject_id")),
@@ -180,16 +202,18 @@ def create_exam_admin_router(
         summary="Create Exam",
         description="Create a new exam for a specific subject",
     )
-    async def create(
-        request: Request, controller: IExamController = Depends(_get_controller)
+    async def create_exam(
+        data: ExamCreateDto,
+        request: Request,
+        controller: IExamController = Depends(_get_controller),
     ):
-        return await controller.create(request)
+        return await controller.create(request, data=data)
 
     @router.patch(
         "/{exam_id}",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("Manage Exams")),
+            Depends(_is_authorized("Edit Exams")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
             Depends(_validate("name", "deadline", "subject_id")),
@@ -199,16 +223,19 @@ def create_exam_admin_router(
         summary="Update Exam",
         description="Update an existing exam by its ID",
     )
-    async def update(
-        request: Request, controller: IExamController = Depends(_get_controller)
+    async def update_exam(
+        exam_id: int,
+        data: ExamUpdateDto,
+        request: Request,
+        controller: IExamController = Depends(_get_controller),
     ):
-        return await controller.update(request)
+        return await controller.update(request, id=exam_id, data=data)
 
     @router.delete(
         "/{exam_id}",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("Manage Exams")),
+            Depends(_is_authorized("Delete Exams")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
         ],
@@ -217,9 +244,11 @@ def create_exam_admin_router(
         summary="Delete Exam",
         description="Delete a exam by its ID",
     )
-    async def delete(
-        request: Request, controller: IExamController = Depends(_get_controller)
+    async def delete_exam(
+        exam_id: int,
+        request: Request,
+        controller: IExamController = Depends(_get_controller),
     ):
-        return await controller.delete(request)
+        return await controller.delete(request, id=exam_id)
 
     return router

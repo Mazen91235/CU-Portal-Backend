@@ -36,19 +36,13 @@ class Task(Base):
     # Columns
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
-    type: Mapped[Optional[str]] = mapped_column(
+    task_type: Mapped[Optional[str]] = mapped_column(
         String(10), nullable=True
     )  # e.g., "Exam", "Assignment", "Project", "Task"
-    urls: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
-    links: Mapped[dict[str, str]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True, default=dict
-    )
-    url: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
-    )
+    )  # includes urls, links, and other additional details
     deadline: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
     due_date: Mapped[Optional[datetime]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
@@ -106,26 +100,19 @@ class Task(Base):
         nullable=False,
     )
     author: Mapped["User"] = relationship("User", back_populates="tasks")
-    attachments: Mapped[list["Attachment"]] = relationship(
-        "Attachment", back_populates="task", cascade="all, delete-orphan"
+    attachments: Mapped[set["Attachment"]] = relationship(
+        "Attachment",
+        back_populates="task",
+        cascade="save-update, merge",
+        collection_class=set,
     )
 
     # Indexes
     __table_args__ = (
         # Composite Indexes
         Index(
-            "idx_task_type_faculty_department_year_subject_due_date_name",
-            "type",
-            "faculty_id",
-            "department_id",
-            "year_id",
-            "subject_id",
-            "due_date",
-            "name",
-        ),
-        Index(
-            "idx_task_type_faculty_department_year_name",
-            "type",
+            "idx_task_task_type_faculty_department_year_name",
+            "task_type",
             "faculty_id",
             "department_id",
             "year_id",

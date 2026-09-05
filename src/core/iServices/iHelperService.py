@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, Any, Type
 from core.entities.user import User
 from core.entities.notification import Notification
+from core.entities.attachment import Attachment
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import FetchedModel, DownloadedFileModel, FileModel
 
@@ -25,11 +26,21 @@ class IHelperService(ABC, Generic[U]):
     @abstractmethod
     async def get_logged_in_user_permissions(
         self,
-    ) -> BaseResponseDto[list[str]]:
+    ) -> BaseResponseDto[set[str]]:
         pass
 
     @abstractmethod
     async def verify_restricted_access(
+        self,
+        faculty_id: int | None = None,
+        department_id: int | None = None,
+        year_id: int | None = None,
+        subject_id: int | None = None,
+    ) -> BaseResponseDto[bool]:
+        pass
+
+    @abstractmethod
+    async def verify_academic_data(
         self,
         faculty_id: int | None = None,
         department_id: int | None = None,
@@ -78,11 +89,14 @@ class IHelperService(ABC, Generic[U]):
     @abstractmethod
     async def send_notification(
         self,
-        notification_type: Notification.Type,
+        notification_type: Notification.NotificationType,
         parent_id: int,
-        user_ids: list[int] | None,
         content: str,
         url: str | None = None,
+        faculty_id: int | None = None,
+        department_id: int | None = None,
+        year_id: int | None = None,
+        subject_id: int | None = None,
     ) -> BaseResponseDto[bool]:
         pass
 
@@ -197,4 +211,26 @@ class IHelperService(ABC, Generic[U]):
         new_name: str | None = None,
         max_retries: int = 6,
     ) -> BaseResponseDto[FileModel]:
+        pass
+
+    # Attachment Functions
+    @abstractmethod
+    async def create_attachment(
+        self,
+        is_file: bool,
+        url: str,
+        author_id: int,
+        source_name: str,
+        source_id: int,
+        link_title: str | None = None,
+        fetched: bool | None = None,
+    ) -> BaseResponseDto[Attachment]:
+        pass
+
+    @abstractmethod
+    async def delete_attachment(
+        self,
+        attachment_id: int | None = None,
+        attachment: Attachment | None = None,
+    ) -> BaseResponseDto:
         pass

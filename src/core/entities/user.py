@@ -1,5 +1,6 @@
 from __future__ import annotations
 from enum import Enum
+
 from .base import (
     Base,
     Integer,
@@ -16,6 +17,8 @@ from .base import (
     Optional,
     TimezoneHandler,
     TypedDict,
+    AssociationProxy,
+    association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
@@ -32,11 +35,15 @@ if TYPE_CHECKING:
     from .task import Task
     from .announcement import Announcement
     from .notification import Notification
+    from .userNotification import UserNotification
     from .log import Log
     from .subject import Subject
+    from .userSubjectLink import UserSubjectLink
     from .requestLimit import RequestLimit
     from .event import Event
+    from .userEvent import UserEvent
     from .note import Note
+    from .attachment import Attachment
 
 
 class User(Base):
@@ -47,10 +54,9 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(60), nullable=False)
     email: Mapped[str] = mapped_column(String(100), nullable=False)
-    password: Mapped[str] = mapped_column(String(255), nullable=True)
     phone: Mapped[str] = mapped_column(String(13), nullable=False)
     gender: Mapped[str] = mapped_column(String(6), nullable=False)
-    type: Mapped[Optional["User.Type"]] = mapped_column(
+    study_type: Mapped[Optional["User.StudyType"]] = mapped_column(
         String(12), nullable=True
     )  # Mainstream, Credit
     section: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -67,7 +73,7 @@ class User(Base):
     google_email: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     google_avatar: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     google_refresh_token: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True
+        String(500), nullable=True
     )
     ips: Mapped[list[str]] = mapped_column(
         MutableList.as_mutable(JSON), nullable=True, default=list
@@ -92,14 +98,6 @@ class User(Base):
 
     # Not Mapped
     @property
-    def url(self) -> Optional[str]:
-        return getattr(self, "_url", None)
-
-    @url.setter
-    def url(self, value: Optional[str]) -> None:
-        setattr(self, "_url", value)
-
-    @property
     def google_details_token(self) -> Optional[str]:
         return getattr(self, "_google_details_token", None)
 
@@ -108,6 +106,16 @@ class User(Base):
         setattr(self, "_google_details_token", value)
 
     # Relationships
+    avatar_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("attachments.id", ondelete="SET NULL", name="fk_attachment_user"),
+        nullable=True,
+    )
+    avatar: Mapped[Optional["Attachment"]] = relationship(
+        "Attachment",
+        back_populates="user",
+        foreign_keys=[avatar_id],
+    )
     year_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("years.id", ondelete="CASCADE", name="fk_year_user"),
@@ -146,62 +154,90 @@ class User(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
-    materials: Mapped[list["Material"]] = relationship(
-        "Material", back_populates="author", cascade="all, delete-orphan"
+    materials: Mapped[set["Material"]] = relationship(
+        "Material",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
-    tasks: Mapped[list["Task"]] = relationship(
-        "Task", back_populates="author", cascade="all, delete-orphan"
+    tasks: Mapped[set["Task"]] = relationship(
+        "Task",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
-    announcements: Mapped[list["Announcement"]] = relationship(
-        "Announcement", back_populates="author", cascade="all, delete-orphan"
+    announcements: Mapped[set["Announcement"]] = relationship(
+        "Announcement",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
-    notifications: Mapped[list["Notification"]] = relationship(
-        "Notification",
-        secondary="user_notifications",
-        back_populates="users",
-        cascade="all, delete",
+    notifications: AssociationProxy[set["Notification"]] = association_proxy(
+        "user_notifications",
+        "notification",
+        creator=lambda notification: __import__(
+            "core.entities.userNotification", fromlist=["UserNotification"]
+        ).UserNotification(notification=notification),
     )
-    events: Mapped[list["Event"]] = relationship(
-        "Event", back_populates="author", cascade="all, delete-orphan"
+    user_notifications: Mapped[set["UserNotification"]] = relationship(
+        "UserNotification",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
-    going_events: Mapped[list["Event"]] = relationship(
+    events: Mapped[set["Event"]] = relationship(
         "Event",
-        secondary="user_events",
-        back_populates="attendees",
-        cascade="all, delete",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
-    notes: Mapped[list["Note"]] = relationship(
-        "Note", back_populates="author", cascade="all, delete-orphan"
+    going_events: AssociationProxy[set["Event"]] = association_proxy(
+        "user_events",
+        "event",
+        creator=lambda event: __import__(
+            "core.entities.userEvent", fromlist=["UserEvent"]
+        ).UserEvent(event=event),
     )
-    # marks: Mapped[list["Mark"]] = relationship(
-    #     "Mark", back_populates="author", cascade="all, delete-orphan"
-    # )
-    # roadmaps: Mapped[list["Roadmap"]] = relationship(
-    #     "Roadmap", back_populates="author", cascade="all, delete-orphan"
-    # )
-    # questions: Mapped[list["Question"]] = relationship(
-    #     "Question", back_populates="author", cascade="all, delete-orphan"
-    # )
-    # answers: Mapped[list["Answer"]] = relationship(
-    #     "Answer", back_populates="author", cascade="all, delete-orphan"
-    # )
-    # timetables: Mapped[list["Timetable"]] = relationship(
-    #     "Timetable", back_populates="author", cascade="all, delete-orphan"
-    # )
-    # reviews: Mapped[list["Review"]] = relationship(
-    #     "Review", back_populates="author", cascade="all, delete-orphan"
-    # )
-    logs: Mapped[list["Log"]] = relationship(
-        "Log", back_populates="user", cascade="all, delete-orphan"
+    user_events: Mapped[set["UserEvent"]] = relationship(
+        "UserEvent",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
-    subjects: Mapped[list["Subject"]] = relationship(
-        "Subject",
-        secondary="user_subject_links",
-        back_populates="users",
-        cascade="all, delete",
+    notes: Mapped[set["Note"]] = relationship(
+        "Note",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
-    request_limits: Mapped[list["RequestLimit"]] = relationship(
-        "RequestLimit", back_populates="user", cascade="all, delete-orphan"
+    logs: Mapped[set["Log"]] = relationship(
+        "Log", back_populates="user", cascade="all, delete-orphan", collection_class=set
+    )
+    subjects: AssociationProxy[set["Subject"]] = association_proxy(
+        "user_subject_links",
+        "subject",
+        creator=lambda subject: __import__(
+            "core.entities.userSubjectLink", fromlist=["UserSubjectLink"]
+        ).UserSubjectLink(subject=subject),
+    )
+    user_subject_links: Mapped[set["UserSubjectLink"]] = relationship(
+        "UserSubjectLink",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        collection_class=set,
+    )
+    request_limits: Mapped[set["RequestLimit"]] = relationship(
+        "RequestLimit",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        collection_class=set,
+    )
+    attachments: Mapped[set["Attachment"]] = relationship(
+        "Attachment",
+        back_populates="author",
+        cascade="all, delete-orphan",
+        foreign_keys="Attachment.author_id",
+        collection_class=set,
     )
 
     # Indexes
@@ -222,10 +258,10 @@ class User(Base):
     )
 
     # Validation
-    @validates("type")
-    def validate_type(self, key, value) -> int:
-        if value not in self.Type.__dict__.values():
-            raise ValueError("Invalid user type")
+    @validates("study_type")
+    def validate_study_type(self, key, value) -> int:
+        if value not in self.StudyType.__dict__.values():
+            raise ValueError("Invalid study type")
         return value
 
     # Attributes
@@ -240,7 +276,7 @@ class User(Base):
     class VerificationToken:
         EXPIRE_HOURS = 1
 
-    class Type(str, Enum):
+    class StudyType(str, Enum):
         MAINSTREAM = "Mainstream"
         CREDIT = "Credit"
 

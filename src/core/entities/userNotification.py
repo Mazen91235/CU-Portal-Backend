@@ -49,9 +49,7 @@ class UserNotification(Base):
         ForeignKey("users.id", ondelete="CASCADE", name="fk_user_notification"),
         nullable=False,
     )
-    user: Mapped["User"] = relationship(
-        "User", backref="user_notifications_associations"
-    )
+    user: Mapped["User"] = relationship("User", back_populates="user_notifications")
     notification_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey(
@@ -62,7 +60,7 @@ class UserNotification(Base):
         nullable=False,
     )
     notification: Mapped["Notification"] = relationship(
-        "Notification", backref="user_notifications_associations"
+        "Notification", back_populates="user_notifications"
     )
 
     # Indexes

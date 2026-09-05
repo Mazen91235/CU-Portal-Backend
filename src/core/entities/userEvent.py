@@ -48,7 +48,7 @@ class UserEvent(Base):
         ForeignKey("users.id", ondelete="CASCADE", name="fk_user_event"),
         nullable=False,
     )
-    user: Mapped["User"] = relationship("User", backref="user_events_associations")
+    user: Mapped["User"] = relationship("User", back_populates="user_events")
     event_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey(
@@ -58,7 +58,7 @@ class UserEvent(Base):
         ),
         nullable=False,
     )
-    event: Mapped["Event"] = relationship("Event", backref="user_events_associations")
+    event: Mapped["Event"] = relationship("Event", back_populates="user_events")
 
     # Indexes
     __table_args__ = (
