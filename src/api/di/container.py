@@ -715,3 +715,17 @@ class Container(containers.DeclarativeContainer):
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
+
+    event_user_routes = providers.Factory(
+        create_event_user_router,
+        controller_provider=event_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    event_admin_routes = providers.Factory(
+        create_event_admin_router,
+        controller_provider=event_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
