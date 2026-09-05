@@ -36,6 +36,7 @@ from core.dtos.taskDtos import *
 from core.dtos.userDtos import *
 from core.dtos.userNotificationDtos import *
 from core.dtos.userSubjectLinkDtos import *
+from core.dtos.weekDtos import *
 from core.dtos.yearDtos import *
 from core.entities.department import Department
 from core.entities.faculty import Faculty
@@ -44,6 +45,7 @@ from core.entities.subject import Subject
 from core.entities.task import Task
 from core.entities.announcement import Announcement
 from core.entities.user import User
+from core.entities.week import Week
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -61,6 +63,7 @@ def rebuild_response_dtos() -> None:
         Announcement=Announcement,
         Notification=Notification,
         User=User,
+        Week=Week,
     )
     for dto in response_dtos:
         dto.model_rebuild(_types_namespace=dto_namespace)
@@ -132,6 +135,8 @@ def create_app() -> FastAPI:
     notification_user_routes = container.notification_user_routes()
     subject_user_routes = container.subject_user_routes()
     subject_admin_routes = container.subject_admin_routes()
+    week_user_routes = container.week_user_routes()
+    week_admin_routes = container.week_admin_routes()
     main_user_routes.include_router(user_user_routes)
     main_user_routes.include_router(material_user_routes)
     main_user_routes.include_router(notification_user_routes)
@@ -140,6 +145,7 @@ def create_app() -> FastAPI:
     main_user_routes.include_router(task_user_routes)
     main_user_routes.include_router(exam_user_routes)
     main_user_routes.include_router(subject_user_routes)
+    main_user_routes.include_router(week_user_routes)
     main_user_routes.include_router(faculty_user_routes)
     main_user_routes.include_router(department_user_routes)
     main_user_routes.include_router(year_user_routes)
@@ -155,6 +161,7 @@ def create_app() -> FastAPI:
     main_admin_routes.include_router(material_admin_routes)
     main_admin_routes.include_router(message_admin_routes)
     main_admin_routes.include_router(subject_admin_routes)
+    main_admin_routes.include_router(week_admin_routes)
     app.include_router(main_user_routes)
     app.include_router(main_admin_routes)
     app.include_router(auth_routes)

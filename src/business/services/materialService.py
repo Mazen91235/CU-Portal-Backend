@@ -7,6 +7,7 @@ from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.material import Material
 from core.entities.subject import Subject
 from core.entities.user import User
+from core.entities.week import Week
 from core.entities.notification import Notification
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import FetchedModel
@@ -22,10 +23,12 @@ class MaterialService(IMaterialService):
         user_repository: IBaseRepository[User],
         logger: IBaseLogger,
         helper_service: IHelperService,
+        week_repository: IBaseRepository[Week] | None = None,
     ):
         self.material_repository = material_repository
         self.subject_repository = subject_repository
         self.user_repository = user_repository
+        self.week_repository = week_repository
         self.logger = logger
         self.helper_service = helper_service
 
@@ -257,6 +260,33 @@ class MaterialService(IMaterialService):
                         message=f"Parent material with ID {data.parent_id} not found",
                     )
                 parent_id = parent_material.id
+            if getattr(data, "week_id", None) and self.week_repository:
+                week_response = await self.week_repository.find_one(
+                    Week.id == data.week_id
+                )
+                if not week_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=week_response.code,
+                        data=None,
+                        message=week_response.message,
+                    )
+                if not week_response.data:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Week with ID {data.week_id} not found",
+                        details={"error": "Week not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Week with ID {data.week_id} not found",
+                    )
             subject_id = None
             if not data.subject_id:
                 await self.logger.log(
@@ -2017,6 +2047,7 @@ class MaterialService(IMaterialService):
                 subject_id=existing_material.subject_id,
                 parent_id=destination_id,
                 author_id=author_id,
+                week_id=existing_material.week_id,
             )
             unique_name_response = await self._generate_unique_name(
                 new_material.name, new_material.subject_id, new_material.parent_id

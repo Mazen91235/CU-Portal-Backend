@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from .subjectDtos import SubjectResponseDto
     from .userDtos import UserResponseDto
+    from .weekDtos import WeekResponseDto
     from .attachmentDtos import AttachmentResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
@@ -24,6 +25,9 @@ class MaterialCreateDto(BaseModel):
     subject_id: int = Field(..., description="ID of the associated subject")
     parent_id: int | None = Field(
         default=None, description="ID of the parent material (for hierarchy)"
+    )
+    week_id: int | None = Field(
+        default=None, description="ID of the associated week"
     )
     details: dict | None = Field(
         default=None, description="Additional metadata about the material (like url)"
@@ -68,6 +72,9 @@ class MaterialResponseDto(BaseModel):
     attachment: AttachmentResponseDto | None = Field(
         default=None, description="Attachment associated with the material"
     )
+    week: WeekResponseDto | None = Field(
+        default=None, description="Week associated with the material"
+    )
 
     # Pydantic Configuration
     model_config = {
@@ -80,6 +87,7 @@ class MaterialUpdateDto(BaseModel):
     material_type: str = Field(
         ..., max_length=30, description="Updated type of the material"
     )
+    week_id: int | None = Field(default=None, description="ID of the associated week")
     details: dict | None = Field(
         default=None, description="Updated additional metadata about the material (like url)"
     )
@@ -103,6 +111,9 @@ class MaterialSearchDto(BaseSearchDto):
     )
     parent_id: int | None = Field(
         default=None, description="ID of the parent material to filter by"
+    )
+    week_id: int | None = Field(
+        default=None, description="ID of the associated week to filter by"
     )
     created_at_from: datetime | None = Field(
         default=None, description="Filter materials created after this date"
