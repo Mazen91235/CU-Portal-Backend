@@ -80,3 +80,4 @@ class Notification(Base):
         EXAM = "exam"
         ANNOUNCEMENT = "announcement"
         MATERIAL = "material"
+        EVENT = "event"

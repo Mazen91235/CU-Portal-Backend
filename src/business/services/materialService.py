@@ -274,12 +274,8 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Subject ID is required for material creation",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["user_subject_links.user"]
-            )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == data.subject_id,
-                dynamic_includes,
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -410,7 +406,6 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"Week with ID {data.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
                     )
-            user_ids = [user.id for user in subject.users] if subject.users else []
             data.author_id = logged_in_user.id
             data.details = data.details or {}
             unique_name_response = await self._generate_unique_name(
@@ -514,9 +509,9 @@ class MaterialService(IMaterialService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.MATERIAL,
                 created_material.id,
-                user_ids,
                 f"New material '{created_material.name}' has been created for subject {subject.name}.",
                 share_link,
+                subject_id=created_material.subject_id,
             )
             await self.logger.log(
                 action="Create",
@@ -635,9 +630,6 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Material with ID {data.id} not found",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["user_subject_links.user"]
-            )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == existing_material.subject_id, dynamic_includes
             )
@@ -806,7 +798,6 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"You do not have the necessary permissions to update this material.",
                 )
-            user_ids = [user.id for user in subject.users] if subject.users else []
             if existing_material.author_id != logged_in_user.id:
                 if "Manage All Materials" not in logged_in_user_permissions:
                     await self.logger.log(
@@ -939,9 +930,9 @@ class MaterialService(IMaterialService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.MATERIAL,
                 updated_material.id,
-                user_ids,
                 f"Material '{updated_material.name}' has been updated for subject {subject.name}.",
                 share_link,
+                subject_id=updated_material.subject_id,
             )
             await self.logger.log(
                 action="Update",
@@ -1604,11 +1595,8 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Invalid URL format: {url}",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["user_subject_links.user"]
-            )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == subject_id, dynamic_includes
+                Subject.id == subject_id
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -1634,7 +1622,6 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Subject with ID {subject_id} not found",
                 )
-            user_ids = [user.id for user in subject.users] if subject.users else []
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -1823,9 +1810,9 @@ class MaterialService(IMaterialService):
             await self.helper_service.send_notification(
                 notification_type=Notification.NotificationType.MATERIAL,
                 parent_id=created_data.id,
-                user_ids=user_ids,
                 content=f"New material '{created_data.name}' has been fetched from drive to subject '{subject.name}'",
                 url=share_link,
+                subject_id=created_data.subject_id, 
             )
             await self.logger.log(
                 action="FetchMaterialsFromDrive",

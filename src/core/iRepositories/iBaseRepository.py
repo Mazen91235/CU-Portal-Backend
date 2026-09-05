@@ -15,6 +15,7 @@ class IBaseRepository(ABC, Generic[T]):
         selects: List[Any] = [],
         order_by: List[Any] = [],
         descending: bool = False,
+        session: AsyncSession | None = None,
     ) -> BaseResponseDto[T]:
         pass
 
@@ -28,11 +29,14 @@ class IBaseRepository(ABC, Generic[T]):
         descending: bool = False,
         page: int = 1,
         limit: int = 50,
+        session: AsyncSession | None = None,
     ) -> BaseResponseDto[List[T]]:
         pass
 
     @abstractmethod
-    async def count(self, predicate: Any = None) -> BaseResponseDto[int]:
+    async def count(
+        self, predicate: Any = None, session: AsyncSession | None = None
+    ) -> BaseResponseDto[int]:
         pass
 
     @abstractmethod
@@ -40,6 +44,7 @@ class IBaseRepository(ABC, Generic[T]):
         self,
         predicate: Any = None,
         column: Any = None,
+        session: AsyncSession | None = None,
     ) -> BaseResponseDto[List[Any]]:
         pass
 
@@ -50,33 +55,37 @@ class IBaseRepository(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    async def update(self, entity: T, updates: List[str] = []) -> BaseResponseDto[T]:
+    async def update(
+        self, entity: T, updates: List[str] = [], session: AsyncSession | None = None
+    ) -> BaseResponseDto[T]:
         pass
 
     @abstractmethod
-    async def delete(self, entity: T) -> BaseResponseDto[bool]:
+    async def delete(
+        self, entity: T, session: AsyncSession | None = None
+    ) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod
     async def execute_sql(
-        self, command: str, params: dict = {}
+        self, command: str, params: dict = {}, session: AsyncSession | None = None
     ) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod
     async def execute_stored_function(
-        self, function_name: str, params: dict = {}
+        self, function_name: str, params: dict = {}, session: AsyncSession | None = None
     ) -> BaseResponseDto[Any]:
         pass
 
     @abstractmethod
-    async def begin_transaction(self) -> None:
+    async def begin_transaction(self, session: AsyncSession | None = None) -> None:
         pass
 
     @abstractmethod
-    async def commit_transaction(self) -> None:
+    async def commit_transaction(self, session: AsyncSession | None = None) -> None:
         pass
 
     @abstractmethod
-    async def rollback_transaction(self) -> None:
+    async def rollback_transaction(self, session: AsyncSession | None = None) -> None:
         pass

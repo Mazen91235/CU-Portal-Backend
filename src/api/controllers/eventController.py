@@ -1,3 +1,4 @@
+from typing import cast
 from core.iControllers.iEventController import IEventController
 from core.iServices.iEventService import IEventService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -10,13 +11,11 @@ from core.utils.parser import Parser
 from core.entities.event import Event
 from core.dtos.eventDtos import (
     EventCreateDto,
-    EventUpdateDto,
     EventResponseDto,
-    EventSearchDto,
+    EventUpdateDto,
     EventDeleteDto,
+    EventSearchDto,
 )
-from core.dtos.userEventDtos import (UserEventRegisterDto,UserEventUnregisterDto)
-from core.models.queryModel import QueryModel
 
 
 class EventController(IEventController):
@@ -25,17 +24,10 @@ class EventController(IEventController):
         self.logger = logger
 
     # CRUD Functions
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         try:
-            event_id = request.path_params.get("event_id")
-            if not event_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Event ID is required",
-                )
             entity_search_dto = Generator[EventSearchDto].generate(
-                EventSearchDto, {int(event_id)}
+                EventSearchDto, {"id": id}
             )
             response = await self.event_service.find_one(
                 entity_search_dto,
@@ -45,7 +37,9 @@ class EventController(IEventController):
                     "department",
                     "year",
                     "event_organizer",
-                    "attendees"
+                    "attendees",
+                    "logo",
+                    "attachments",
                 ],
             )
             if not response.success:
@@ -69,7 +63,9 @@ class EventController(IEventController):
                     code=404,
                     message="Event not found",
                 )
-            event_mapped = Mapper[Event, EventResponseDto].map(event, EventResponseDto, True)
+            event_mapped = Mapper[Event, EventResponseDto].map(
+                event, EventResponseDto, True
+            )
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
@@ -91,12 +87,8 @@ class EventController(IEventController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def find(self, request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[EventSearchDto],
-            )
             entity_search_dto = Generator[EventSearchDto].generate_from_query(
                 EventSearchDto, query
             )
@@ -132,23 +124,8 @@ class EventController(IEventController):
 
             events = response.data
 
-            if not events:
-                await self.logger.log(
-                    action="Find",
-                    entity="Event",
-                    level="info",
-                    code=404,
-                    message="Events not found",
-                    source="EventController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Events not found",
-                )
-
             events_mapped = Mapper[Event, EventResponseDto].map_list(
-                events, EventResponseDto, True
+                events or [], EventResponseDto, True
             )
 
             return ResponseHandler.generate_response(
@@ -172,11 +149,9 @@ class EventController(IEventController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def create(self, request):
+    async def create(self, request, data):
         try:
             await self.event_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[EventCreateDto].generate(EventCreateDto, payload)
             event = Mapper[EventCreateDto, Event].map(data, Event)
             response = await self.event_service.create(event)
             if not response.success:
@@ -202,16 +177,16 @@ class EventController(IEventController):
                     code=500,
                     message="Failed to create event, Please try again later",
                 )
-                      
+
             event_mapped = Mapper[Event, EventResponseDto].map(
-                            created_event, EventResponseDto, True
-                        )
+                created_event, EventResponseDto, True
+            )
             await self.event_service.commit_transaction()
             return ResponseHandler.generate_response(
-                            success=True,
-                            code=201,
-                            data=event_mapped,
-                        )
+                success=True,
+                code=201,
+                data=event_mapped,
+            )
         except Exception as e:
             await self.event_service.rollback_transaction()
             await self.logger.log(
@@ -229,22 +204,11 @@ class EventController(IEventController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update(self, request):
+    async def update(self, request, id, data):
         try:
             await self.event_service.begin_transaction()
-            event_id = request.path_params.get("event_id")
-            if not event_id:
-                await self.event_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Event ID is required",
-                )
-
-            payload = await request.json()
-            payload["id"] = int(event_id)
-            data = Generator[EventUpdateDto].generate(EventUpdateDto, payload)
-            event = Mapper[EventUpdateDto, Event].map(data, Event)
+            event = cast(Event, Mapper[EventUpdateDto, Event].map(data, Event))
+            event.id = id
             response = await self.event_service.update(event)
             if not response.success:
                 await self.event_service.rollback_transaction()
@@ -269,7 +233,9 @@ class EventController(IEventController):
                     code=500,
                     message="An error occurred while processing the request, please try again later",
                 )
-            event_mapped = Mapper[Event, EventResponseDto].map(event, EventResponseDto, True)
+            event_mapped = Mapper[Event, EventResponseDto].map(
+                event, EventResponseDto, True
+            )
             await self.event_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
@@ -293,26 +259,12 @@ class EventController(IEventController):
                 code=500,
                 message="An error occurred while processing the request, please try again later",
             )
-        
-    async def delete(self, request):
+
+    async def delete(self, request, id):
         try:
             await self.event_service.begin_transaction()
-
-            event_id = request.path_params.get("event_id")
-
-            if not event_id:
-                await self.event_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Event ID is required",
-                )
-
-            data = Generator[EventDeleteDto].generate(
-                EventDeleteDto, {"id": int(event_id)}
-            )
+            data = Generator[EventDeleteDto].generate(EventDeleteDto, {"id": id})
             entity = Mapper[EventDeleteDto, Event].map(data, Event)
-
             response = await self.event_service.delete(entity)
 
             if not response.success:
@@ -348,50 +300,70 @@ class EventController(IEventController):
             )
 
     # Event Specific Functions
-    async def register(self, request):
+    async def register(self, request, data):
         try:
             await self.event_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserEventRegisterDto].generate(UserEventRegisterDto, payload)
-
-            response = await self.event_service.register(data)
+            response = await self.event_service.register(data.event_id)
             if not response.success:
                 await self.event_service.rollback_transaction()
-                return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
+                return ResponseHandler.generate_response(
+                    success=False, code=response.code, message=response.message
+                )
 
             await self.event_service.commit_transaction()
             return ResponseHandler.generate_response(
-                success=True, code=200, message="Registered for event successfully", data=response.data
+                success=True,
+                code=200,
+                message="Registered for event successfully",
+                data=response.data,
             )
         except Exception as e:
             await self.event_service.rollback_transaction()
             await self.logger.log(
-                action="Register", entity="Event", level="error", code=500,
+                action="Register",
+                entity="Event",
+                level="error",
+                code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)}, source="EventController",
+                details={"error": str(e)},
+                source="EventController",
             )
-            return ResponseHandler.generate_response(success=False, code=500, message="An error occurred while processing the request, please try again later")
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
 
-    async def unregister(self, request):
+    async def unregister(self, request, data):
         try:
             await self.event_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserEventUnregisterDto].generate(UserEventUnregisterDto, payload)
-
-            response = await self.event_service.unregister(data)
+            response = await self.event_service.unregister(data.event_id)
             if not response.success:
                 await self.event_service.rollback_transaction()
-                return ResponseHandler.generate_response(success=False, code=response.code, message=response.message)
+                return ResponseHandler.generate_response(
+                    success=False, code=response.code, message=response.message
+                )
 
             await self.event_service.commit_transaction()
             return ResponseHandler.generate_response(
-                success=True, code=200, message="Unregistered from event successfully", data=response.data
+                success=True,
+                code=200,
+                message="Unregistered from event successfully",
+                data=response.data,
             )
         except Exception as e:
             await self.event_service.rollback_transaction()
             await self.logger.log(
-                action="Unregister", entity="Event", level="error", code=500,
+                action="Unregister",
+                entity="Event",
+                level="error",
+                code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)}, source="EventController",
+                details={"error": str(e)},
+                source="EventController",
             )
-            return ResponseHandler.generate_response(success=False, code=500, message="An error occurred while processing the request, please try again later")   
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )

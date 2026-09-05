@@ -46,21 +46,14 @@ class Event(Base):
     end_date: Mapped[Optional[datetime]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
-    url: Mapped[str] = mapped_column(String(255), nullable=False)
     price: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     location_type: Mapped["Event.LocationType"] = mapped_column(
         String(8), nullable=False
     )  # Online, Offline
     location: Mapped[str] = mapped_column(String(255), nullable=False)
-    urls: Mapped[list] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
-    links: Mapped[list[dict[str, str]]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
-    )
+    )  # url, urls, links, etc...
 
     # Timestamps
     created_at: Mapped[Optional[datetime]] = mapped_column(
@@ -113,7 +106,7 @@ class Event(Base):
         "UserEvent",
         back_populates="event",
         cascade="all, delete-orphan",
-        collection_class=set
+        collection_class=set,
     )
     logo_id: Mapped[Optional[int]] = mapped_column(
         Integer,
@@ -128,7 +121,7 @@ class Event(Base):
         back_populates="event",
         cascade="save-update, merge",
         foreign_keys="Attachment.event_id",
-        collection_class=set
+        collection_class=set,
     )
 
     # Indexes

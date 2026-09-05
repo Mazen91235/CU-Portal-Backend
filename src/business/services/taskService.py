@@ -198,11 +198,8 @@ class TaskService(ITaskService):
                     data=None,
                     message="Task with the same name already exists for this subject.",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["user_subject_links.user"]
-            )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id, dynamic_includes
+                Subject.id == data.subject_id
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -228,7 +225,6 @@ class TaskService(ITaskService):
                     data=None,
                     message="Subject not found",
                 )
-            user_ids = [user.id for user in subject.users] if subject.users else []
             if data.url and not Validator.is_valid_external_url(data.url):
                 await self.logger.log(
                     action="Create",
@@ -426,9 +422,9 @@ class TaskService(ITaskService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.TASK,
                 created_task.id,
-                user_ids,
                 f"New task '{created_task.name}' has been created for subject {subject.name}.",
                 share_link,
+                subject_id=created_task.subject_id,
             )
             await self.logger.log(
                 action="Create",
@@ -523,9 +519,6 @@ class TaskService(ITaskService):
                     data=None,
                     message="Another task with the same name already exists for this subject.",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["user_subject_links.user"]
-            )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == data.subject_id, dynamic_includes
             )
@@ -553,7 +546,6 @@ class TaskService(ITaskService):
                     data=None,
                     message="Subject not found",
                 )
-            user_ids = [user.id for user in subject.users] if subject.users else []
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -838,9 +830,9 @@ class TaskService(ITaskService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.TASK,
                 updated_task.id,
-                user_ids,
                 f"Task '{updated_task.name}' has been updated for subject {subject.name}.",
                 share_link,
+                subject_id=updated_task.subject_id,
             )
             await self.logger.log(
                 action="Update",

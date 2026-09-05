@@ -88,9 +88,11 @@ class BaseRepository(IBaseRepository):
         selects=None,
         order_by=None,
         descending=False,
+        session=None,
     ):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             query = select(self._model)
 
             # Handling Predicates
@@ -149,9 +151,11 @@ class BaseRepository(IBaseRepository):
         descending=False,
         page=1,
         limit=50,
+        session=None,
     ):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             query = select(self._model)
 
             # Handling Predicates
@@ -205,9 +209,10 @@ class BaseRepository(IBaseRepository):
                 error=repr(ex),
             )
 
-    async def count(self, predicate=None):
+    async def count(self, predicate=None, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             query = select(func.count(getattr(self._model, "id")))
 
             if predicate is not None:
@@ -243,9 +248,11 @@ class BaseRepository(IBaseRepository):
         self,
         predicate=None,
         column=None,
+        session=None,
     ):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             if column is None:
                 return BaseResponseDto(
                     success=False,
@@ -287,7 +294,7 @@ class BaseRepository(IBaseRepository):
 
     async def create(self, entity, session=None):
         try:
-            if not session:
+            if session is None:
                 session = self._resolve_session()
             session.add(entity)
             await session.flush()
@@ -315,9 +322,10 @@ class BaseRepository(IBaseRepository):
                 code=500,
             )
 
-    async def update(self, entity, updates=None):
+    async def update(self, entity, updates=None, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             # Similar to EF Core's nuclear Clear(), we ensure the instance is merged
             updated_entity = await session.merge(entity)
 
@@ -358,9 +366,10 @@ class BaseRepository(IBaseRepository):
                 error=repr(ex),
             )
 
-    async def delete(self, entity):
+    async def delete(self, entity, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             merged = await session.merge(entity)
             await session.delete(merged)
             await session.flush()
@@ -384,9 +393,10 @@ class BaseRepository(IBaseRepository):
                 error=repr(ex),
             )
 
-    async def execute_sql(self, command, params=None):
+    async def execute_sql(self, command, params=None, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             if self._session_factory is None:
                 await session.execute(text(command), params or {})
                 await session.commit()
@@ -412,9 +422,10 @@ class BaseRepository(IBaseRepository):
                 error=repr(ex),
             )
 
-    async def execute_stored_function(self, function_name, params=None):
+    async def execute_stored_function(self, function_name, params=None, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             if not params:
                 params = {}
             param_placeholders = ", ".join([f":{key}" for key in params.keys()])
@@ -444,9 +455,10 @@ class BaseRepository(IBaseRepository):
                 error=repr(ex),
             )
 
-    async def begin_transaction(self):
+    async def begin_transaction(self, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             if session.in_transaction():
                 return
             await session.begin()
@@ -460,9 +472,10 @@ class BaseRepository(IBaseRepository):
                 source="BaseRepository",
             )
 
-    async def commit_transaction(self):
+    async def commit_transaction(self, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             if not session.in_transaction():
                 return
             await session.commit()
@@ -476,9 +489,10 @@ class BaseRepository(IBaseRepository):
                 source="BaseRepository",
             )
 
-    async def rollback_transaction(self):
+    async def rollback_transaction(self, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             if not session.in_transaction():
                 return
             await session.rollback()

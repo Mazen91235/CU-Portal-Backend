@@ -91,9 +91,12 @@ class IHelperService(ABC, Generic[U]):
         self,
         notification_type: Notification.NotificationType,
         parent_id: int,
-        user_ids: list[int] | None,
         content: str,
         url: str | None = None,
+        faculty_id: int | None = None,
+        department_id: int | None = None,
+        year_id: int | None = None,
+        subject_id: int | None = None,
     ) -> BaseResponseDto[bool]:
         pass
 

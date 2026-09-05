@@ -131,6 +131,7 @@ class Role(Base):
             "Add Events",
             "Edit Events",
             "Delete Events",
+            "Manage All Events",
             "View EventOrganizers",
             "Add EventOrganizers",
             "Edit EventOrganizers",

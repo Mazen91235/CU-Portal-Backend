@@ -197,11 +197,8 @@ class ExamService(IExamService):
                     data=None,
                     message="Exam with the same name already exists for this subject.",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["user_subject_links.user"]
-            )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id, dynamic_includes
+                Subject.id == data.subject_id
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -227,7 +224,6 @@ class ExamService(IExamService):
                     data=None,
                     message="Subject not found for exam creation",
                 )
-            user_ids = [user.id for user in subject.users] if subject.users else []
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -319,9 +315,9 @@ class ExamService(IExamService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.EXAM,
                 created_exam.id,
-                user_ids,
                 f"New exam '{created_exam.name}' has been created for subject {subject.name}.",
                 share_link,
+                subject_id=created_exam.subject_id,
             )
             await self.logger.log(
                 action="Create",
@@ -413,11 +409,8 @@ class ExamService(IExamService):
                     data=None,
                     message="Another exam with the same name already exists for this subject.",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["user_subject_links.user"]
-            )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id, dynamic_includes
+                Subject.id == data.subject_id
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -443,7 +436,6 @@ class ExamService(IExamService):
                     data=None,
                     message="Subject not found for exam update",
                 )
-            user_ids = [user.id for user in subject.users] if subject.users else []
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -599,9 +591,9 @@ class ExamService(IExamService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.EXAM,
                 updated_exam.id,
-                user_ids,
                 f"Exam '{updated_exam.name}' has been updated for subject {subject.name}.",
                 share_link,
+                subject_id=updated_exam.subject_id,
             )
             await self.logger.log(
                 action="Update",

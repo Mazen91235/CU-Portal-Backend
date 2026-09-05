@@ -196,11 +196,8 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="Announcement with the same title already exists for this subject.",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["user_subject_links.user"]
-            )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id, dynamic_includes
+                Subject.id == data.subject_id
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -226,7 +223,6 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="Subject not found",
                 )
-            user_ids = [user.id for user in subject.users] if subject.users else []
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -406,9 +402,9 @@ class AnnouncementService(IAnnouncementService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.ANNOUNCEMENT,
                 created_announcement.id,
-                user_ids,
                 f"New announcement '{created_announcement.title}' has been created for subject {subject.name}.",
                 share_link,
+                subject_id=created_announcement.subject_id,
             )
             await self.logger.log(
                 action="Create",
@@ -473,9 +469,6 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="Announcement not found",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["user_subject_links.user"]
-            )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == data.subject_id, dynamic_includes
             )
@@ -503,7 +496,6 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="Subject not found",
                 )
-            user_ids = [user.id for user in subject.users] if subject.users else []
             existing_announcement_response = (
                 await self.announcement_repository.find_one(
                     and_(
@@ -801,9 +793,9 @@ class AnnouncementService(IAnnouncementService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.ANNOUNCEMENT,
                 updated_announcement.id,
-                user_ids,
                 f"Announcement '{updated_announcement.title}' has been updated for subject {subject.name}.",
                 share_link,
+                subject_id=updated_announcement.subject_id,
             )
             await self.logger.log(
                 action="Update",

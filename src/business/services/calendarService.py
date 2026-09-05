@@ -6,6 +6,7 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.task import Task
 from core.entities.announcement import Announcement
+from core.entities.note import Note
 from core.dtos.calendarDtos import CalendarDayEventDto, CalendarResponseDto
 from core.dtos.baseDtos import BaseResponseDto
 from core.utils.timezoneHandler import TimezoneHandler
@@ -104,6 +105,7 @@ class CalendarService(ICalendarService):
             tasks = response_data.get("tasks", [])
             exams = response_data.get("exams", [])
             announcements = response_data.get("announcements", [])
+            notes = response_data.get("notes", [])
             result = {}
             for task in tasks:
                 deadline = (
@@ -116,7 +118,12 @@ class CalendarService(ICalendarService):
                 else:
                     continue  # Skip tasks without a valid deadline
                 if date_str not in result:
-                    result[date_str] = {"tasks": [], "exams": [], "announcements": []}
+                    result[date_str] = {
+                        "tasks": [],
+                        "exams": [],
+                        "announcements": [],
+                        "notes": [],
+                    }
                 result[date_str]["tasks"].append(
                     CalendarDayEventDto(
                         id=task.get("id"),
@@ -146,7 +153,12 @@ class CalendarService(ICalendarService):
                 else:
                     continue  # Skip exams without a valid deadline
                 if date_str not in result:
-                    result[date_str] = {"tasks": [], "exams": [], "announcements": []}
+                    result[date_str] = {
+                        "tasks": [],
+                        "exams": [],
+                        "announcements": [],
+                        "notes": [],
+                    }
                 result[date_str]["exams"].append(
                     CalendarDayEventDto(
                         id=exam.get("id"),
@@ -176,7 +188,12 @@ class CalendarService(ICalendarService):
                 else:
                     continue  # Skip announcements without a valid date
                 if date_str not in result:
-                    result[date_str] = {"tasks": [], "exams": [], "announcements": []}
+                    result[date_str] = {
+                        "tasks": [],
+                        "exams": [],
+                        "announcements": [],
+                        "notes": [],
+                    }
                 result[date_str]["announcements"].append(
                     CalendarDayEventDto(
                         id=announcement.get("id"),
@@ -192,6 +209,37 @@ class CalendarService(ICalendarService):
                             announcement.get("details", {}).get("location", "")
                             if announcement.get("details")
                             else None
+                        ),
+                    )
+                )
+            for note in notes:
+                date = (
+                    TimezoneHandler.from_isoformat(note.get("date"))
+                    if note.get("date")
+                    else None
+                )
+                if date:
+                    date_str = date.strftime("%Y-%m-%d")
+                else:
+                    continue  # Skip notes without a valid date
+                if date_str not in result:
+                    result[date_str] = {
+                        "tasks": [],
+                        "exams": [],
+                        "announcements": [],
+                        "notes": [],
+                    }
+                result[date_str]["notes"].append(
+                    Note(
+                        id=note.get("id"),
+                        title=note.get("title") or "",
+                        content=note.get("content") or "",
+                        date=(date.isoformat() if date else None),
+                        created_at=TimezoneHandler.from_isoformat(
+                            note.get("created_at")
+                        ),
+                        updated_at=TimezoneHandler.from_isoformat(
+                            note.get("updated_at")
                         ),
                     )
                 )

@@ -43,11 +43,21 @@ BEGIN
           AND a.date >= p_date_from 
           AND a.date <= p_date_to
     )
+    filtered_notes AS (
+        -- 4. Fetch Notes with non-null date within range
+        SELECT n.*
+        FROM notes n
+        WHERE n.author_id = p_user_id
+          AND n.date IS NOT NULL
+          AND n.date >= p_date_from 
+          AND n.date <= p_date_to
+    )
     -- 5. Construct final JSON object matching CalendarResponseDto structure
     SELECT json_build_object(
         'tasks', COALESCE((SELECT json_agg(ft ORDER BY ft.deadline ASC, ft.id ASC) FROM filtered_tasks ft), '[]'::json),
         'exams', COALESCE((SELECT json_agg(fe ORDER BY fe.deadline ASC, fe.id ASC) FROM filtered_exams fe), '[]'::json),
-        'announcements', COALESCE((SELECT json_agg(fa ORDER BY fa.date DESC, fa.id ASC) FROM filtered_announcements fa), '[]'::json)
+        'announcements', COALESCE((SELECT json_agg(fa ORDER BY fa.date DESC, fa.id ASC) FROM filtered_announcements fa), '[]'::json),
+        'notes', COALESCE((SELECT json_agg(fn ORDER BY fn.date DESC, fn.id ASC) FROM filtered_notes fn), '[]'::json)
     ) INTO v_result;
 
     RETURN v_result;

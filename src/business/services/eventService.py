@@ -1,34 +1,27 @@
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, and_
 from core.iServices.iEventService import IEventService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.event import Event
-from core.entities.faculty import Faculty
-from core.entities.department import Department
-from core.entities.year import Year
-from core.entities.notification import Notification
+from core.entities.userEvent import UserEvent
 from core.entities.eventOrganizer import EventOrganizer
+from core.entities.notification import Notification
 from core.dtos.baseDtos import BaseResponseDto
 from core.utils.validator import Validator
-from core.dtos.userEventDtos import (UserEventRegisterDto,UserEventUnregisterDto)
 
 
 class EventService(IEventService):
     def __init__(
         self,
         event_repository: IBaseRepository[Event],
-        faculty_repository: IBaseRepository[Faculty],
-        department_repository: IBaseRepository[Department],
-        year_repository: IBaseRepository[Year],
+        user_event_repository: IBaseRepository[UserEvent],
         event_organizer_repository: IBaseRepository[EventOrganizer],
         logger: IBaseLogger,
         helper_service: IHelperService,
     ):
         self.event_repository = event_repository
-        self.faculty_repository = faculty_repository
-        self.department_repository = department_repository
-        self.year_repository = year_repository
+        self.user_event_repository = user_event_repository
         self.event_organizer_repository = event_organizer_repository
         self.logger = logger
         self.helper_service = helper_service
@@ -57,7 +50,7 @@ class EventService(IEventService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Event, data, ["title","location"], is_and, starts_with, is_exact
+                Event, data, ["title", "location"], is_and, starts_with, is_exact
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Event, includes
@@ -115,7 +108,7 @@ class EventService(IEventService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Event, data, ["title","location"], is_and, starts_with, is_exact
+                Event, data, ["title", "location"], is_and, starts_with, is_exact
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Event, includes
@@ -162,10 +155,128 @@ class EventService(IEventService):
 
     async def create(self, data):
         try:
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                )
+            )
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Create",
+                    entity="Event",
+                    level="warning",
+                    code=403,
+                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="User does not have access to create event for the specified criteria.",
+                )
+            event_organizer_response = await self.event_organizer_repository.find_one(
+                EventOrganizer.id == data.event_organizer_id
+            )
+            if not event_organizer_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=event_organizer_response.code,
+                    data=None,
+                    message=event_organizer_response.message,
+                )
+            if not event_organizer_response.data:
+                await self.logger.log(
+                    action="Create",
+                    entity="Event",
+                    level="warning",
+                    code=404,
+                    message="Event Organizer not found for event creation.",
+                    details={"event_organizer_id": data.event_organizer_id},
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Event Organizer not found for event creation.",
+                )
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="Create",
+                    entity="Event",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve logged-in user for Event Creation.",
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="Failed to retrieve logged-in user for Event Creation.",
+                )
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="Create",
+                    entity="Event",
+                    level="error",
+                    code=500,
+                    message="No logged-in user found for Event Creation.",
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="No logged-in user found for Event Creation.",
+                )
+            data.author_id = logged_in_user.id
+            if data.location_type == "Online" and not Validator.is_valid_external_url(
+                data.location
+            ):
+                await self.logger.log(
+                    action="Create",
+                    entity="Event",
+                    level="warning",
+                    code=400,
+                    message="Invalid online event location URL provided.",
+                    details={"location": data.location},
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    message="Invalid online event location URL provided.",
+                )
+            if data.end_date and data.end_date <= data.start_date:
+                await self.logger.log(
+                    action="Create",
+                    entity="Event",
+                    level="warning",
+                    code=400,
+                    message="End date must be after start date for event creation.",
+                    details={
+                        "start_date": str(data.start_date),
+                        "end_date": str(data.end_date),
+                    },
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    message="End date must be after start date for event creation.",
+                )
             existing_event_response = await self.event_repository.find_one(
                 and_(
-                    Event.title == data.title,
-                    Event.start_date==data.start_date
+                    Event.faculty_id.is_not_distinct_from(data.faculty_id),
+                    Event.department_id.is_not_distinct_from(data.department_id),
+                    Event.year_id.is_not_distinct_from(data.year_id),
+                    func.lower(Event.title) == func.lower(data.title),
                 )
             )
             if not existing_event_response.success:
@@ -182,251 +293,43 @@ class EventService(IEventService):
                     entity="Event",
                     level="warning",
                     code=400,
-                    message="Event with the same title and start date already exists.",
+                    message="An event with the same title already exists for the specified faculty, department, and year.",
+                    details={
+                        "title": data.title,
+                        "faculty_id": data.faculty_id,
+                        "department_id": data.department_id,
+                        "year_id": data.year_id,
+                    },
                     source="EventService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=400,
                     data=None,
-                    message="Event with the same title and start date already exists.",
+                    message="An event with the same title already exists for the specified faculty, department, and year.",
                 )
-            logged_in_user_response = await self.helper_service.get_logged_in_user()
-            if not logged_in_user_response.success:
-                await self.logger.log(
-                          action="Create",
-                          entity="Event",
-                          level="error",
-                          code=500,
-                          message="Failed to retrieve logged-in user for Event Creation.",
-                          source="EventService",
-                      )
-                return BaseResponseDto(
-                    success=False,
-                    code=logged_in_user_response.code,
-                    data=None,
-                    message=logged_in_user_response.message,
-                )
-            logged_in_user = logged_in_user_response.data
-            if not logged_in_user:
-                await self.logger.log(
-                    action="Create",
-                    entity="Event",
-                    level="error",
-                    code=401,
-                    message="No logged-in user found for Event Creation.",
-                    source="EventService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=401,
-                    data=None,
-                    message="No logged-in user found for Event Creation.",
-                )
-
-            event_organizer_dynamic_includes = self.helper_service.generate_dynamic_includes(
-                            EventOrganizer, None
-                        )
-            event_organizer_response = await self.event_organizer_repository.find_one(
-                EventOrganizer.id == data.event_organizer_id, event_organizer_dynamic_includes
-            )
-            if not event_organizer_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=event_organizer_response.code,
-                    data=None,
-                    message=event_organizer_response.message,
-                )
-            event_organizer = event_organizer_response.data
-            if not event_organizer:
-                await self.logger.log(
-                    action="Create",
-                    entity="Event",
-                    level="warning",
-                    code=404,
-                    message="Event organizer not found for event creation",
-                    source="EventService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="Event organizer not found for event creation",
-                )
-
-            if data.faculty_id:
-                faculty_dynamic_includes = self.helper_service.generate_dynamic_includes(
-                    Faculty, None
-                )
-                faculty_response = await self.faculty_repository.find_one(
-                    Faculty.id == data.faculty_id, faculty_dynamic_includes
-                )
-                if not faculty_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=faculty_response.code,
-                        data=None,
-                        message=faculty_response.message,
-                    )
-                if not faculty_response.data:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Event",
-                        level="warning",
-                        code=404,
-                        message="Faculty not found for event creation",
-                        source="EventService",
-                    )
-                    return BaseResponseDto(
-                        success=False, code=404, data=None, message="Faculty not found for event creation"
-                    )
-
-            if data.department_id:
-                department_dynamic_includes = self.helper_service.generate_dynamic_includes(
-                    Department, None
-                )
-                department_response = await self.department_repository.find_one(
-                    Department.id == data.department_id, department_dynamic_includes
-                )
-                if not department_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=department_response.code,
-                        data=None,
-                        message=department_response.message,
-                    )
-                if not department_response.data:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Event",
-                        level="warning",
-                        code=404,
-                        message="Department not found for event creation",
-                        source="EventService",
-                    )
-                    return BaseResponseDto(
-                        success=False, code=404, data=None, message="Department not found for event creation"
-                    )
-
-            if data.year_id:
-                year_dynamic_includes = self.helper_service.generate_dynamic_includes(
-                    Year, None
-                )
-                year_response = await self.year_repository.find_one(
-                    Year.id == data.year_id, year_dynamic_includes
-                )
-                if not year_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=year_response.code,
-                        data=None,
-                        message=year_response.message,
-                    )
-                if not year_response.data:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Event",
-                        level="warning",
-                        code=404,
-                        message="Year not found for event creation",
-                        source="EventService",
-                    )
-                    return BaseResponseDto(
-                        success=False, code=404, data=None, message="Year not found for event creation"
-                    )
-                
-            if data.end_date and data.end_date < data.start_date:
+            data.details = data.details or {}
+            url = data.details.get("url")
+            urls = data.details.get("urls", [])
+            links = data.details.get("links", [])
+            data.details.pop("url", None)
+            data.details.pop("urls", None)
+            data.details.pop("links", None)
+            if not url:
                 await self.logger.log(
                     action="Create",
                     entity="Event",
                     level="warning",
                     code=400,
-                    message="End date cannot be before start date",
+                    message="No valid Logo provided for the event.",
+                    details={"details": data.details},
                     source="EventService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=400,
-                    data=None,
-                    message="End date cannot be before start date",
+                    message="No valid Logo provided for the event.",
                 )
-            files = []            
-            for url in data.urls:
-                file_exists_response = (
-                    await self.helper_service.verify_file_exists_on_drive(url)
-                )
-                if not file_exists_response.success:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Event",
-                        level="warning",
-                        code=400,
-                        message="File does not exist for Event Creation.",
-                        details={"url": url},
-                        source="EventService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=file_exists_response.code,
-                        data=None,
-                        message=file_exists_response.message,
-                    )
-                file_data = file_exists_response.data
-                if not file_data:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Event",
-                        level="warning",
-                        code=400,
-                        message="Failed to fetch file data from Google Drive for Event Creation.",
-                        details={"url": url},
-                        source="EventService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Failed to fetch file data from Google Drive",
-                    )
-                files.append(file_data.model_dump())
-            for link_name, link_url in (data.links or {}).items():
-                if not Validator.is_valid_external_url(link_url):
-                    await self.logger.log(
-                        action="Create",
-                        entity="Event",
-                        level="warning",
-                        code=400,
-                        message="Invalid URL provided for Event Creation.",
-                        details={"link_name": link_name, "link_url": link_url},
-                        source="EventService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid URL provided",
-                    )
-
-            if data.url and not Validator.is_valid_external_url(data.url):
-                await self.logger.log(
-                    action="Create",
-                    entity="Event",
-                    level="warning",
-                    code=400,
-                    message="Invalid Event URL provided for Event Creation.",
-                    details={"url": data.url},
-                    source="EventService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Invalid Event URL provided",
-                )
-
-            data.author_id = logged_in_user.id
-            data.details = {"files_data": files} if files else {}
-
             create_response = await self.event_repository.create(data)
             if not create_response.success:
                 return BaseResponseDto(
@@ -451,42 +354,206 @@ class EventService(IEventService):
                     data=None,
                     message="An error occurred while creating event",
                 )
+            attachment_response = await self.helper_service.create_attachment(
+                is_file=True,
+                url=url,
+                author_id=logged_in_user.id,
+                source_name="event_logo_id",
+                source_id=created_event.id,
+            )
+            if not attachment_response.success:
+                await self.logger.log(
+                    action="Create",
+                    entity="Event",
+                    level="warning",
+                    code=attachment_response.code or 500,
+                    message="Failed to create attachment for event logo.",
+                    details={"url": url},
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=attachment_response.code or 500,
+                    data=None,
+                    message=attachment_response.message,
+                )
+            attachment = attachment_response.data
+            if not attachment:
+                await self.logger.log(
+                    action="Create",
+                    entity="Event",
+                    level="error",
+                    code=500,
+                    message="Failed to create attachment for event logo without a specific error.",
+                    details={"url": url},
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while creating event",
+                )
+            created_event.logo_id = attachment.id
+            update_response = await self.event_repository.update(
+                created_event, ["logo_id"]
+            )
+            if not update_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_response.code,
+                    data=None,
+                    message=update_response.message,
+                )
+            updated_event = update_response.data
+            if not updated_event:
+                await self.logger.log(
+                    action="Create",
+                    entity="Event",
+                    level="error",
+                    code=500,
+                    message="Failed to update event with logo_id.",
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while creating event",
+                )
+            for url in urls:
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=True,
+                    url=url,
+                    author_id=logged_in_user.id,
+                    source_name="event_id",
+                    source_id=updated_event.id,
+                )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Event",
+                        level="warning",
+                        code=attachment_response.code or 500,
+                        message="Failed to create attachment for event.",
+                        details={"url": url},
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code or 500,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Event",
+                        level="error",
+                        code=500,
+                        message="Failed to create attachment for event without a specific error.",
+                        details={"url": url},
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while creating event",
+                    )
+            for link in links:
+                link_name = link.get("name", link.get("title", ""))
+                link_url = link.get("url", "")
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=False,
+                    url=link_url,
+                    author_id=logged_in_user.id,
+                    source_name="event_id",
+                    source_id=updated_event.id,
+                    link_title=link_name,
+                )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Event",
+                        level="warning",
+                        code=attachment_response.code or 500,
+                        message="Failed to create attachment for event.",
+                        details={"url": link_url},
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code or 500,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Event",
+                        level="error",
+                        code=500,
+                        message="Failed to create attachment for event without a specific error.",
+                        details={"url": link_url},
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while creating event",
+                    )
+            share_link = f"/users/events/{updated_event.id}"
+            await self.helper_service.send_notification(
+                Notification.NotificationType.EVENT,
+                updated_event.id,
+                f"New Event '{updated_event.name}' has been posted.",
+                share_link,
+                faculty_id=updated_event.faculty_id,
+                department_id=updated_event.department_id,
+                year_id=updated_event.year_id,
+            )
             await self.logger.log(
                 action="Create",
                 entity="Event",
                 level="info",
                 code=201,
-                message="Event created successfully.",
-                details={"event_id": create_response.data.id, "author_id": logged_in_user.id},
+                message="Event created successfully",
                 source="EventService",
             )
             return BaseResponseDto(
                 success=True,
                 code=201,
-                data=created_event,
+                data=updated_event,
                 message="Event created successfully",
             )
         except Exception as ex:
-              await self.logger.log(
-                  action="Create",
-                  entity="Event",
-                  level="error",
-                  code=500,
-                  message="An error occurred while creating event",
-                  details={"error": str(ex)},
-                  source="EventService",
-              )
-              return BaseResponseDto(
-                  success=False,
-                  code=500,
-                  data=None,
-                  message="An error occurred while creating event",
-              )
-         
+            await self.logger.log(
+                action="Create",
+                entity="Event",
+                level="error",
+                code=500,
+                message="An error occurred while creating event",
+                details={"error": str(ex)},
+                source="EventService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while creating event",
+            )
+
     async def update(self, data):
         try:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Event, ["logo", "attachments"]
+            )
             target_event_response = await self.event_repository.find_one(
-                Event.id == data.id
+                Event.id == data.id, dynamic_includes
             )
             if not target_event_response.success:
                 return BaseResponseDto(
@@ -509,37 +576,79 @@ class EventService(IEventService):
                     success=False,
                     code=404,
                     data=None,
-                    message="Event not found for update",
+                    message="Event not found",
                 )
-
-            existing_event_response = await self.event_repository.find_one(
-                and_(Event.title == data.title, Event.start_date == data.start_date)
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=target_event.faculty_id,
+                    department_id=target_event.department_id,
+                    year_id=target_event.year_id,
+                )
             )
-            if not existing_event_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=existing_event_response.code,
-                    data=None,
-                    message=existing_event_response.message,
-                )
-            existing_event = existing_event_response.data
-            if existing_event and existing_event.id != data.id:
+            if not verify_restricted_access_response.success:
                 await self.logger.log(
                     action="Update",
                     entity="Event",
                     level="warning",
-                    code=400,
-                    message="Another event with the same title and start date already exists.",
-                    details={"title": data.title, "start_date": str(data.start_date)},
+                    code=403,
+                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
                     source="EventService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=400,
-                    data=None,
-                    message="Another event with the same title and start date already exists.",
+                    code=403,
+                    message="User does not have access to update event for the specified criteria.",
                 )
-
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                )
+            )
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Event",
+                    level="warning",
+                    code=403,
+                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="User does not have access to update event for the specified criteria.",
+                )
+            event_organizer_response = await self.event_organizer_repository.find_one(
+                EventOrganizer.id == data.event_organizer_id
+            )
+            if not event_organizer_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=event_organizer_response.code,
+                    data=None,
+                    message=event_organizer_response.message,
+                )
+            event_organizer = event_organizer_response.data
+            if not event_organizer:
+                await self.logger.log(
+                    action="Update",
+                    entity="Event",
+                    level="warning",
+                    code=404,
+                    message="Event Organizer not found for event update.",
+                    details={"event_organizer_id": data.event_organizer_id},
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Event Organizer not found for event update.",
+                )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -572,8 +681,6 @@ class EventService(IEventService):
                     data=None,
                     message="No logged-in user found for Event Update.",
                 )
-
-
             logged_in_user_permissions_response = (
                 await self.helper_service.get_logged_in_user_permissions()
             )
@@ -608,7 +715,6 @@ class EventService(IEventService):
                     data=None,
                     message="No logged-in user permissions found for Event Update.",
                 )
-
             if (
                 logged_in_user.id != target_event.author_id
                 and "Manage All Events" not in logged_in_user_permissions
@@ -631,102 +737,65 @@ class EventService(IEventService):
                     data=None,
                     message="User does not have permission to update this event.",
                 )
-
-            if data.end_date and data.end_date < data.start_date:
+            data.author_id = logged_in_user.id
+            if data.end_date and data.end_date <= data.start_date:
                 await self.logger.log(
                     action="Update",
                     entity="Event",
                     level="warning",
                     code=400,
-                    message="End date cannot be before start date",
-                    details={"start_date": str(data.start_date), "end_date": str(data.end_date)},
+                    message="End date must be after start date for event update.",
+                    details={
+                        "start_date": str(data.start_date),
+                        "end_date": str(data.end_date),
+                    },
                     source="EventService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=400,
                     data=None,
-                    message="End date cannot be before start date",
+                    message="End date must be after start date for event update.",
                 )
-
-            old_urls = target_event.urls or []
-            to_be_removed_urls = (
-                [url for url in old_urls if url not in data.urls]
-                if data.urls
-                else old_urls
-            )
-
-            files = []
-            for url in data.urls:
-                file_exists_response = (
-                    await self.helper_service.verify_file_exists_on_drive(url)
+            if data.location_type == "Online" and not Validator.is_valid_external_url(
+                data.location
+            ):
+                await self.logger.log(
+                    action="Update",
+                    entity="Event",
+                    level="warning",
+                    code=400,
+                    message="Invalid online event location URL provided for update.",
+                    details={"location": data.location},
+                    source="EventService",
                 )
-                if not file_exists_response.success:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Event",
-                        level="warning",
-                        code=400,
-                        message="File does not exist on Google Drive for Event Update.",
-                        details={"url": url},
-                        source="EventService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=file_exists_response.code,
-                        data=None,
-                        message=file_exists_response.message,
-                    )
-                file_data = file_exists_response.data
-                if not file_data:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Event",
-                        level="error",
-                        code=500,
-                        message="Failed to fetch file data from Google Drive for Event Update.",
-                        details={"url": url},
-                        source="EventService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=500,
-                        data=None,
-                        message="Failed to fetch file data from Google Drive for Event Update.",
-                    )
-                files.append(file_data.model_dump())
-
-            for link_name, link_url in (data.links or {}).items():
-                if not link_url or not Validator.is_valid_external_url(link_url):
-                    await self.logger.log(
-                        action="Update",
-                        entity="Event",
-                        level="warning",
-                        code=400,
-                        message="Invalid link provided for Event Update.",
-                        details={"link_name": link_name},
-                        source="EventService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid link provided for Event Update.",
-                    )
-
-            data.details = {"files_data": files} if files else {}
-
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Invalid online event location URL provided for update.",
+                )
+            old_logo = target_event.logo
+            old_attachments = target_event.attachments or []
+            data.details = data.details or {}
+            url = data.details.get("url")
+            urls = data.details.get("urls", [])
+            links = data.details.get("links", [])
+            data.details.pop("url", None)
+            data.details.pop("urls", None)
+            data.details.pop("links", None)
             target_event.title = data.title
             target_event.start_date = data.start_date
             target_event.end_date = data.end_date
             target_event.price = data.price
+            target_event.location_type = data.location_type
             target_event.location = data.location
-            target_event.location_type=data.location_type
-            target_event.urls = data.urls
-            target_event.links = data.links
             target_event.details = data.details
             target_event.faculty_id = data.faculty_id
-
+            target_event.department_id = data.department_id
+            target_event.year_id = data.year_id
+            target_event.author_id = data.author_id
+            target_event.event_organizer_id = data.event_organizer_id
             update_response = await self.event_repository.update(target_event)
             if not update_response.success:
                 return BaseResponseDto(
@@ -751,28 +820,206 @@ class EventService(IEventService):
                     data=None,
                     message="An error occurred while updating event",
                 )
-
-            if len(to_be_removed_urls) > 0:
-                remove_response = await self.helper_service.remove_files_from_drive(
-                    [
-                        {
-                            "user_id": updated_event.author_id,
-                            "file_id": self.helper_service.get_file_id_from_url(url),
-                        }
-                        for url in to_be_removed_urls
-                    ]
+            if not url:
+                await self.logger.log(
+                    action="Update",
+                    entity="Event",
+                    level="warning",
+                    code=400,
+                    message="No valid Logo provided for the event update.",
+                    details={"details": data.details},
+                    source="EventService",
                 )
-                if not remove_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    message="No valid Logo provided for the event update.",
+                )
+            if url != old_logo.url:
+                await self.helper_service.delete_attachment(attachment=old_logo)
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=True,
+                    url=url,
+                    author_id=logged_in_user.id,
+                    source_name="event_logo_id",
+                    source_id=updated_event.id,
+                )
+                if not attachment_response.success:
                     await self.logger.log(
                         action="Update",
                         entity="Event",
                         level="warning",
-                        code=400,
-                        message="Failed to Remove Files from Drive during Event Update.",
-                        details={"urls": to_be_removed_urls},
+                        code=attachment_response.code or 500,
+                        message="Failed to create attachment for event logo during update.",
+                        details={"url": url},
                         source="EventService",
                     )
-
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code or 500,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Event",
+                        level="error",
+                        code=500,
+                        message="Failed to create attachment for event logo during update without a specific error.",
+                        details={"url": url},
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while updating event",
+                    )
+                updated_event.logo_id = attachment.id
+                update_response = await self.event_repository.update(
+                    updated_event, ["logo_id"]
+                )
+                if not update_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=update_response.code,
+                        data=None,
+                        message=update_response.message,
+                    )
+                updated_event = update_response.data
+                if not updated_event:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Event",
+                        level="error",
+                        code=500,
+                        message="Failed to update event with new logo_id.",
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while updating event",
+                    )
+            new_urls = [
+                u
+                for u in urls
+                if u not in [a.url for a in old_attachments if a.is_file]
+            ]
+            new_links = [
+                l
+                for l in links
+                if l.get("url", "")
+                not in [a.url for a in old_attachments if not a.is_file]
+            ]
+            to_be_removed_attachments = []
+            for attachment in old_attachments:
+                if attachment.is_file and attachment.url not in urls:
+                    to_be_removed_attachments.append(attachment)
+                elif not attachment.is_file and not any(
+                    link.get("url", "") == attachment.url for link in links
+                ):
+                    to_be_removed_attachments.append(attachment)
+            for attachment in to_be_removed_attachments:
+                await self.helper_service.delete_attachment(attachment=attachment)
+            for url in new_urls:
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=True,
+                    url=url,
+                    author_id=logged_in_user.id,
+                    source_name="event_id",
+                    source_id=updated_event.id,
+                )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Event",
+                        level="warning",
+                        code=attachment_response.code or 500,
+                        message="Failed to create attachment for event.",
+                        details={"url": url},
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Event",
+                        level="error",
+                        code=500,
+                        message="Failed to create attachment for event without a specific error.",
+                        details={"url": url},
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while updating event",
+                    )
+            for link in new_links:
+                link_name = link.get("name", link.get("title", ""))
+                link_url = link.get("url", "")
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=False,
+                    url=link_url,
+                    author_id=logged_in_user.id,
+                    source_name="event_id",
+                    source_id=updated_event.id,
+                    link_title=link_name,
+                )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Event",
+                        level="warning",
+                        code=attachment_response.code or 500,
+                        message="Failed to create attachment for event.",
+                        details={"url": link_url},
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code or 500,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Event",
+                        level="error",
+                        code=500,
+                        message="Failed to create attachment for event without a specific error.",
+                        details={"url": link_url},
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while updating event",
+                    )
+            share_link = f"/users/events/{updated_event.id}"
+            await self.helper_service.send_notification(
+                Notification.NotificationType.EVENT,
+                updated_event.id,
+                f"Event '{updated_event.name}' has been updated.",
+                share_link,
+                faculty_id=updated_event.faculty_id,
+                department_id=updated_event.department_id,
+                year_id=updated_event.year_id,
+            )
             await self.logger.log(
                 action="Update",
                 entity="Event",
@@ -803,11 +1050,14 @@ class EventService(IEventService):
                 data=None,
                 message="An error occurred while updating event",
             )
-            
+
     async def delete(self, data):
         try:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Event, ["logo", "attachments"]
+            )
             target_event_response = await self.event_repository.find_one(
-                Event.id == data.id
+                Event.id == data.id, dynamic_includes
             )
             if not target_event_response.success:
                 return BaseResponseDto(
@@ -832,7 +1082,28 @@ class EventService(IEventService):
                     data=None,
                     message="Event not found",
                 )
-
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=target_event.faculty_id,
+                    department_id=target_event.department_id,
+                    year_id=target_event.year_id,
+                )
+            )
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Event",
+                    level="warning",
+                    code=403,
+                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="User does not have access to delete event for the specified criteria.",
+                )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -865,8 +1136,6 @@ class EventService(IEventService):
                     data=None,
                     message="No logged-in user found for Event Deletion.",
                 )
-
-
             logged_in_user_permissions_response = (
                 await self.helper_service.get_logged_in_user_permissions()
             )
@@ -901,7 +1170,6 @@ class EventService(IEventService):
                     data=None,
                     message="No logged-in user permissions found for Event Deletion.",
                 )
-
             if (
                 logged_in_user.id != target_event.author_id
                 and "Manage All Events" not in logged_in_user_permissions
@@ -924,9 +1192,9 @@ class EventService(IEventService):
                     data=None,
                     message="User does not have permission to delete this event.",
                 )
-
-            urls_to_remove = target_event.urls or []
-
+            to_be_removed_attachments = [target_event.logo] + (
+                target_event.attachments or []
+            )
             delete_response = await self.event_repository.delete(target_event)
             if not delete_response.success:
                 return BaseResponseDto(
@@ -935,28 +1203,8 @@ class EventService(IEventService):
                     data=None,
                     message=delete_response.message,
                 )
-
-            if len(urls_to_remove) > 0:
-                remove_response = await self.helper_service.remove_files_from_drive(
-                    [
-                        {
-                            "user_id": target_event.author_id,
-                            "file_id": self.helper_service.get_file_id_from_url(url),
-                        }
-                        for url in urls_to_remove
-                    ]
-                )
-                if not remove_response.success:
-                    await self.logger.log(
-                        action="Delete",
-                        entity="Event",
-                        level="warning",
-                        code=400,
-                        message="Failed to Remove Files from Drive during Event Deletion.",
-                        details={"urls": urls_to_remove},
-                        source="EventService",
-                    )
-
+            for attachment in to_be_removed_attachments:
+                await self.helper_service.delete_attachment(attachment=attachment)
             await self.logger.log(
                 action="Delete",
                 entity="Event",
@@ -986,9 +1234,9 @@ class EventService(IEventService):
                 code=500,
                 data=None,
                 message="An error occurred while deleting event",
-            )    
+            )
 
-    async def register(self, data):
+    async def register(self, event_id):
         try:
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
@@ -1001,10 +1249,13 @@ class EventService(IEventService):
                     source="EventService",
                 )
                 return BaseResponseDto(
-                    success=False, code=logged_in_user_response.code, data=None, message=logged_in_user_response.message
+                    success=False,
+                    code=logged_in_user_response.code,
+                    data=None,
+                    message=logged_in_user_response.message,
                 )
-            user = logged_in_user_response.data
-            if not user:
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
                 await self.logger.log(
                     action="Register",
                     entity="Event",
@@ -1014,20 +1265,18 @@ class EventService(IEventService):
                     source="EventService",
                 )
                 return BaseResponseDto(
-                    success=False, 
-                    code=401, 
-                    data=None, 
-                    message="No logged-in user found for Event Register.")
-
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Event, ["attendees"]
-            )
-            event_response = await self.event_repository.find_one(
-                Event.id == data.event_id, dynamic_includes
-            )
+                    success=False,
+                    code=401,
+                    data=None,
+                    message="No logged-in user found for Event Register.",
+                )
+            event_response = await self.event_repository.find_one(Event.id == event_id)
             if not event_response.success:
                 return BaseResponseDto(
-                    success=False, code=event_response.code, data=None, message=event_response.message
+                    success=False,
+                    code=event_response.code,
+                    data=None,
+                    message=event_response.message,
                 )
             event = event_response.data
             if not event:
@@ -1037,44 +1286,86 @@ class EventService(IEventService):
                     level="warning",
                     code=404,
                     message="Event not found for registration",
-                    details={"event_id": data.event_id},
+                    details={"event_id": event_id},
                     source="EventService",
                 )
-                return BaseResponseDto(success=False, code=404, data=None, message="Event not found")
-
-            attendee_ids = [attendee.id for attendee in event.attendees] if event.attendees else []
-            if user.id in attendee_ids:
+                return BaseResponseDto(
+                    success=False, code=404, data=None, message="Event not found"
+                )
+            existing_registration_response = await self.user_event_repository.find_one(
+                and_(
+                    UserEvent.user_id == logged_in_user.id,
+                    UserEvent.event_id == event.id,
+                )
+            )
+            if not existing_registration_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_registration_response.code,
+                    data=None,
+                    message=existing_registration_response.message,
+                )
+            existing_registration = existing_registration_response.data
+            if existing_registration:
                 await self.logger.log(
                     action="Register",
                     entity="Event",
                     level="warning",
                     code=400,
-                    message="User already registered for this event.",
-                    details={"user_id": user.id, "event_id": event.id},
+                    message="User is already registered for this event.",
+                    details={"user_id": logged_in_user.id, "event_id": event.id},
                     source="EventService",
                 )
                 return BaseResponseDto(
-                    success=False, code=400, data=None, message="User already registered for this event"
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="You are already registered for this event",
                 )
-
-            event.attendees.append(user)
-
-            update_response = await self.event_repository.update(event)
-            if not update_response.success:
+            registration = UserEvent(user_id=logged_in_user.id, event_id=event.id)
+            create_response = await self.user_event_repository.create(registration)
+            if not create_response.success:
                 return BaseResponseDto(
-                    success=False, code=update_response.code, data=None, message=update_response.message
+                    success=False,
+                    code=create_response.code,
+                    data=None,
+                    message=create_response.message,
                 )
-
+            created_registration = create_response.data
+            if not created_registration:
+                await self.logger.log(
+                    action="Register",
+                    entity="Event",
+                    level="error",
+                    code=500,
+                    message="Failed to register user for event without a specific error.",
+                    details={"user_id": logged_in_user.id, "event_id": event.id},
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while registering for event",
+                )
             await self.logger.log(
                 action="Register",
                 entity="Event",
                 level="info",
                 code=200,
                 message="User registered for event successfully.",
-                details={"user_id": user.id, "event_id": event.id},
+                details={
+                    "user_id": created_registration.user_id,
+                    "event_id": created_registration.event_id,
+                },
                 source="EventService",
             )
-            return BaseResponseDto(success=True, code=200, data=True, message="Registered for event successfully")
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=None,
+                message="Registered for event successfully",
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Register",
@@ -1086,10 +1377,13 @@ class EventService(IEventService):
                 source="EventService",
             )
             return BaseResponseDto(
-                success=False, code=500, data=None, message="An error occurred while registering for event"
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while registering for event",
             )
 
-    async def unregister(self, data: UserEventUnregisterDto) -> BaseResponseDto:
+    async def unregister(self, event_id):
         try:
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
@@ -1102,10 +1396,13 @@ class EventService(IEventService):
                     source="EventService",
                 )
                 return BaseResponseDto(
-                    success=False, code=logged_in_user_response.code, data=None, message=logged_in_user_response.message
+                    success=False,
+                    code=logged_in_user_response.code,
+                    data=None,
+                    message=logged_in_user_response.message,
                 )
-            user = logged_in_user_response.data
-            if not user:
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
                 await self.logger.log(
                     action="Unregister",
                     entity="Event",
@@ -1115,20 +1412,18 @@ class EventService(IEventService):
                     source="EventService",
                 )
                 return BaseResponseDto(
-                    success=False, 
-                    code=401, 
-                    data=None, 
-                    message="No logged-in user found for Event Unregister.")
-
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Event, ["attendees"]
-            )
-            event_response = await self.event_repository.find_one(
-                Event.id == data.event_id, dynamic_includes
-            )
+                    success=False,
+                    code=401,
+                    data=None,
+                    message="No logged-in user found for Event Unregister.",
+                )
+            event_response = await self.event_repository.find_one(Event.id == event_id)
             if not event_response.success:
                 return BaseResponseDto(
-                    success=False, code=event_response.code, data=None, message=event_response.message
+                    success=False,
+                    code=event_response.code,
+                    data=None,
+                    message=event_response.message,
                 )
             event = event_response.data
             if not event:
@@ -1138,44 +1433,67 @@ class EventService(IEventService):
                     level="warning",
                     code=404,
                     message="Event not found for unregistration",
-                    details={"event_id": data.event_id},
+                    details={"event_id": event_id},
                     source="EventService",
                 )
-                return BaseResponseDto(success=False, code=404, data=None, message="Event not found")
-
-            attendee_ids = [attendee.id for attendee in event.attendees] if event.attendees else []
-            if user.id not in attendee_ids:
+                return BaseResponseDto(
+                    success=False, code=404, data=None, message="Event not found"
+                )
+            existing_registration_response = await self.user_event_repository.find_one(
+                and_(
+                    UserEvent.user_id == logged_in_user.id,
+                    UserEvent.event_id == event.id,
+                )
+            )
+            if not existing_registration_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_registration_response.code,
+                    data=None,
+                    message=existing_registration_response.message,
+                )
+            existing_registration = existing_registration_response.data
+            if not existing_registration:
                 await self.logger.log(
                     action="Unregister",
                     entity="Event",
                     level="warning",
                     code=400,
                     message="User is not registered for this event.",
-                    details={"user_id": user.id, "event_id": event.id},
+                    details={"user_id": logged_in_user.id, "event_id": event.id},
                     source="EventService",
                 )
                 return BaseResponseDto(
-                    success=False, code=400, data=None, message="You are not registered for this event"
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="You are not registered for this event",
                 )
-
-            event.attendees = [attendee for attendee in event.attendees if attendee.id != user.id]
-
-            update_response = await self.event_repository.update(event)
-            if not update_response.success:
+            delete_response = await self.user_event_repository.delete(
+                existing_registration
+            )
+            if not delete_response.success:
                 return BaseResponseDto(
-                    success=False, code=update_response.code, data=None, message=update_response.message
+                    success=False,
+                    code=delete_response.code,
+                    data=None,
+                    message=delete_response.message,
                 )
-
             await self.logger.log(
                 action="Unregister",
                 entity="Event",
                 level="info",
                 code=200,
                 message="User unregistered from event successfully.",
-                details={"user_id": user.id, "event_id": event.id},
+                details={"user_id": logged_in_user.id, "event_id": event.id},
                 source="EventService",
             )
-            return BaseResponseDto(success=True, code=200, data=True, message="Unregistered from event successfully")
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=None,
+                message="Unregistered from event successfully",
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Unregister",
@@ -1187,5 +1505,8 @@ class EventService(IEventService):
                 source="EventService",
             )
             return BaseResponseDto(
-                success=False, code=500, data=None, message="An error occurred while unregistering from event"
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while unregistering from event",
             )

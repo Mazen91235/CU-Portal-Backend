@@ -3,6 +3,9 @@ from typing import TYPE_CHECKING, Literal
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+if TYPE_CHECKING:
+    from core.entities.note import Note
+
 from core.dtos.baseDtos import BaseSearchDto
 
 
@@ -26,6 +29,9 @@ class CalendarDayDto(BaseModel):
     )
     announcements: list[CalendarDayEventDto] = Field(
         default_factory=list, description="List of announcements for the day"
+    )
+    notes: list[Note] = Field(  # Should be NoteResponseDto
+        default_factory=list, description="List of notes for the day"
     )
 
 

@@ -40,6 +40,10 @@ from api.routes.weekRoutes import (
     create_week_user_router,
     create_week_admin_router,
 )
+from api.routes.eventRoutes import (
+    create_event_user_router,
+    create_event_admin_router,
+)
 from api.routes.yearRoutes import create_year_user_router, create_year_admin_router
 from api.routes.departmentRoutes import (
     create_department_user_router,
@@ -69,6 +73,7 @@ from api.controllers.notificationController import NotificationController
 from api.controllers.yearController import YearController
 from api.controllers.departmentController import DepartmentController
 from api.controllers.weekController import WeekController
+from api.controllers.eventController import EventController
 from api.controllers.attachmentController import AttachmentController
 from business.services.userService import UserService
 from business.services.roleService import RoleService
@@ -84,6 +89,7 @@ from business.services.facultyService import FacultyService
 from business.services.yearService import YearService
 from business.services.departmentService import DepartmentService
 from business.services.weekService import WeekService
+from business.services.eventService import EventService
 from business.services.requestLimitService import RequestLimitService
 from business.services.examService import ExamService
 from business.services.attachmentService import AttachmentService
@@ -111,6 +117,9 @@ from core.entities.notification import Notification
 from core.entities.message import Message
 from core.entities.faculty import Faculty
 from core.entities.week import Week
+from core.entities.event import Event
+from core.entities.userEvent import UserEvent
+from core.entities.eventOrganizer import EventOrganizer
 from core.entities.attachment import Attachment
 from core.utils.databaseHandler import DatabaseHandler
 
@@ -236,6 +245,24 @@ class Container(containers.DeclarativeContainer):
         model=Week,
         session_factory=session_factory,
     )
+    event_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Event,
+        session_factory=session_factory,
+    )
+    user_event_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=UserEvent,
+        session_factory=session_factory,
+    )
+    event_organizer_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=EventOrganizer,
+        session_factory=session_factory,
+    )
     attachment_repository = providers.Factory(
         BaseRepository,
         session=db_session,
@@ -325,6 +352,15 @@ class Container(containers.DeclarativeContainer):
     week_service = providers.Factory(
         WeekService,
         week_repository=week_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+
+    event_service = providers.Factory(
+        EventService,
+        event_repository=event_repository,
+        user_event_repository=user_event_repository,
+        event_organizer_repository=event_organizer_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -458,6 +494,10 @@ class Container(containers.DeclarativeContainer):
 
     week_controller = providers.Factory(
         WeekController, week_service=week_service, logger=logger
+    )
+
+    event_controller = providers.Factory(
+        EventController, event_service=event_service, logger=logger
     )
 
     subject_controller = providers.Factory(
