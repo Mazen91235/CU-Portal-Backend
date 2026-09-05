@@ -17,13 +17,7 @@ from core.dtos.userDtos import (
     UserResponseDto,
     UserUpdateDto,
     UserSearchDto,
-    UserVerifyEmailDto,
-    UserGetStoredAccessTokenDto,
-    UserUpdateUsersDto,
-    UserUpdateAcademicDataDto,
-    UserHasPermissionsDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class UserController(IUserController):

@@ -15,7 +15,6 @@ from core.dtos.taskDtos import (
     TaskSearchDto,
     TaskDeleteDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class TaskController(ITaskController):

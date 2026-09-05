@@ -1,4 +1,3 @@
-from typing import cast
 from core.iControllers.iRoleController import IRoleController
 from core.iServices.iRoleService import IRoleService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -6,7 +5,6 @@ from core.entities.role import Role
 from core.dtos.roleDtos import (
     RoleCreateDto,
     RoleResponseDto,
-    RoleUpdateDto,
     RoleDeleteDto,
     RoleSearchDto,
 )
@@ -14,7 +12,6 @@ from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
 from core.utils.responseHandler import ResponseHandler
-from core.models.queryModel import QueryModel
 
 
 class RoleController(IRoleController):

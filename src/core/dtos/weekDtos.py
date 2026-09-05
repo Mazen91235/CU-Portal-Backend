@@ -16,26 +16,31 @@ from core.dtos.baseDtos import BaseSearchDto
 class WeekCreateDto(BaseModel):
     week_number: int = Field(..., ge=1, description="Week number")
     start_date: datetime = Field(..., description="Start date of the week")
-    end_date: datetime = Field(..., description="End date of the week")
     faculty_id: int = Field(..., description="Faculty ID associated with the week")
-    department_id: int = Field(..., description="Department ID associated with the week")
+    department_id: int = Field(
+        ..., description="Department ID associated with the week"
+    )
     year_id: int = Field(..., description="Year ID associated with the week")
 
 
 class WeekResponseDto(BaseModel):
     id: int | None = Field(default=None, description="ID of the week")
     week_number: int | None = Field(default=None, description="Week number")
-    start_date: datetime | None = Field(default=None, description="Start date of the week")
-    end_date: datetime | None = Field(default=None, description="End date of the week")
+    start_date: datetime | None = Field(
+        default=None, description="Start date of the week"
+    )
     created_at: datetime | None = Field(default=None, description="Creation timestamp")
-    updated_at: datetime | None = Field(default=None, description="Last update timestamp")
+    updated_at: datetime | None = Field(
+        default=None, description="Last update timestamp"
+    )
 
     # Relationships
-    faculty_id: int | None = Field(default=None, description="Faculty ID")
-    faculty: FacultyResponseDto | None = Field(default=None, description="Faculty details")
-    department_id: int | None = Field(default=None, description="Department ID")
-    department: DepartmentResponseDto | None = Field(default=None, description="Department details")
-    year_id: int | None = Field(default=None, description="Year ID")
+    faculty: FacultyResponseDto | None = Field(
+        default=None, description="Faculty details"
+    )
+    department: DepartmentResponseDto | None = Field(
+        default=None, description="Department details"
+    )
     year: YearResponseDto | None = Field(default=None, description="Year details")
     materials: list[MaterialResponseDto] | None = Field(
         default=None, description="Materials associated with this week"
@@ -47,19 +52,22 @@ class WeekResponseDto(BaseModel):
 
 
 class WeekUpdateDto(BaseModel):
-    week_number: int | None = Field(default=None, ge=1, description="Week number")
-    start_date: datetime | None = Field(default=None, description="Start date of the week")
-    end_date: datetime | None = Field(default=None, description="End date of the week")
-    faculty_id: int | None = Field(default=None, description="Faculty ID")
-    department_id: int | None = Field(default=None, description="Department ID")
-    year_id: int | None = Field(default=None, description="Year ID")
+    week_number: int = Field(..., ge=1, description="Week number")
+    start_date: datetime = Field(..., description="Start date of the week")
+    faculty_id: int = Field(..., description="Faculty ID")
+    department_id: int = Field(..., description="Department ID")
+    year_id: int = Field(..., description="Year ID")
 
 
 class WeekSearchDto(BaseSearchDto):
     id: int | None = Field(default=None, description="ID of the week to filter by")
-    week_number: int | None = Field(default=None, description="Week number to filter by")
+    week_number: int | None = Field(
+        default=None, description="Week number to filter by"
+    )
     faculty_id: int | None = Field(default=None, description="Faculty ID to filter by")
-    department_id: int | None = Field(default=None, description="Department ID to filter by")
+    department_id: int | None = Field(
+        default=None, description="Department ID to filter by"
+    )
     year_id: int | None = Field(default=None, description="Year ID to filter by")
     created_at_from: datetime | None = Field(
         default=None, description="Filter weeks created after this date"

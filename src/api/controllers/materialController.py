@@ -1,5 +1,3 @@
-from fastapi import Response
-from starlette.requests import Request
 from typing import cast
 from core.iControllers.iMaterialController import IMaterialController
 from core.iServices.iMaterialService import IMaterialService
@@ -16,10 +14,7 @@ from core.dtos.materialDtos import (
     MaterialUpdateDto,
     MaterialsDeleteDto,
     MaterialSearchDto,
-    MaterialsCopyOrMoveDto,
-    MaterialsFetchFromDriveDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class MaterialController(IMaterialController):

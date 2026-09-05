@@ -15,7 +15,6 @@ from core.dtos.examDtos import (
     ExamSearchDto,
     ExamDeleteDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class ExamController(IExamController):

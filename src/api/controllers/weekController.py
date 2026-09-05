@@ -9,7 +9,6 @@ from core.dtos.weekDtos import (
     WeekSearchDto,
     WeekResponseDto,
 )
-from core.models.queryModel import QueryModel
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
@@ -108,23 +107,8 @@ class WeekController(IWeekController):
                 )
 
             weeks = response.data
-            if not weeks:
-                await self.logger.log(
-                    action="Find",
-                    entity="Week",
-                    level="info",
-                    code=404,
-                    message="Weeks not found",
-                    source="WeekController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Weeks not found",
-                )
-
             weeks_mapped = Mapper[Week, WeekResponseDto].map_list(
-                weeks, WeekResponseDto, True
+                weeks or [], WeekResponseDto, True
             )
             return ResponseHandler.generate_response(
                 success=True,

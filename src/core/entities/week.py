@@ -36,7 +36,6 @@ class Week(Base):
     start_date: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False
     )
-    end_date: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
 
     # Timestamps
     created_at: Mapped[Optional[datetime]] = mapped_column(
@@ -73,7 +72,10 @@ class Week(Base):
     )
     year: Mapped["Year"] = relationship("Year", back_populates="weeks")
     materials: Mapped[set["Material"]] = relationship(
-        "Material", back_populates="week", cascade="all, delete-orphan", collection_class=set
+        "Material",
+        back_populates="week",
+        cascade="save-update, merge",
+        collection_class=set,
     )
 
     # Indexes

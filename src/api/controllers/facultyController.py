@@ -15,7 +15,6 @@ from core.dtos.facultyDtos import (
     FacultySearchDto,
     FacultyDeleteDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class FacultyController(IFacultyController):

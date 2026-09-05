@@ -5,8 +5,6 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
-from core.utils.parser import Parser
-import json
 
 # Entities & DTOs
 from core.entities.announcement import Announcement
@@ -17,7 +15,6 @@ from core.dtos.announcementDtos import (
     AnnouncementDeleteDto,
     AnnouncementSearchDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class AnnouncementController(IAnnouncementController):

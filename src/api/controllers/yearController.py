@@ -9,7 +9,6 @@ from core.dtos.yearDtos import (
     YearSearchDto,
     YearResponseDto,
 )
-from core.models.queryModel import QueryModel
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler

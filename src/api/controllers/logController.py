@@ -1,4 +1,3 @@
-from typing import cast
 from core.iControllers.iLogController import ILogController
 from core.iServices.iLogService import ILogService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -12,7 +11,6 @@ from core.dtos.logDtos import (
     LogResponseDto,
     LogSearchDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class LogController(ILogController):

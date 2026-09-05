@@ -1,14 +1,9 @@
-from typing import cast
-from sqlalchemy import and_
-
+from sqlalchemy import and_, func
 from core.iServices.iWeekService import IWeekService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.week import Week
-from core.entities.faculty import Faculty
-from core.entities.department import Department
-from core.entities.year import Year
 from core.dtos.baseDtos import BaseResponseDto
 
 
@@ -16,16 +11,10 @@ class WeekService(IWeekService):
     def __init__(
         self,
         week_repository: IBaseRepository[Week],
-        faculty_repository: IBaseRepository[Faculty],
-        department_repository: IBaseRepository[Department],
-        year_repository: IBaseRepository[Year],
         logger: IBaseLogger,
         helper_service: IHelperService,
     ):
         self.week_repository = week_repository
-        self.faculty_repository = faculty_repository
-        self.department_repository = department_repository
-        self.year_repository = year_repository
         self.logger = logger
         self.helper_service = helper_service
 
@@ -158,70 +147,29 @@ class WeekService(IWeekService):
 
     async def create(self, data):
         try:
-            # Verify Faculty exists
-            faculty_response = await self.faculty_repository.find_one(
-                Faculty.id == data.faculty_id
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                )
             )
-            if not faculty_response.success or not faculty_response.data:
+            if not verify_restricted_access_response.success:
                 await self.logger.log(
                     action="Create",
                     entity="Week",
-                    level="warning",
-                    code=404,
-                    message=f"Faculty with ID {data.faculty_id} not found",
-                    details={"faculty_id": data.faculty_id},
+                    level="error",
+                    code=verify_restricted_access_response.code or 500,
+                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
                     source="WeekService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=404,
+                    code=verify_restricted_access_response.code,
                     data=None,
-                    message=f"Faculty with ID {data.faculty_id} not found",
+                    message=verify_restricted_access_response.message,
                 )
-
-            # Verify Department exists
-            dept_response = await self.department_repository.find_one(
-                Department.id == data.department_id
-            )
-            if not dept_response.success or not dept_response.data:
-                await self.logger.log(
-                    action="Create",
-                    entity="Week",
-                    level="warning",
-                    code=404,
-                    message=f"Department with ID {data.department_id} not found",
-                    details={"department_id": data.department_id},
-                    source="WeekService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message=f"Department with ID {data.department_id} not found",
-                )
-
-            # Verify Year exists
-            year_response = await self.year_repository.find_one(
-                Year.id == data.year_id
-            )
-            if not year_response.success or not year_response.data:
-                await self.logger.log(
-                    action="Create",
-                    entity="Week",
-                    level="warning",
-                    code=404,
-                    message=f"Year with ID {data.year_id} not found",
-                    details={"year_id": data.year_id},
-                    source="WeekService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message=f"Year with ID {data.year_id} not found",
-                )
-
-            # Check if Week already exists with same (faculty_id, department_id, year_id, week_number)
             existing_week_response = await self.week_repository.find_one(
                 and_(
                     Week.faculty_id == data.faculty_id,
@@ -237,18 +185,64 @@ class WeekService(IWeekService):
                     data=None,
                     message=existing_week_response.message,
                 )
-            if existing_week_response.data:
+            existing_week = existing_week_response.data
+            if existing_week:
                 await self.logger.log(
                     action="Create",
                     entity="Week",
                     level="warning",
                     code=400,
-                    message="Week number already exists for this faculty, department, and year",
+                    message="Week already exists with the same details",
+                    details={"week_number": data.week_number},
+                    source="WeekService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Week already exists with the same details",
+                )
+            nearest_distance = func.abs(
+                func.extract("epoch", Week.start_date - data.start_date)
+            )
+            existing_week_withing_date_response = await self.week_repository.find_one(
+                and_(
+                    Week.faculty_id == data.faculty_id,
+                    Week.department_id == data.department_id,
+                    Week.year_id == data.year_id,
+                ),
+                order_by=[nearest_distance.asc()],
+            )
+            if not existing_week_withing_date_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_week_withing_date_response.code,
+                    data=None,
+                    message=existing_week_withing_date_response.message,
+                )
+            existing_week_within_date = existing_week_withing_date_response.data
+            if (
+                existing_week_within_date
+                and abs(
+                    (
+                        (
+                            existing_week_within_date.start_date - data.start_date
+                        ).total_seconds()
+                    )
+                    / 86400
+                )
+                < 7
+            ):
+                await self.logger.log(
+                    action="Create",
+                    entity="Week",
+                    level="warning",
+                    code=400,
+                    message="Another week already exists within 7 days of the provided start date",
                     details={
-                        "faculty_id": data.faculty_id,
-                        "department_id": data.department_id,
-                        "year_id": data.year_id,
-                        "week_number": data.week_number,
+                        "existing_week_id": existing_week_within_date.id,
+                        "existing_week_start_date": existing_week_within_date.start_date,
+                        "new_week_start_date": data.start_date,
                     },
                     source="WeekService",
                 )
@@ -256,18 +250,17 @@ class WeekService(IWeekService):
                     success=False,
                     code=400,
                     data=None,
-                    message="Week number already exists for this faculty, department, and year",
+                    message="Another week already exists within 7 days of the provided start date",
                 )
-
-            result = await self.week_repository.create(data)
-            if not result.success:
+            create_response = await self.week_repository.create(data)
+            if not create_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=result.code,
+                    code=create_response.code,
                     data=None,
-                    message=result.message,
+                    message=create_response.message,
                 )
-            created_week = result.data
+            created_week = create_response.data
             if not created_week:
                 await self.logger.log(
                     action="Create",
@@ -275,7 +268,7 @@ class WeekService(IWeekService):
                     level="error",
                     code=500,
                     message="Failed to create week",
-                    details={"week_number": data.week_number},
+                    details={"week_data": data},
                     source="WeekService",
                 )
                 return BaseResponseDto(
@@ -290,7 +283,7 @@ class WeekService(IWeekService):
                 level="info",
                 code=201,
                 message="Week created successfully",
-                details={"week_id": created_week.id, "week_number": data.week_number},
+                details={"week_id": created_week.id},
                 source="WeekService",
             )
             return BaseResponseDto(success=True, code=201, data=created_week)
@@ -313,18 +306,20 @@ class WeekService(IWeekService):
 
     async def update(self, data):
         try:
-            week_response = await self.week_repository.find_one(Week.id == data.id)
-            if not week_response.success:
+            target_week_response = await self.week_repository.find_one(
+                Week.id == data.id
+            )
+            if not target_week_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=week_response.code,
+                    code=target_week_response.code,
                     data=None,
-                    message=week_response.message,
+                    message=target_week_response.message,
                 )
-            week = week_response.data
-            if not week:
+            target_week = target_week_response.data
+            if not target_week:
                 await self.logger.log(
-                    action="Edit",
+                    action="Update",
                     entity="Week",
                     level="warning",
                     code=404,
@@ -338,112 +333,157 @@ class WeekService(IWeekService):
                     data=None,
                     message="Week not found",
                 )
-
-            faculty_id = data.faculty_id if data.faculty_id is not None else week.faculty_id
-            department_id = (
-                data.department_id if data.department_id is not None else week.department_id
-            )
-            year_id = data.year_id if data.year_id is not None else week.year_id
-            week_number = (
-                data.week_number if data.week_number is not None else week.week_number
-            )
-
-            # Check Faculty existence if changed
-            if data.faculty_id is not None and data.faculty_id != week.faculty_id:
-                fac_res = await self.faculty_repository.find_one(Faculty.id == data.faculty_id)
-                if not fac_res.success or not fac_res.data:
-                    return BaseResponseDto(
-                        success=False, code=404, message=f"Faculty with ID {data.faculty_id} not found"
-                    )
-
-            # Check Department existence if changed
-            if data.department_id is not None and data.department_id != week.department_id:
-                dept_res = await self.department_repository.find_one(
-                    Department.id == data.department_id
-                )
-                if not dept_res.success or not dept_res.data:
-                    return BaseResponseDto(
-                        success=False, code=404, message=f"Department with ID {data.department_id} not found"
-                    )
-
-            # Check Year existence if changed
-            if data.year_id is not None and data.year_id != week.year_id:
-                year_res = await self.year_repository.find_one(Year.id == data.year_id)
-                if not year_res.success or not year_res.data:
-                    return BaseResponseDto(
-                        success=False, code=404, message=f"Year with ID {data.year_id} not found"
-                    )
-
-            # Check duplicate
-            existing_response = await self.week_repository.find_one(
-                and_(
-                    Week.faculty_id == faculty_id,
-                    Week.department_id == department_id,
-                    Week.year_id == year_id,
-                    Week.week_number == week_number,
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=target_week.faculty_id,
+                    department_id=target_week.department_id,
+                    year_id=target_week.year_id,
                 )
             )
-            if not existing_response.success:
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Week",
+                    level="error",
+                    code=verify_restricted_access_response.code or 500,
+                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="WeekService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=existing_response.code,
+                    code=verify_restricted_access_response.code,
                     data=None,
-                    message=existing_response.message,
+                    message=verify_restricted_access_response.message,
                 )
-            existing_week = existing_response.data
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                )
+            )
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Week",
+                    level="error",
+                    code=verify_restricted_access_response.code or 500,
+                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="WeekService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=verify_restricted_access_response.code,
+                    data=None,
+                    message=verify_restricted_access_response.message,
+                )
+            existing_week_response = await self.week_repository.find_one(
+                and_(
+                    Week.faculty_id == data.faculty_id,
+                    Week.department_id == data.department_id,
+                    Week.year_id == data.year_id,
+                    Week.week_number == data.week_number,
+                )
+            )
+            if not existing_week_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_week_response.code,
+                    data=None,
+                    message=existing_week_response.message,
+                )
+            existing_week = existing_week_response.data
             if existing_week and existing_week.id != data.id:
                 await self.logger.log(
-                    action="Edit",
+                    action="Update",
                     entity="Week",
                     level="warning",
                     code=400,
-                    message="Another week with the same details already exists",
-                    details={"week_id": data.id, "week_number": week_number},
+                    message="Another week already exists with the same details",
+                    details={"week_number": data.week_number},
                     source="WeekService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=400,
                     data=None,
-                    message="Another week with the same details already exists",
+                    message="Another week already exists with the same details",
                 )
-
-            fields_to_update = []
-            if data.week_number is not None:
-                week.week_number = data.week_number
-                fields_to_update.append("week_number")
-            if data.start_date is not None:
-                week.start_date = data.start_date
-                fields_to_update.append("start_date")
-            if data.end_date is not None:
-                week.end_date = data.end_date
-                fields_to_update.append("end_date")
-            if data.faculty_id is not None:
-                week.faculty_id = data.faculty_id
-                fields_to_update.append("faculty_id")
-            if data.department_id is not None:
-                week.department_id = data.department_id
-                fields_to_update.append("department_id")
-            if data.year_id is not None:
-                week.year_id = data.year_id
-                fields_to_update.append("year_id")
-
-            if not fields_to_update:
-                return BaseResponseDto(success=True, code=200, data=week)
-
-            result = await self.week_repository.update(week, fields_to_update)
-            if not result.success:
+            nearest_distance = func.abs(
+                func.extract("epoch", Week.start_date - data.start_date)
+            )
+            existing_weeks_withing_date_response = await self.week_repository.find(
+                and_(
+                    Week.faculty_id == data.faculty_id,
+                    Week.department_id == data.department_id,
+                    Week.year_id == data.year_id,
+                ),
+                order_by=[nearest_distance.asc()],
+                limit=2,
+            )
+            if not existing_weeks_withing_date_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=result.code,
+                    code=existing_weeks_withing_date_response.code,
                     data=None,
-                    message=result.message,
+                    message=existing_weeks_withing_date_response.message,
                 )
-
-            updated_week = result.data
+            existing_weeks_within_date = existing_weeks_withing_date_response.data
+            existing_week_within_date = None
+            for week in existing_weeks_within_date or []:
+                if week.id != data.id:
+                    existing_week_within_date = week
+                    break
+            if (
+                existing_week_within_date
+                and abs(
+                    (
+                        (
+                            existing_week_within_date.start_date - data.start_date
+                        ).total_seconds()
+                    )
+                    / 86400
+                )
+                < 7
+            ):
+                await self.logger.log(
+                    action="Update",
+                    entity="Week",
+                    level="warning",
+                    code=400,
+                    message="Another week already exists within 7 days of the provided start date",
+                    details={
+                        "existing_week_id": existing_week_within_date.id,
+                        "existing_week_start_date": existing_week_within_date.start_date,
+                        "new_week_start_date": data.start_date,
+                    },
+                    source="WeekService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Another week already exists within 7 days of the provided start date",
+                )
+            target_week.week_number = data.week_number
+            target_week.start_date = data.start_date
+            target_week.faculty_id = data.faculty_id
+            target_week.department_id = data.department_id
+            target_week.year_id = data.year_id
+            update_response = await self.week_repository.update(target_week)
+            if not update_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_response.code,
+                    data=None,
+                    message=update_response.message,
+                )
+            updated_week = update_response.data
             if not updated_week:
                 await self.logger.log(
-                    action="Edit",
+                    action="Update",
                     entity="Week",
                     level="error",
                     code=500,
@@ -457,9 +497,8 @@ class WeekService(IWeekService):
                     data=None,
                     message="Failed to update week",
                 )
-
             await self.logger.log(
-                action="Edit",
+                action="Update",
                 entity="Week",
                 level="info",
                 code=200,
@@ -470,7 +509,7 @@ class WeekService(IWeekService):
             return BaseResponseDto(success=True, code=200, data=updated_week)
         except Exception as ex:
             await self.logger.log(
-                action="Edit",
+                action="Update",
                 entity="Week",
                 level="error",
                 code=500,
@@ -487,22 +526,18 @@ class WeekService(IWeekService):
 
     async def delete(self, data):
         try:
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Week, ["materials"]
+            target_week_response = await self.week_repository.find_one(
+                Week.id == data.id
             )
-            week_response = await self.week_repository.find_one(
-                Week.id == data.id, dynamic_includes
-            )
-            if not week_response.success:
+            if not target_week_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=week_response.code,
+                    code=target_week_response.code,
                     data=None,
-                    message=week_response.message,
+                    message=target_week_response.message,
                 )
-
-            week = week_response.data
-            if not week:
+            target_week = target_week_response.data
+            if not target_week:
                 await self.logger.log(
                     action="Delete",
                     entity="Week",
@@ -518,14 +553,36 @@ class WeekService(IWeekService):
                     data=None,
                     message="Week not found",
                 )
-
-            result = await self.week_repository.delete(week)
-            if not result.success:
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=target_week.faculty_id,
+                    department_id=target_week.department_id,
+                    year_id=target_week.year_id,
+                )
+            )
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Week",
+                    level="error",
+                    code=verify_restricted_access_response.code or 500,
+                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="WeekService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=result.code,
+                    code=verify_restricted_access_response.code,
                     data=None,
-                    message=result.message,
+                    message=verify_restricted_access_response.message,
+                )
+            delete_response = await self.week_repository.delete(target_week)
+            if not delete_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=delete_response.code,
+                    data=None,
+                    message=delete_response.message,
                 )
             await self.logger.log(
                 action="Delete",

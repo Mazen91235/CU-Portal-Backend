@@ -47,7 +47,12 @@ class Role(Base):
     )
 
     # Relationships
-    users: Mapped[set["User"]] = relationship("User", back_populates="role", cascade="all, delete-orphan", collection_class=set)
+    users: Mapped[set["User"]] = relationship(
+        "User",
+        back_populates="role",
+        cascade="all, delete-orphan",
+        collection_class=set,
+    )
     exact_roles: AssociationProxy[set["ExactRole"]] = association_proxy(
         "role_links",
         "exact_role",
@@ -98,20 +103,11 @@ class Role(Base):
             "Edit Courses",
             "Delete Courses",
             "Access All Courses",
-            "View Course Maps",
-            "Add Course Maps",
-            "Edit Course Maps",
-            "Delete Course Maps",
             "View Materials",
             "Add Materials",
             "Edit Materials",
             "Delete Materials",
             "Manage All Materials",
-            "View Grades",
-            "Add Grades",
-            "Edit Grades",
-            "Delete Grades",
-            "Manage All Grades",
             "View Tasks",
             "Add Tasks",
             "Edit Tasks",
@@ -127,6 +123,18 @@ class Role(Base):
             "Edit Announcements",
             "Delete Announcements",
             "Manage All Announcements",
+            "View Weeks",
+            "Add Weeks",
+            "Edit Weeks",
+            "Delete Weeks",
+            "View Events",
+            "Add Events",
+            "Edit Events",
+            "Delete Events",
+            "View EventOrganizers",
+            "Add EventOrganizers",
+            "Edit EventOrganizers",
+            "Delete EventOrganizers",
             "View Logs",
             "Delete Logs",
             "View Messages",

@@ -1,4 +1,3 @@
-from fastapi import Request, Response
 from core.iControllers.iNotificationController import INotificationController
 from core.iServices.iNotificationService import INotificationService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -7,16 +6,13 @@ from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
 
 # Entities & DTOs
-from core.entities.userNotification import UserNotification
 from core.entities.notification import Notification
 from core.dtos.userNotificationDtos import (
     UserNotificationSearchDto,
-    UserNotificationResponseDto,
 )
 from core.dtos.notificationDtos import (
     NotificationResponseDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class NotificationController(INotificationController):
@@ -90,7 +86,7 @@ class NotificationController(INotificationController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def mark_notification_as_seen(self, request: Request, id: int):
+    async def mark_notification_as_seen(self, request, id):
         try:
             await self.notification_service.begin_transaction()
             response = await self.notification_service.mark_notification_as_seen(id)

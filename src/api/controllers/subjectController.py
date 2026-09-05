@@ -6,7 +6,6 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
-from business.contextVars.userContext import user_context
 
 # Entities & DTOs
 from core.entities.subject import Subject

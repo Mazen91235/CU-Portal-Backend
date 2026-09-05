@@ -243,7 +243,7 @@ class YearService(IYearService):
             year = year_response.data
             if not year:
                 await self.logger.log(
-                    action="Edit",
+                    action="Update",
                     entity="Year",
                     level="warning",
                     code=404,
@@ -271,7 +271,7 @@ class YearService(IYearService):
             existing_year = existing_response.data
             if existing_year and existing_year.id != data.id:
                 await self.logger.log(
-                    action="Edit",
+                    action="Update",
                     entity="Year",
                     level="warning",
                     code=400,
@@ -300,7 +300,7 @@ class YearService(IYearService):
             updated_year = result.data
             if not updated_year:
                 await self.logger.log(
-                    action="Edit",
+                    action="Update",
                     entity="Year",
                     level="error",
                     code=500,
@@ -316,7 +316,7 @@ class YearService(IYearService):
                 )
 
             await self.logger.log(
-                action="Edit",
+                action="Update",
                 entity="Year",
                 level="info",
                 code=200,
@@ -327,7 +327,7 @@ class YearService(IYearService):
             return BaseResponseDto(success=True, code=200, data=updated_year)
         except Exception as ex:
             await self.logger.log(
-                action="Edit",
+                action="Update",
                 entity="Year",
                 level="error",
                 code=500,

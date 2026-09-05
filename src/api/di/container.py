@@ -288,9 +288,9 @@ class Container(containers.DeclarativeContainer):
         material_repository=material_repository,
         subject_repository=subject_repository,
         user_repository=user_repository,
+        week_repository=week_repository,
         logger=logger,
         helper_service=helper_service,
-        week_repository=week_repository,
     )
 
     message_service = providers.Factory(
@@ -325,9 +325,6 @@ class Container(containers.DeclarativeContainer):
     week_service = providers.Factory(
         WeekService,
         week_repository=week_repository,
-        faculty_repository=faculty_repository,
-        department_repository=department_repository,
-        year_repository=year_repository,
         logger=logger,
         helper_service=helper_service,
     )

@@ -12,7 +12,6 @@ from core.entities.notification import Notification
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import FetchedModel
 from core.utils.validator import Validator
-from core.utils.fernetHandler import FernetHandler
 
 
 class MaterialService(IMaterialService):
@@ -21,9 +20,9 @@ class MaterialService(IMaterialService):
         material_repository: IBaseRepository[Material],
         subject_repository: IBaseRepository[Subject],
         user_repository: IBaseRepository[User],
+        week_repository: IBaseRepository[Week],
         logger: IBaseLogger,
         helper_service: IHelperService,
-        week_repository: IBaseRepository[Week] | None = None,
     ):
         self.material_repository = material_repository
         self.subject_repository = subject_repository
@@ -77,7 +76,6 @@ class MaterialService(IMaterialService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                [],
                 descending,
             )
             if not result.success:
@@ -142,7 +140,6 @@ class MaterialService(IMaterialService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                [],
                 descending,
                 page,
                 limit,
@@ -260,33 +257,6 @@ class MaterialService(IMaterialService):
                         message=f"Parent material with ID {data.parent_id} not found",
                     )
                 parent_id = parent_material.id
-            if getattr(data, "week_id", None) and self.week_repository:
-                week_response = await self.week_repository.find_one(
-                    Week.id == data.week_id
-                )
-                if not week_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=week_response.code,
-                        data=None,
-                        message=week_response.message,
-                    )
-                if not week_response.data:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Material",
-                        level="error",
-                        code=404,
-                        message=f"Week with ID {data.week_id} not found",
-                        details={"error": "Week not found"},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message=f"Week with ID {data.week_id} not found",
-                    )
             subject_id = None
             if not data.subject_id:
                 await self.logger.log(
@@ -390,6 +360,56 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=verify_restricted_access_response.message,
                 )
+            if data.week_id:
+                week_response = await self.week_repository.find_one(
+                    Week.id == data.week_id
+                )
+                if not week_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=week_response.code,
+                        data=None,
+                        message=week_response.message,
+                    )
+                week = week_response.data
+                if not week:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Week with ID {data.week_id} not found",
+                        details={"error": "Week not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Week with ID {data.week_id} not found",
+                    )
+                if (
+                    week.faculty_id != subject.faculty_id
+                    or week.department_id != subject.department_id
+                    or week.year_id != subject.year_id
+                ):
+                    await self.logger.log(
+                        action="Create",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Week with ID {data.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
+                        details={
+                            "error": "Week does not match subject's faculty, department, or year"
+                        },
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Week with ID {data.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
+                    )
             user_ids = [user.id for user in subject.users] if subject.users else []
             data.author_id = logged_in_user.id
             data.details = data.details or {}
@@ -700,6 +720,56 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=verify_restricted_access_response.message,
                 )
+            if data.week_id:
+                week_response = await self.week_repository.find_one(
+                    Week.id == data.week_id
+                )
+                if not week_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=week_response.code,
+                        data=None,
+                        message=week_response.message,
+                    )
+                week = week_response.data
+                if not week:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Week with ID {data.week_id} not found",
+                        details={"error": "Week not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Week with ID {data.week_id} not found",
+                    )
+                if (
+                    week.faculty_id != subject.faculty_id
+                    or week.department_id != subject.department_id
+                    or week.year_id != subject.year_id
+                ):
+                    await self.logger.log(
+                        action="Update",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Week with ID {data.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
+                        details={
+                            "error": "Week does not match subject's faculty, department, or year"
+                        },
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Week with ID {data.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
+                    )
             logged_in_user_permissions_response = (
                 await self.helper_service.get_logged_in_user_permissions()
             )
@@ -2047,7 +2117,6 @@ class MaterialService(IMaterialService):
                 subject_id=existing_material.subject_id,
                 parent_id=destination_id,
                 author_id=author_id,
-                week_id=existing_material.week_id,
             )
             unique_name_response = await self._generate_unique_name(
                 new_material.name, new_material.subject_id, new_material.parent_id

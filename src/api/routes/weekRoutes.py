@@ -39,18 +39,11 @@ def create_week_user_router(
     ):
         return await auth_middleware.is_ready(request)
 
-    async def _has_registered_subjects(
-        request: Request,
-        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
-    ):
-        return await auth_middleware.has_registered_subjects(request)
-
     @router.get(
         "/{week_id}",
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_ready),
-            Depends(_has_registered_subjects),
         ],
         response_model=BaseResponseDto[WeekResponseDto],
         status_code=200,
@@ -69,7 +62,6 @@ def create_week_user_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_ready),
-            Depends(_has_registered_subjects),
         ],
         response_model=BaseResponseDto[list[WeekResponseDto]],
         status_code=200,
@@ -109,6 +101,12 @@ def create_week_admin_router(
     ):
         return await auth_middleware.is_logged_in(request, refresh_token)
 
+    async def _is_ready(
+        request: Request,
+        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+    ):
+        return await auth_middleware.is_ready(request)
+
     def _is_authorized(*permissions):
         async def authorize(
             request: Request,
@@ -131,7 +129,11 @@ def create_week_admin_router(
 
     @router.get(
         "/{week_id}",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Weeks"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_ready),
+            Depends(_is_authorized("View Weeks")),
+        ],
         response_model=BaseResponseDto[WeekResponseDto],
         status_code=200,
         summary="Find Week",
@@ -146,7 +148,11 @@ def create_week_admin_router(
 
     @router.get(
         "/",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Weeks"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_ready),
+            Depends(_is_authorized("View Weeks")),
+        ],
         response_model=BaseResponseDto[list[WeekResponseDto]],
         status_code=200,
         summary="Find Weeks",
@@ -165,8 +171,17 @@ def create_week_admin_router(
         "/",
         dependencies=[
             Depends(_is_logged_in),
+            Depends(_is_ready),
             Depends(_is_authorized("Add Weeks")),
-            Depends(_validate("week_number")),
+            Depends(
+                _validate(
+                    "week_number",
+                    "start_date",
+                    "faculty_id",
+                    "department_id",
+                    "year_id",
+                )
+            ),
         ],
         response_model=BaseResponseDto[WeekResponseDto],
         status_code=201,
@@ -184,8 +199,17 @@ def create_week_admin_router(
         "/{week_id}",
         dependencies=[
             Depends(_is_logged_in),
+            Depends(_is_ready),
             Depends(_is_authorized("Edit Weeks")),
-            Depends(_validate("week_number")),
+            Depends(
+                _validate(
+                    "week_number",
+                    "start_date",
+                    "faculty_id",
+                    "department_id",
+                    "year_id",
+                )
+            ),
         ],
         response_model=BaseResponseDto[WeekResponseDto],
         status_code=200,
@@ -202,7 +226,11 @@ def create_week_admin_router(
 
     @router.delete(
         "/{week_id}",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("Delete Weeks"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_ready),
+            Depends(_is_authorized("Delete Weeks")),
+        ],
         response_model=BaseResponseDto[bool],
         status_code=200,
         summary="Delete Week",

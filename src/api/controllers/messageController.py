@@ -6,7 +6,6 @@ from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
 from core.entities.message import Message
 from core.dtos.messageDtos import MessageCreateDto, MessageResponseDto, MessageSearchDto
-from core.models.queryModel import QueryModel
 
 
 class MessageController(IMessageController):

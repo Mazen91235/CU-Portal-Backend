@@ -890,20 +890,7 @@ class RoleService(IRoleService):
                     for permission in role_permissions_to_remove:
                         exact_role = all_exact_roles.get(permission)
                         if not exact_role:
-                            await self.logger.log(
-                                action="ResetPermissions",
-                                entity="Role",
-                                level="warning",
-                                code=404,
-                                message=f"Exact role '{permission}' not found for removal from role '{exclusion_role}'.",
-                                source="RoleService",
-                            )
-                            return BaseResponseDto(
-                                success=False,
-                                code=404,
-                                data=None,
-                                message=f"Exact role '{permission}' not found for removal from role '{exclusion_role}'.",
-                            )
+                            continue
                         role.exact_roles.remove(exact_role)
                     update_response = await self.role_repository.update(
                         role, ["role_links", "exact_roles"]
