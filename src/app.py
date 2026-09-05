@@ -45,6 +45,7 @@ from core.entities.subject import Subject
 from core.entities.task import Task
 from core.entities.announcement import Announcement
 from core.entities.user import User
+from core.entities.note import Note
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -62,6 +63,7 @@ def rebuild_response_dtos() -> None:
         Announcement=Announcement,
         Notification=Notification,
         User=User,
+        Note=Note,
     )
     for dto in response_dtos:
         dto.model_rebuild(_types_namespace=dto_namespace)
