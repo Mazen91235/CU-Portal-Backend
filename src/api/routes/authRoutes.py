@@ -185,7 +185,7 @@ def create_auth_router(
 
     @router.get(
         "/google-authentication-redirect",
-        dependencies=[Depends(_is_logged_out), Depends(set_timeout(120))],
+        dependencies=[Depends(set_timeout(120))],
         summary="Handle Google authentication redirect",
         description="Handles the redirect from Google after user authentication and processes the login. User is then redirected to the frontend url with the authentication result and token if logged in.",
     )

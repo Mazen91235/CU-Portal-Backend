@@ -10,5 +10,9 @@ class IRoleController(ICrudController[RoleCreateDto, RoleUpdateDto, RoleSearchDt
         pass
 
     @abstractmethod
+    async def get_permissions(self, request: Request) -> Response:
+        pass
+
+    @abstractmethod
     async def reset_permissions(self, request: Request) -> Response:
         pass

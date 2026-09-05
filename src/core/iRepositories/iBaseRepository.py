@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import TypeVar, Generic, List, Any
+from sqlalchemy.ext.asyncio import AsyncSession
 from core.dtos.baseDtos import BaseResponseDto
 
 T = TypeVar("T")
@@ -12,7 +13,8 @@ class IBaseRepository(ABC, Generic[T]):
         predicate: Any = None,
         includes: List[Any] = [],
         selects: List[Any] = [],
-        order_by: list[Any] = [],
+        order_by: List[Any] = [],
+        join_entities: List[Any] = [],
         descending: bool = False,
     ) -> BaseResponseDto[T]:
         pass
@@ -23,7 +25,8 @@ class IBaseRepository(ABC, Generic[T]):
         predicate: Any = None,
         includes: List[Any] = [],
         selects: List[Any] = [],
-        order_by: list[Any] = [],
+        order_by: List[Any] = [],
+        join_entities: List[Any] = [],
         descending: bool = False,
         page: int = 1,
         limit: int = 50,
@@ -35,7 +38,17 @@ class IBaseRepository(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    async def create(self, entity: T) -> BaseResponseDto[T]:
+    async def find_distinct(
+        self,
+        predicate: Any = None,
+        column: Any = None,
+    ) -> BaseResponseDto[List[Any]]:
+        pass
+
+    @abstractmethod
+    async def create(
+        self, entity: T, session: AsyncSession | None = None
+    ) -> BaseResponseDto[T]:
         pass
 
     @abstractmethod

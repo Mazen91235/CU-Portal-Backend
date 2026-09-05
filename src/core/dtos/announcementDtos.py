@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from .departmentDtos import DepartmentResponseDto
     from .yearDtos import YearResponseDto
     from .facultyDtos import FacultyResponseDto
+    from .attachmentDtos import AttachmentResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
 
@@ -20,9 +21,7 @@ class AnnouncementCreateDto(BaseModel):
     content: str = Field(
         ..., min_length=1, max_length=1000, description="Content of the announcement"
     )
-    date: str | None = Field(
-        default=None, description="Date string for the announcement"
-    )
+    date: datetime | None = Field(default=None, description="Date for the announcement")
     subject_id: int = Field(
         ..., gt=0, description="ID of the subject this announcement belongs to"
     )
@@ -33,15 +32,8 @@ class AnnouncementCreateDto(BaseModel):
     year_id: int | None = Field(
         default=None, gt=0, description="ID of the academic year"
     )
-    urls: list[str] = Field(
-        default_factory=list,
-        description="List of Google Drive file URLs attached to the announcement",
-    )
-    links: list[dict[str, str]] = Field(
-        default_factory=list, description="List of external links"
-    )
     details: dict[str, Any] = Field(
-        default_factory=dict, description="Additional details dictionary"
+        default_factory=dict, description="Additional details dictionary (eg. urls, links)"
     )
 
 
@@ -52,19 +44,13 @@ class AnnouncementResponseDto(BaseModel):
     date: datetime | None = Field(
         default=None, description="Scheduled date of the announcement"
     )
-    urls: list[str] | None = Field(
-        default_factory=list, description="List of attached file URLs"
-    )
-    links: list[dict[str, str]] | None = Field(
-        default_factory=list, description="List of attached links"
-    )
     details: dict | None = Field(
         default_factory=dict, description="Additional details (e.g., files_data)"
     )
     created_at: datetime | None = Field(
         default=None, description="Creation date of the announcement"
     )
-    modified_at: datetime | None = Field(
+    updated_at: datetime | None = Field(
         default=None, description="Last update date of the announcement"
     )
 
@@ -83,6 +69,9 @@ class AnnouncementResponseDto(BaseModel):
     )
     year: YearResponseDto | None = Field(
         default=None, description="Academic year associated with the announcement"
+    )
+    attachments: list[AttachmentResponseDto] | None = Field(
+        default_factory=list, description="List of attachments for the announcement"
     )
 
     # Pydantic Configuration
@@ -104,9 +93,7 @@ class AnnouncementUpdateDto(BaseModel):
         max_length=1000,
         description="Content of the announcement",
     )
-    date: str | None = Field(
-        default=None, description="ISO formatted date string for the announcement"
-    )
+    date: datetime | None = Field(default=None, description="Date for the announcement")
     subject_id: int = Field(
         ..., gt=0, description="ID of the subject this announcement belongs to"
     )
@@ -117,15 +104,8 @@ class AnnouncementUpdateDto(BaseModel):
     year_id: int | None = Field(
         default=None, gt=0, description="ID of the academic year"
     )
-    urls: list[str] = Field(
-        default_factory=list,
-        description="List of Google Drive file URLs attached to the announcement",
-    )
-    links: list[dict[str, str]] = Field(
-        default_factory=list, description="List of external links"
-    )
     details: dict[str, Any] = Field(
-        default_factory=dict, description="Additional details dictionary"
+        default_factory=dict, description="Additional details dictionary (eg. urls, links)"
     )
 
 
@@ -148,9 +128,9 @@ class AnnouncementSearchDto(BaseSearchDto):
     )
     year_id: int | None = Field(default=None, description="ID of Year to filter by")
     author_id: int | None = Field(default=None, description="ID of Author to filter by")
-    date_from: str | None = Field(
+    date_from: datetime | None = Field(
         default=None, description="Start date to filter announcements"
     )
-    date_to: str | None = Field(
+    date_to: datetime | None = Field(
         default=None, description="End date to filter announcements"
     )

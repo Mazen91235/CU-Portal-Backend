@@ -17,8 +17,6 @@ from core.dtos.subjectDtos import (
     SubjectResponseDto,
 )
 
-from core.models.queryModel import QueryModel
-
 
 class SubjectController(ISubjectController):
     def __init__(
@@ -38,7 +36,8 @@ class SubjectController(ISubjectController):
                 SubjectSearchDto, {"id": id}
             )
             response = await self.subject_service.find_one(
-                entity_search_dto, includes=["faculty", "department", "year", "users"]
+                entity_search_dto,
+                includes=["faculty", "department", "year", "user_subject_links.user"],
             )
 
             if not response.success:
@@ -119,21 +118,8 @@ class SubjectController(ISubjectController):
 
             subjects = response.data
 
-            if subjects is None:
-                await self.logger.log(
-                    action="Find",
-                    entity="Subject",
-                    level="info",
-                    code=404,
-                    message="Subjects not found",
-                    source="SubjectController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False, code=404, message="Subjects not found"
-                )
-
             subjects_mapped = Mapper[Subject, SubjectResponseDto].map_list(
-                subjects, SubjectResponseDto, True
+                subjects or [], SubjectResponseDto, True
             )
 
             return ResponseHandler.generate_response(
@@ -141,6 +127,7 @@ class SubjectController(ISubjectController):
                 code=200,
                 message="Subjects retrieved successfully",
                 data=subjects_mapped,
+                next_page=response.next_page,
             )
         except Exception as e:
             await self.logger.log(
@@ -311,21 +298,7 @@ class SubjectController(ISubjectController):
                     success=False, code=response.code, message=response.message
                 )
 
-            available_subjects = response.data
-            if not available_subjects:
-                await self.logger.log(
-                    action="GetAvailable",
-                    entity="Subject",
-                    level="error",
-                    code=500,
-                    message="Failed to retrieve available subjects",
-                    source="SubjectController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=500,
-                    message="An error occurred while processing the request, please try again later",
-                )
+            available_subjects = response.data or []
             subjects_mapped = Mapper[Subject, SubjectResponseDto].map_list(
                 available_subjects, SubjectResponseDto, True
             )

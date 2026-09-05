@@ -19,6 +19,7 @@ from api.routes.announcementRoutes import (
     create_announcement_user_router,
     create_announcement_admin_router,
 )
+from api.routes.calendarRoutes import create_calendar_user_router
 from api.routes.subjectRoutes import (
     create_subject_admin_router,
     create_subject_user_router,
@@ -29,38 +30,50 @@ from api.routes.materialRoutes import (
     create_material_user_router,
     create_material_admin_router,
 )
+from api.routes.attachmentRoutes import create_attachment_public_router
+from api.routes.fileRoutes import create_file_public_router
 from api.routes.messageRoutes import (
     create_message_public_router,
     create_message_admin_router,
 )
-from api.routes.yearRoutes import create_year_admin_router
-from api.routes.departmentRoutes import create_department_admin_router
-from api.routes.facultyRoutes import create_faculty_admin_router
 from api.routes.weekRoutes import (
     create_week_user_router,
     create_week_admin_router,
 )
+from api.routes.yearRoutes import create_year_user_router, create_year_admin_router
+from api.routes.departmentRoutes import (
+    create_department_user_router,
+    create_department_admin_router,
+)
+from api.routes.facultyRoutes import (
+    create_faculty_user_router,
+    create_faculty_admin_router,
+)
+from api.middlewares.authMiddleware import AuthMiddleware
+from api.middlewares.validationMiddleware import ValidationMiddleware
+from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
+from business.contextVars.sessionContext import session_context
 from api.controllers.userController import UserController
 from api.controllers.roleController import RoleController
 from api.controllers.examController import ExamController
 from api.controllers.facultyController import FacultyController
+from api.controllers.fileController import FileController
 from api.controllers.messageController import MessageController
 from api.controllers.logController import LogController
 from api.controllers.materialController import MaterialController
 from api.controllers.subjectController import SubjectController
 from api.controllers.announcementController import AnnouncementController
 from api.controllers.taskController import TaskController
+from api.controllers.calendarController import CalendarController
 from api.controllers.notificationController import NotificationController
 from api.controllers.yearController import YearController
 from api.controllers.departmentController import DepartmentController
 from api.controllers.weekController import WeekController
-from api.middlewares.authMiddleware import AuthMiddleware
-from api.middlewares.validationMiddleware import ValidationMiddleware
-from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
-from business.contextVars.sessionContext import session_context
+from api.controllers.attachmentController import AttachmentController
 from business.services.userService import UserService
 from business.services.roleService import RoleService
 from business.services.taskService import TaskService
+from business.services.calendarService import CalendarService
 from business.services.subjectService import SubjectService
 from business.services.announcementService import AnnouncementService
 from business.services.notificationService import NotificationService
@@ -72,8 +85,9 @@ from business.services.yearService import YearService
 from business.services.departmentService import DepartmentService
 from business.services.weekService import WeekService
 from business.services.requestLimitService import RequestLimitService
-from business.services.helperService import HelperService
 from business.services.examService import ExamService
+from business.services.attachmentService import AttachmentService
+from business.services.helperService import HelperService
 from business.loggers.baseLogger import BaseLogger
 from infrastructure.repositories.baseRepository import BaseRepository
 from core.entities.log import Log
@@ -97,6 +111,7 @@ from core.entities.notification import Notification
 from core.entities.message import Message
 from core.entities.faculty import Faculty
 from core.entities.week import Week
+from core.entities.attachment import Attachment
 from core.utils.databaseHandler import DatabaseHandler
 
 DB_URL = DatabaseHandler.get_db_url()
@@ -221,6 +236,12 @@ class Container(containers.DeclarativeContainer):
         model=Week,
         session_factory=session_factory,
     )
+    attachment_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Attachment,
+        session_factory=session_factory,
+    )
 
     # --- 4. Services ---
     helper_service = providers.Factory(
@@ -233,6 +254,8 @@ class Container(containers.DeclarativeContainer):
         department_repository=department_repository,
         year_repository=year_repository,
         subject_repository=subject_repository,
+        attachment_repository=attachment_repository,
+        session_factory=session_factory,
     )
     logger = providers.Factory(
         BaseLogger, repository=log_repository, helper_service=helper_service
@@ -336,6 +359,13 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
+    calendar_service = providers.Factory(
+        CalendarService,
+        task_repository=task_repository,
+        announcement_repository=announcement_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
     notification_service = providers.Factory(
         NotificationService,
         user_notification_repository=user_notification_repository,
@@ -351,12 +381,22 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
+    attachment_service = providers.Factory(
+        AttachmentService,
+        attachment_repository=attachment_repository,
+        announcement_repository=announcement_repository,
+        material_repository=material_repository,
+        pending_user_repository=pending_user_repository,
+        task_repository=task_repository,
+        user_repository=user_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
 
     # --- 5. Middlewares ---
     auth_middleware = providers.Factory(
         AuthMiddleware,
         user_service=user_service,
-        role_service=role_service,
         logger=logger,
     )
 
@@ -384,6 +424,9 @@ class Container(containers.DeclarativeContainer):
     task_controller = providers.Factory(
         TaskController, task_service=task_service, logger=logger
     )
+    calendar_controller = providers.Factory(
+        CalendarController, calendar_service=calendar_service, logger=logger
+    )
     notification_controller = providers.Factory(
         NotificationController, notification_service=notification_service, logger=logger
     )
@@ -394,6 +437,10 @@ class Container(containers.DeclarativeContainer):
 
     material_controller = providers.Factory(
         MaterialController, material_service=material_service, logger=logger
+    )
+
+    file_controller = providers.Factory(
+        FileController, helper_service=helper_service, logger=logger
     )
 
     message_controller = providers.Factory(
@@ -429,6 +476,10 @@ class Container(containers.DeclarativeContainer):
 
     role_controller = providers.Factory(
         RoleController, role_service=role_service, logger=logger
+    )
+
+    attachment_controller = providers.Factory(
+        AttachmentController, attachment_service=attachment_service, logger=logger
     )
 
     # --- 7. Routes ---
@@ -475,9 +526,23 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    year_user_routes = providers.Factory(
+        create_year_user_router,
+        controller_provider=year_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
     year_admin_routes = providers.Factory(
         create_year_admin_router,
         controller_provider=year_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    department_user_routes = providers.Factory(
+        create_department_user_router,
+        controller_provider=department_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
@@ -536,12 +601,30 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    calendar_user_routes = providers.Factory(
+        create_calendar_user_router,
+        controller_provider=calendar_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
     material_admin_routes = providers.Factory(
         create_material_admin_router,
         controller_provider=material_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
+
+    attachment_public_routes = providers.Factory(
+        create_attachment_public_router,
+        controller_provider=attachment_controller.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    file_public_routes = providers.Factory(
+        create_file_public_router, controller_provider=file_controller.provider
+    )
+
     message_public_routes = providers.Factory(
         create_message_public_router,
         controller_provider=message_controller.provider,
@@ -551,6 +634,12 @@ class Container(containers.DeclarativeContainer):
     message_admin_routes = providers.Factory(
         create_message_admin_router,
         controller_provider=message_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+    )
+
+    faculty_user_routes = providers.Factory(
+        create_faculty_user_router,
+        controller_provider=faculty_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )

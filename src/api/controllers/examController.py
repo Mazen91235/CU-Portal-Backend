@@ -127,29 +127,15 @@ class ExamController(IExamController):
 
             exams = response.data
 
-            if not exams:
-                await self.logger.log(
-                    action="Find",
-                    entity="Exam",
-                    level="info",
-                    code=404,
-                    message="Exams not found",
-                    source="ExamController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Exams not found",
-                )
-
             exams_mapped = Mapper[Task, ExamResponseDto].map_list(
-                exams, ExamResponseDto, True
+                exams or [], ExamResponseDto, True
             )
 
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 data=exams_mapped,
+                next_page=response.next_page,
             )
 
         except Exception as e:

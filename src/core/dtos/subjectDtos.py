@@ -56,7 +56,9 @@ class SubjectResponseDto(BaseModel):
     term: int | None = Field(
         default=None, description="Term/semester the subject is offered in"
     )
-    credits: int | None = Field(default=None, description="Number of credits for the subject")
+    credits: int | None = Field(
+        default=None, description="Number of credits for the subject"
+    )
     created_at: datetime | None = Field(
         default=None, description="Timestamp when the subject was created"
     )
@@ -112,9 +114,7 @@ class SubjectUpdateDto(BaseModel):
         default_factory=dict,
         description="Additional details about the subject like description, max_students, etc.",
     )
-    is_old: bool = Field(
-        default=False, description="Whether the subject is deprecated"
-    )
+    is_old: bool = Field(default=False, description="Whether the subject is deprecated")
 
 
 class SubjectSearchDto(BaseSearchDto):
@@ -128,4 +128,7 @@ class SubjectSearchDto(BaseSearchDto):
     year_id: int | None = Field(default=None, description="ID of Year to filter by")
     is_old: bool | None = Field(
         default=None, description="Whether the subject is deprecated"
+    )
+    user_id: int | None = Field(
+        default=None, description="ID of User to filter subjects by enrollment"
     )

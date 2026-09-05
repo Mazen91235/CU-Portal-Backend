@@ -109,24 +109,26 @@ class Event(Base):
             "core.entities.userEvent", fromlist=["UserEvent"]
         ).UserEvent(user=user),
     )
-    user_events: Mapped[list["UserEvent"]] = relationship(
+    user_events: Mapped[set["UserEvent"]] = relationship(
         "UserEvent",
         back_populates="event",
         cascade="all, delete-orphan",
+        collection_class=set
     )
     logo_id: Mapped[Optional[int]] = mapped_column(
         Integer,
-        ForeignKey("attachments.id", ondelete="CASCADE", name="fk_attachment_event"),
+        ForeignKey("attachments.id", ondelete="SET NULL", name="fk_attachment_event"),
         nullable=False,
     )
     logo: Mapped[Optional["Attachment"]] = relationship(
         "Attachment", back_populates="event_logo", foreign_keys=[logo_id]
     )
-    attachments: Mapped[list["Attachment"]] = relationship(
+    attachments: Mapped[set["Attachment"]] = relationship(
         "Attachment",
         back_populates="event",
-        cascade="all, delete-orphan",
+        cascade="save-update, merge",
         foreign_keys="Attachment.event_id",
+        collection_class=set
     )
 
     # Indexes

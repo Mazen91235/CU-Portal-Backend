@@ -50,17 +50,34 @@ class Mapper(Generic[T, U]):
         return inspected_value is not None and hasattr(inspected_value, "mapper")
 
     @classmethod
-    def _map_nested_value(cls, value: Any, visited: set[int]) -> Any:
+    def _map_nested_value(
+        cls, value: Any, visited: set[int], limit_nesting: int | None = None
+    ) -> Any:
         if value is None:
             return None
 
+        # Check for iterable/collection types
         if isinstance(value, (list, tuple, set, _AssociationList, _AssociationSet)):
-            return [cls._map_nested_value(item, visited) for item in value]
+            items = list(value)
+            # Apply limit if specified
+            if limit_nesting is not None and limit_nesting >= 0:
+                items = items[:limit_nesting]
+
+            # Map items and filter out None results caused by cycle detection
+            mapped_items = []
+            for item in items:
+                mapped_item = cls._map_nested_value(
+                    item, visited, limit_nesting=limit_nesting
+                )
+                if mapped_item is not None:
+                    mapped_items.append(mapped_item)
+
+            return mapped_items
 
         if not cls._is_orm_instance(value):
             return value
 
-        # FIX: Track the individual instance ID to break cycles without blocking sibling objects
+        # Track individual instance ID to break cycles without blocking sibling objects
         if id(value) in visited:
             return None
 
@@ -70,7 +87,13 @@ class Mapper(Generic[T, U]):
         if not dto_cls:
             return value
 
-        return cls.map(value, dto_cls, False, visited)
+        return cls.map(
+            value,
+            dto_cls,
+            to_dict=False,
+            visited=visited,
+            limit_nesting=limit_nesting,
+        )
 
     @staticmethod
     def map(
@@ -78,6 +101,7 @@ class Mapper(Generic[T, U]):
         cls: Type[U],
         to_dict: bool = False,
         visited: set[int] | None = None,
+        limit_nesting: int | None = None,
     ) -> U | dict:
         mapped_values = {}
         active_visited = set(visited) if visited is not None else set()
@@ -105,12 +129,15 @@ class Mapper(Generic[T, U]):
             except Exception:
                 source_attrs = dir(src)
 
-            # Keep your explicit property visible to the mapper
+            # Keep explicit property visible to the mapper
             if (
                 hasattr(src, "google_details_token")
                 and "google_details_token" not in source_attrs
             ):
                 source_attrs.append("google_details_token")
+
+            if hasattr(src, "seen") and "seen" not in source_attrs:
+                source_attrs.append("seen")
 
         target_fields = (
             cls.model_fields.keys() if issubclass(cls, BaseModel) else dir(cls)
@@ -125,7 +152,9 @@ class Mapper(Generic[T, U]):
                 raw_value = (
                     getattr(src, attr) if not isinstance(src, dict) else src.get(attr)
                 )
-                mapped_value = Mapper._map_nested_value(raw_value, active_visited)
+                mapped_value = Mapper._map_nested_value(
+                    raw_value, active_visited, limit_nesting=limit_nesting
+                )
                 mapped_values[attr] = mapped_value
 
         dest = cls(**mapped_values)
@@ -141,6 +170,12 @@ class Mapper(Generic[T, U]):
 
     @staticmethod
     def map_list(
-        src_list: list[T], cls: Type[U], to_dict: bool = False
+        src_list: list[T],
+        cls: Type[U],
+        to_dict: bool = False,
+        limit_nesting: int | None = None,
     ) -> list[U] | list[dict]:
-        return [Mapper.map(src, cls, to_dict=to_dict) for src in src_list]
+        return [
+            Mapper.map(src, cls, to_dict=to_dict, limit_nesting=limit_nesting)
+            for src in src_list
+        ]

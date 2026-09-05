@@ -65,6 +65,7 @@ class SubjectService(ISubjectService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
             )
             if not result.success:
@@ -103,32 +104,70 @@ class SubjectService(ISubjectService):
         limit=50,
     ):
         try:
-            predicate = self.helper_service.generate_dynamic_predicate(
-                Subject, data, ["name", "code"], is_and, starts_with, is_exact
-            )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, includes
-            )
-            dynamic_selects = self.helper_service.generate_dynamic_selects(
-                "Subject", selects
-            )
-            dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Subject", order_by
-            )
-            result = await self.subject_repository.find(
-                predicate,
-                dynamic_includes,
-                dynamic_selects,
-                dynamic_order_by,
-                descending,
-                page,
-                limit,
-            )
-            if not result.success:
-                return BaseResponseDto(
-                    success=False, code=result.code, data=None, message=result.message
+            if not data or data.user_id is None:
+                predicate = self.helper_service.generate_dynamic_predicate(
+                    Subject, data, ["name", "code"], is_and, starts_with, is_exact
                 )
-            return BaseResponseDto(success=True, data=result.data)
+                dynamic_includes = self.helper_service.generate_dynamic_includes(
+                    Subject, includes
+                )
+                dynamic_selects = self.helper_service.generate_dynamic_selects(
+                    "Subject", selects
+                )
+                dynamic_order_by = self.helper_service.generate_dynamic_order_by(
+                    "Subject", order_by
+                )
+                result = await self.subject_repository.find(
+                    predicate,
+                    dynamic_includes,
+                    dynamic_selects,
+                    dynamic_order_by,
+                    [],
+                    descending,
+                    page,
+                    limit,
+                )
+                if not result.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=result.code,
+                        data=None,
+                        message=result.message,
+                    )
+                return BaseResponseDto(
+                    success=True, data=result.data, next_page=result.next_page
+                )
+            else:
+                dynamic_includes = self.helper_service.generate_dynamic_includes(
+                    UserSubjectLink,
+                    [
+                        "subject.faculty",
+                        "subject.department",
+                        "subject.year",
+                        "subject.users",
+                    ],
+                )
+                subject_link_response = await self.user_subject_link_repository.find(
+                    UserSubjectLink.user_id == data.user_id, dynamic_includes
+                )
+                if not subject_link_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=subject_link_response.code,
+                        data=None,
+                        message=subject_link_response.message,
+                    )
+                subject_links = subject_link_response.data
+                if not subject_links:
+                    return BaseResponseDto(
+                        success=True, data=[], next_page=subject_link_response.next_page
+                    )
+                subjects = [link.subject for link in subject_links if link.subject]
+                return BaseResponseDto(
+                    success=True,
+                    data=subjects,
+                    next_page=subject_link_response.next_page,
+                )
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -463,8 +502,11 @@ class SubjectService(ISubjectService):
 
     async def delete(self, data):
         try:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Subject, ["user_subject_links.user"]
+            )
             existing_response = await self.subject_repository.find_one(
-                Subject.id == data.id, ["users"]
+                Subject.id == data.id, dynamic_includes
             )
             if not existing_response.success:
                 return BaseResponseDto(
@@ -595,22 +637,7 @@ class SubjectService(ISubjectService):
                     data=None,
                     message=response.message,
                 )
-            available_courses = response.data
-            if not available_courses:
-                await self.logger.log(
-                    action="GetAvailable",
-                    entity="Subject",
-                    level="warning",
-                    code=404,
-                    message="No available courses found for the logged in user.",
-                    source="UserService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="No available courses found for the logged in user.",
-                )
+            available_courses = response.data or []
             available_courses = cast(list[Subject], available_courses)
             await self.logger.log(
                 action="GetAvailable",
@@ -677,14 +704,19 @@ class SubjectService(ISubjectService):
                     success=False, code=401, data=None, message="Unauthorized"
                 )
 
-            result = await self.user_subject_link_repository.find(
-                UserSubjectLink.user_id == logged_in_user.id,
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                UserSubjectLink,
                 [
                     "subject.faculty",
                     "subject.department",
                     "subject.year",
                     "subject.users",
                 ],
+            )
+
+            result = await self.user_subject_link_repository.find(
+                UserSubjectLink.user_id == logged_in_user.id,
+                dynamic_includes,
             )
             if not result.success:
                 return BaseResponseDto(
@@ -772,17 +804,22 @@ class SubjectService(ISubjectService):
                     success=False, code=401, data=None, message="Unauthorized"
                 )
 
-            link_response = await self.user_subject_link_repository.find_one(
-                and_(
-                    UserSubjectLink.user_id == logged_in_user.id,
-                    UserSubjectLink.subject_id == subject_id,
-                ),
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                UserSubjectLink,
                 [
                     "subject.faculty",
                     "subject.department",
                     "subject.year",
                     "subject.users",
                 ],
+            )
+
+            link_response = await self.user_subject_link_repository.find_one(
+                and_(
+                    UserSubjectLink.user_id == logged_in_user.id,
+                    UserSubjectLink.subject_id == subject_id,
+                ),
+                dynamic_includes,
             )
             if not link_response.success:
                 return BaseResponseDto(

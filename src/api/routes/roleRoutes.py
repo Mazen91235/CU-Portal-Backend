@@ -57,6 +57,19 @@ def create_role_admin_router(
         return validate_request
 
     @router.get(
+        "/permissions",
+        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Roles"))],
+        response_model=BaseResponseDto[list[str]],
+        status_code=200,
+        summary="Get permissions",
+        description="Get the available exact permissions in the system",
+    )
+    async def get_permissions(
+        request: Request, controller: IRoleController = Depends(_get_controller)
+    ):
+        return await controller.get_permissions(request)
+
+    @router.get(
         "/{role_id}",
         dependencies=[
             Depends(_is_logged_in),
@@ -96,12 +109,12 @@ def create_role_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Add Roles")),
-            Depends(_validate("name", "permissions")),
+            Depends(_validate("name")),
         ],
         response_model=BaseResponseDto[RoleResponseDto],
         status_code=201,
         summary="Create a role",
-        description="Create a new role with the provided name and permissions",
+        description="Create a new role with the provided name.",
     )
     async def create_role(
         data: RoleCreateDto,
@@ -115,7 +128,7 @@ def create_role_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Edit Roles")),
-            Depends(_validate("name", "permissions")),
+            Depends(_validate("name")),
         ],
         response_model=BaseResponseDto[RoleResponseDto],
         status_code=200,

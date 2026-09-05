@@ -47,16 +47,19 @@ class Role(Base):
     )
 
     # Relationships
-    users: Mapped[list["User"]] = relationship("User", back_populates="role")
-    exact_roles: AssociationProxy[list["ExactRole"]] = association_proxy(
+    users: Mapped[set["User"]] = relationship("User", back_populates="role", cascade="all, delete-orphan", collection_class=set)
+    exact_roles: AssociationProxy[set["ExactRole"]] = association_proxy(
         "role_links",
         "exact_role",
         creator=lambda exact_role: __import__(
             "core.entities.roleLink", fromlist=["RoleLink"]
         ).RoleLink(exact_role=exact_role),
     )
-    role_links: Mapped[list["RoleLink"]] = relationship(
-        "RoleLink", back_populates="role", cascade="all, delete-orphan"
+    role_links: Mapped[set["RoleLink"]] = relationship(
+        "RoleLink",
+        back_populates="role",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
 
     # Indexes

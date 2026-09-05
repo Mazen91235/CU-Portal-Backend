@@ -1,6 +1,15 @@
 from pydantic import BaseModel, Field
 
 
+class RequestResponseModel(BaseModel):
+    json_response: dict = Field(
+        default_factory=dict, description="The JSON response from the request"
+    )
+    content: bytes | None = Field(
+        default=None, description="The raw content of the response in bytes"
+    )
+
+
 class FileModel(BaseModel):
     id: str = Field(..., description="ID of the file")
     name: str = Field(..., description="Name of the file")

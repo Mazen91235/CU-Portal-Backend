@@ -54,26 +54,26 @@ class Faculty(Base):
     )
 
     # Relationships
-    users: Mapped[list["User"]] = relationship(
-        "User", back_populates="faculty", cascade="all, delete-orphan"
+    users: Mapped[set["User"]] = relationship(
+        "User", back_populates="faculty", cascade="all, delete-orphan", collection_class=set
     )
-    departments: Mapped[list["Department"]] = relationship(
-        "Department", back_populates="faculty", cascade="all, delete-orphan"
+    departments: Mapped[set["Department"]] = relationship(
+        "Department", back_populates="faculty", cascade="all, delete-orphan", collection_class=set
     )
-    announcements: Mapped[list["Announcement"]] = relationship(
-        "Announcement", back_populates="faculty", cascade="all, delete-orphan"
+    announcements: Mapped[set["Announcement"]] = relationship(
+        "Announcement", back_populates="faculty", cascade="all, delete-orphan", collection_class=set
     )
-    tasks: Mapped[list["Task"]] = relationship(
-        "Task", back_populates="faculty", cascade="all, delete-orphan"
+    tasks: Mapped[set["Task"]] = relationship(
+        "Task", back_populates="faculty", cascade="all, delete-orphan", collection_class=set
     )
-    subjects: Mapped[list["Subject"]] = relationship(
-        "Subject", back_populates="faculty", cascade="all, delete-orphan"
+    subjects: Mapped[set["Subject"]] = relationship(
+        "Subject", back_populates="faculty", cascade="all, delete-orphan", collection_class=set
     )
-    events: Mapped[list["Event"]] = relationship(
-        "Event", back_populates="faculty", cascade="all, delete-orphan"
+    events: Mapped[set["Event"]] = relationship(
+        "Event", back_populates="faculty", cascade="all, delete-orphan", collection_class=set
     )
-    weeks: Mapped[list["Week"]] = relationship(
-        "Week", back_populates="faculty", cascade="all, delete-orphan"
+    weeks: Mapped[set["Week"]] = relationship(
+        "Week", back_populates="faculty", cascade="all, delete-orphan", collection_class=set
     )
 
     # Indexes

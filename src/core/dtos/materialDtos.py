@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from .subjectDtos import SubjectResponseDto
     from .userDtos import UserResponseDto
     from .weekDtos import WeekResponseDto
+    from .attachmentDtos import AttachmentResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
 
@@ -21,15 +22,15 @@ class MaterialCreateDto(BaseModel):
         max_length=30,
         description="Type of the material (file, folder, youtube, drive, external.)",
     )
-    url: str | None = Field(
-        default=None, max_length=255, description="Drive URL of the material"
-    )
     subject_id: int = Field(..., description="ID of the associated subject")
     parent_id: int | None = Field(
         default=None, description="ID of the parent material (for hierarchy)"
     )
     week_id: int | None = Field(
         default=None, description="ID of the associated week"
+    )
+    details: dict | None = Field(
+        default=None, description="Additional metadata about the material (like url)"
     )
 
 
@@ -43,15 +44,12 @@ class MaterialResponseDto(BaseModel):
         max_length=30,
         description="Type of the material (file, folder, youtube, drive, external.)",
     )
-    url: str | None = Field(
-        default=None, max_length=255, description="Drive URL of the material"
-    )
     details: dict | None = Field(
         default=None, description="Additional metadata about the material"
     )
 
     created_at: datetime | None = Field(default=None, description="Creation timestamp")
-    modified_at: datetime | None = Field(
+    updated_at: datetime | None = Field(
         default=None, description="Last modification timestamp"
     )
 
@@ -71,11 +69,9 @@ class MaterialResponseDto(BaseModel):
     children: list[MaterialResponseDto] | None = Field(
         default=None, description="List of child materials (for hierarchy)"
     )
-
-    week_id: int | None = Field(
-        default=None, description="ID of the associated week"
+    attachment: AttachmentResponseDto | None = Field(
+        default=None, description="Attachment associated with the material"
     )
-
     week: WeekResponseDto | None = Field(
         default=None, description="Week associated with the material"
     )
@@ -88,9 +84,13 @@ class MaterialResponseDto(BaseModel):
 
 class MaterialUpdateDto(BaseModel):
     name: str = Field(..., max_length=200, description="Updated name of the material")
-    material_type: str = Field(..., max_length=30, description="Updated type of the material")
-    url: str | None = Field(default=None, max_length=255, description="Updated URL")
-    week_id: int | None = Field(default=None, description="Updated week ID")
+    material_type: str = Field(
+        ..., max_length=30, description="Updated type of the material"
+    )
+    week_id: int | None = Field(default=None, description="ID of the associated week")
+    details: dict | None = Field(
+        default=None, description="Updated additional metadata about the material (like url)"
+    )
 
 
 class MaterialsDeleteDto(BaseModel):

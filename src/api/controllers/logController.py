@@ -148,29 +148,15 @@ class LogController(ILogController):
                 )
 
             logs = response.data
-            if not logs:
-                await self.logger.log(
-                    action="Find",
-                    entity="Log",
-                    level="info",
-                    code=404,
-                    message="Logs not found",
-                    source="LogController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Logs not found",
-                )
-
             logs_mapped = Mapper[Log, LogResponseDto].map_list(
-                logs, LogResponseDto, True
+                logs or [], LogResponseDto, True
             )
 
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 data=logs_mapped,
+                next_page=response.next_page,
             )
         except Exception as e:
             await self.logger.log(
@@ -233,6 +219,68 @@ class LogController(ILogController):
             await self.log_service.rollback_transaction()
             await self.logger.log(
                 action="Delete",
+                entity="Log",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="LogController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def get_log_actions(self, request):
+        try:
+            response = await self.log_service.get_log_actions()
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            log_actions = response.data
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=log_actions,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="GetLogActions",
+                entity="Log",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="LogController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def get_log_entities(self, request):
+        try:
+            response = await self.log_service.get_log_entities()
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            log_entities = response.data
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=log_entities,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="GetLogEntities",
                 entity="Log",
                 level="error",
                 code=500,

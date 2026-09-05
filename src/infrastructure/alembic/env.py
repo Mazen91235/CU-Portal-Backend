@@ -49,17 +49,17 @@ dictConfig(
 )
 
 # Database configuration
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = os.environ.get("DIRECT_URL", os.environ.get("DATABASE_URL", ""))
 
 if DATABASE_URL:
     # Alembic online mode in this project uses async engine; ensure asyncpg driver.
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 else:
-    POSTGRES_USER = os.environ.get("POSTGRES_USER", "postgres")
-    POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "password")
-    POSTGRES_HOST = os.environ.get("POSTGRES_HOST", "localhost")
-    POSTGRES_PORT = os.environ.get("POSTGRES_PORT", "5432")
-    POSTGRES_DB = os.environ.get("POSTGRES_DB", "alzheimers_db")
+    POSTGRES_USER = os.environ.get("POSTGRES_USER", "")
+    POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "")
+    POSTGRES_HOST = os.environ.get("POSTGRES_HOST", "")
+    POSTGRES_PORT = os.environ.get("POSTGRES_PORT", "")
+    POSTGRES_DB = os.environ.get("POSTGRES_DB", "")
 
     DATABASE_URL = (
         f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}"

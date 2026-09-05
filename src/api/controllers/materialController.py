@@ -37,6 +37,7 @@ class MaterialController(IMaterialController):
                 entity_search_dto,
                 [
                     "author",
+                    "attachment",
                 ],
             )
             if not response.success:
@@ -121,29 +122,15 @@ class MaterialController(IMaterialController):
 
             materials = response.data
 
-            if not materials:
-                await self.logger.log(
-                    action="Find",
-                    entity="Material",
-                    level="info",
-                    code=404,
-                    message="Materials not found",
-                    source="MaterialController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Materials not found",
-                )
-
             materials_mapped = Mapper[Material, MaterialResponseDto].map_list(
-                materials, MaterialResponseDto, True
+                materials or [], MaterialResponseDto, True
             )
 
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 data=materials_mapped,
+                next_page=response.next_page,
             )
         except Exception as e:
             await self.logger.log(

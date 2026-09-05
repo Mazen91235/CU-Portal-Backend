@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, allow_inactive
 from core.iControllers.iUserController import IUserController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -52,7 +52,7 @@ def create_user_user_router(
 
     @router.get(
         "/me",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive)],
         response_model=BaseResponseDto[UserResponseDto],
         status_code=200,
         summary="Get Current User",
@@ -68,8 +68,20 @@ def create_user_user_router(
         return await controller.get_current_user(request, query=query)
 
     @router.get(
-        "/permissions",
+        "/change-google-account",
         dependencies=[Depends(_is_logged_in)],
+        status_code=200,
+        summary="Change Google Account",
+        description="Change the Google account associated with the currently logged in user",
+    )
+    async def change_google_account(
+        request: Request, controller: IUserController = Depends(_get_controller)
+    ):
+        return await controller.change_google_account(request)
+
+    @router.get(
+        "/permissions",
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive)],
         response_model=BaseResponseDto[list[str]],
         status_code=200,
         summary="Get User Permissions",
@@ -84,6 +96,7 @@ def create_user_user_router(
         "/has-permissions",
         dependencies=[
             Depends(_is_logged_in),
+            Depends(allow_inactive),
             Depends(_validate("required_permissions", "is_and")),
         ],
         response_model=BaseResponseDto[bool],
@@ -100,7 +113,11 @@ def create_user_user_router(
 
     @router.patch(
         "/",
-        dependencies=[Depends(_is_logged_in), Depends(_validate("name"))],
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(allow_inactive),
+            Depends(_validate("name")),
+        ],
         response_model=BaseResponseDto[UserResponseDto],
         status_code=200,
         summary="Update User",
@@ -117,6 +134,7 @@ def create_user_user_router(
         "/academic-data",
         dependencies=[
             Depends(_is_logged_in),
+            Depends(allow_inactive),
             Depends(_validate("faculty_id", "department_id", "year_id", "study_type")),
         ],
         response_model=BaseResponseDto,
@@ -176,6 +194,23 @@ def create_user_admin_router(
         return validate_request
 
     @router.get(
+        "/statistics",
+        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
+        response_model=BaseResponseDto[UserStatisticsResponseDto],
+        status_code=200,
+        summary="Get User Statistics",
+        description="Get statistics for the users in the system, including total count, new users this month, percentage increase, active users, and pending users.",
+    )
+    async def get_user_statistics(
+        request: Request,
+        query: QueryModel[UserSearchDto] = Depends(
+            Parser.parse_query(QueryModel[UserSearchDto])
+        ),
+        controller: IUserController = Depends(_get_controller),
+    ):
+        return await controller.get_statistics(request, query=query)
+
+    @router.get(
         "/{user_id}",
         dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
         response_model=BaseResponseDto[UserResponseDto],
@@ -207,23 +242,6 @@ def create_user_admin_router(
     ):
         return await controller.find(request, query=query)
 
-    @router.get(
-        "/system/statistics",
-        dependencies=[Depends(_is_logged_in), Depends(_is_authorized("View Users"))],
-        response_model=BaseResponseDto[UserStatisticsResponseDto],
-        status_code=200,
-        summary="Get User Statistics",
-        description="Get statistics for the users in the system, including total count, new users this month, percentage increase, active users, and pending users.",
-    )
-    async def get_user_statistics(
-        request: Request,
-        query: QueryModel[UserSearchDto] = Depends(
-            Parser.parse_query(QueryModel[UserSearchDto])
-        ),
-        controller: IUserController = Depends(_get_controller),
-    ):
-        return await controller.get_statistics(request, query=query)
-
     @router.patch(
         "/",
         dependencies=[
@@ -242,5 +260,41 @@ def create_user_admin_router(
         controller: IUserController = Depends(_get_controller),
     ):
         return await controller.update_many(request, data=data)
+
+    @router.patch(
+        "/{user_id}/suspend",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Manage Users")),
+        ],
+        response_model=BaseResponseDto,
+        status_code=200,
+        summary="Suspend User",
+        description="Suspend a user by their ID",
+    )
+    async def suspend_user(
+        user_id: int,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
+    ):
+        return await controller.suspend(request, id=user_id)
+
+    @router.patch(
+        "/{user_id}/unsuspend",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("Manage Users")),
+        ],
+        response_model=BaseResponseDto,
+        status_code=200,
+        summary="Unsuspend User",
+        description="Unsuspend a user by their ID",
+    )
+    async def unsuspend_user(
+        user_id: int,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
+    ):
+        return await controller.unsuspend(request, id=user_id)
 
     return router

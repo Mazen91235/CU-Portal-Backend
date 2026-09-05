@@ -38,6 +38,7 @@ class TaskController(ITaskController):
                     "faculty",
                     "department",
                     "year",
+                    "attachments",
                 ],
             )
 
@@ -127,29 +128,15 @@ class TaskController(ITaskController):
 
             tasks = response.data
 
-            if not tasks:
-                await self.logger.log(
-                    action="Find",
-                    entity="Task",
-                    level="info",
-                    code=404,
-                    message="Tasks not found",
-                    source="TaskController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Tasks not found",
-                )
-
             tasks_mapped = Mapper[Task, TaskResponseDto].map_list(
-                tasks, TaskResponseDto, True
+                tasks or [], TaskResponseDto, True
             )
 
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 data=tasks_mapped,
+                next_page=response.next_page,
             )
 
         except Exception as e:

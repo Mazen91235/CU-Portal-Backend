@@ -50,18 +50,28 @@ class Notification(Base):
         nullable=True,
     )
 
+    # Not Mapped
+    @property
+    def seen(self) -> Optional[bool]:
+        return getattr(self, "_seen", None)
+
+    @seen.setter
+    def seen(self, value: Optional[bool]) -> None:
+        setattr(self, "_seen", value)
+
     # Relationships
-    users: AssociationProxy[list["User"]] = association_proxy(
+    users: AssociationProxy[set["User"]] = association_proxy(
         "user_notifications",
         "user",
         creator=lambda user: __import__(
             "core.entities.userNotification", fromlist=["UserNotification"]
         ).UserNotification(user=user),
     )
-    user_notifications: Mapped[list["UserNotification"]] = relationship(
+    user_notifications: Mapped[set["UserNotification"]] = relationship(
         "UserNotification",
         back_populates="notification",
         cascade="all, delete-orphan",
+        collection_class=set,
     )
 
     # Attributes

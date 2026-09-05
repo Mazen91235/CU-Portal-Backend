@@ -1,15 +1,15 @@
 import os
 import aiohttp
-from aiohttp import ClientResponse
+from aiohttp import FormData
 import asyncio
 import json
 from typing import TypeVar, cast
 from sqlalchemy import and_, func, or_
-from aiosmtplib import SMTP
-from email.message import EmailMessage
 from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from business.contextVars.requestContext import request_context
 from business.contextVars.userContext import user_context
+from business.contextVars.permissionsContext import permissions_context
 from core.iServices.iHelperService import IHelperService
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.user import User
@@ -20,10 +20,20 @@ from core.entities.year import Year
 from core.entities.subject import Subject
 from core.entities.notification import Notification
 from core.entities.userNotification import UserNotification
+from core.entities.attachment import Attachment
+from core.entities.event import Event
+from core.entities.eventOrganizer import EventOrganizer
 from core.dtos.baseDtos import BaseResponseDto
-from core.models.fileModels import FetchedModel, DownloadedFileModel, FileModel
+from core.models.fileModels import (
+    RequestResponseModel,
+    FetchedModel,
+    DownloadedFileModel,
+    FileModel,
+)
 from core.utils.entitiesHandler import EntitiesHandler
 from core.utils.fernetHandler import FernetHandler
+from core.utils.timezoneHandler import TimezoneHandler
+from core.utils.validator import Validator
 
 U = TypeVar("U")  # EntitySearchDto Type
 
@@ -39,6 +49,8 @@ class HelperService(IHelperService[U]):
         department_repository: IBaseRepository[Department],
         year_repository: IBaseRepository[Year],
         subject_repository: IBaseRepository[Subject],
+        attachment_repository: IBaseRepository[Attachment],
+        session_factory: async_sessionmaker[AsyncSession] | None = None,
     ):
         self.notification_repository = notification_repository
         self.user_notification_repository = user_notification_repository
@@ -48,10 +60,12 @@ class HelperService(IHelperService[U]):
         self.department_repository = department_repository
         self.year_repository = year_repository
         self.subject_repository = subject_repository
+        self.attachment_repository = attachment_repository
         self.smtp_name = os.environ.get("SMTP_FROM_NAME", "")
         self.smtp_email = os.environ.get("SMTP_FROM_EMAIL", "")
         self.brevo_api_url = os.environ.get("BREVO_API_URL", "")
         self.brevo_api_key = os.environ.get("BREVO_API_KEY", "")
+        self.session_factory = session_factory
 
     def _get_column_type(self, column):
         column_property = getattr(column, "property", None)
@@ -116,48 +130,7 @@ class HelperService(IHelperService[U]):
 
     async def get_logged_in_user_permissions(self):
         try:
-            user_response = await self.get_logged_in_user()
-            if not user_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=user_response.code,
-                    data=None,
-                    message=user_response.message,
-                )
-            user = user_response.data
-            if not user:
-                return BaseResponseDto(
-                    success=False,
-                    code=401,
-                    data=None,
-                    message="No logged-in user found",
-                )
-            dynamic_includes = self.generate_dynamic_includes(
-                Role, ["role_links.exact_role"]
-            )
-            role_response = await self.role_repository.find_one(
-                Role.id == user.role_id, dynamic_includes
-            )
-            if not role_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=role_response.code,
-                    data=None,
-                    message=role_response.message,
-                )
-            role = role_response.data
-            if not role:
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message=f"Role with ID {user.role_id} not found",
-                )
-            permissions = (
-                [permission.name for permission in role.exact_roles]
-                if role.exact_roles
-                else []
-            )
+            permissions = permissions_context.get(None)
             return BaseResponseDto(success=True, data=permissions)
         except Exception as ex:
             return BaseResponseDto(
@@ -317,7 +290,9 @@ class HelperService(IHelperService[U]):
                         message=f"Year with ID {year_id} not found",
                     )
             if subject_id:
-                dynamic_includes = self.generate_dynamic_includes(Subject, ["users"])
+                dynamic_includes = self.generate_dynamic_includes(
+                    Subject, ["user_subject_links.user"]
+                )
                 subject_response = await self.subject_repository.find_one(
                     Subject.id == subject_id, dynamic_includes
                 )
@@ -624,6 +599,47 @@ class HelperService(IHelperService[U]):
                 order_by_arr.append(order_item)
         return order_by_arr
 
+    async def generate_dynamic_join_entities(self, cls, entities):
+        request = request_context.get(None)
+        if not request or not request.state or not request.state.restrict_courses:
+            return (None, [])
+        logged_in_user_response = await self.get_logged_in_user()
+        if not logged_in_user_response.success:
+            return (None, [])
+        logged_in_user = logged_in_user_response.data
+        if not logged_in_user:
+            return (None, [])
+
+        user_subject_link = EntitiesHandler.ENTITIES.get("UserSubjectLink")
+
+        predicate = and_(getattr(user_subject_link, "user_id") == logged_in_user.id)
+
+        join_entities_arr = [
+            (
+                user_subject_link,
+                getattr(cls, "subject_id") == getattr(user_subject_link, "subject_id"),
+            )
+        ]
+        for entity in entities or []:
+            if (
+                not isinstance(entity, str)
+                or not entity.strip()
+                or entity.lower() == cls.__name__.lower()
+            ):
+                continue
+
+            entity_cls = EntitiesHandler.ENTITIES.get(entity)
+            if not entity_cls:
+                continue
+            join_entities_arr.append(
+                (
+                    entity_cls,
+                    getattr(entity_cls, "subject_id")
+                    == getattr(user_subject_link, "subject_id"),
+                )
+            )
+        return (predicate, join_entities_arr)
+
     def generate_dynamic_predicate(
         self, cls, data, query_fields, is_and, starts_with, is_exact
     ):
@@ -633,7 +649,7 @@ class HelperService(IHelperService[U]):
             query_fields = []
         to_dict = getattr(data, "model_dump", None)
         if callable(to_dict):
-            data_dict = cast(dict, to_dict())
+            data_dict = cast(dict, to_dict(exclude_unset=True, exclude_none=False))
         elif isinstance(data, dict):
             data_dict = data
         else:
@@ -641,39 +657,54 @@ class HelperService(IHelperService[U]):
 
         conditions = []
         for key, value in data_dict.items():
+            is_range_key = key.endswith("_from") or key.endswith("_to")
+            field_name = key.rsplit("_", 1)[0] if is_range_key else key
+
             if value is None:
+                conditions.append(getattr(cls, field_name).is_(None))
                 continue
+
             if isinstance(value, str):
                 value = value.strip()
                 if not value:
                     continue
 
-            is_range_key = key.endswith("_from") or key.endswith("_to")
-            field_name = key.rsplit("_", 1)[0] if is_range_key else key
             if field_name == "query" and len(query_fields) > 0:
+                query_conditions = []
                 for query_field in query_fields:
                     column = getattr(cls, query_field, None)
                     if not column:
                         continue
                     if starts_with:
-                        conditions.append(
+                        query_conditions.append(
                             func.lower(column).ilike(func.lower(f"{value}%"))
                         )
                     elif is_exact:
-                        conditions.append(column == value)
+                        query_conditions.append(column == value)
                     else:
-                        conditions.append(
+                        query_conditions.append(
                             func.lower(column).ilike(func.lower(f"%{value}%"))
                         )
+                if len(query_conditions) > 0:
+                    conditions.append(or_(*query_conditions))
                 continue
+
             column = getattr(cls, field_name, None)
+
             if not column:
                 continue
 
             if key.endswith("_from"):
-                conditions.append(column >= value)
+                # Column isn't null and >= value
+                conditions.append(
+                    column.isnot(None)
+                    & (column >= TimezoneHandler.from_isoformat(value))
+                )
             elif key.endswith("_to"):
-                conditions.append(column <= value)
+                conditions.append(
+                    column.isnot(None)
+                    & (column <= TimezoneHandler.from_isoformat(value))
+                )
             elif isinstance(value, str):
                 if not self._is_string_column(column):
                     conditions.append(column == value)
@@ -694,70 +725,79 @@ class HelperService(IHelperService[U]):
         return and_(*conditions) if is_and else or_(*conditions)
 
     # Notification Functions
-    async def send_notification(
+    async def _send_notification(
         self, notification_type, parent_id, user_ids, content, url=None
     ):
-        try:
-            notification = Notification(
-                content=content,
-                notification_type=notification_type,
-                parent_id=parent_id,
-                url=url,
-            )
-            create_notification_response = await self.notification_repository.create(
-                notification
-            )
-            if not create_notification_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=create_notification_response.code,
-                    data=False,
-                    message=create_notification_response.message,
-                )
-            created_notification = create_notification_response.data
-            if not created_notification:
-                return BaseResponseDto(
-                    success=False,
-                    code=500,
-                    data=False,
-                    message="Failed to create notification",
-                )
-            for user_id in user_ids or []:
-                user_notification = UserNotification(
-                    user_id=user_id, notification_id=created_notification.id
-                )
-                create_user_notification_response = (
-                    await self.user_notification_repository.create(user_notification)
-                )
-                if not create_user_notification_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=create_user_notification_response.code,
-                        data=False,
-                        message=create_user_notification_response.message,
-                    )
-                created_user_notification = create_user_notification_response.data
-                if not created_user_notification:
-                    return BaseResponseDto(
-                        success=False,
-                        code=500,
-                        data=False,
-                        message="Failed to create user notification",
-                    )
-            return BaseResponseDto(
-                success=True,
-                code=200,
-                data=True,
-                message="Notification sent successfully",
-            )
-        except Exception as ex:
+        if not self.session_factory:
             return BaseResponseDto(
                 success=False,
                 code=500,
                 data=False,
-                message="An error occurred while sending the notification",
-                error=repr(ex),
+                message="Session factory is not initialized",
             )
+        async with self.session_factory() as session:
+            try:
+                await session.begin()  # Start a transaction
+                notification = Notification(
+                    content=content,
+                    notification_type=notification_type,
+                    parent_id=parent_id,
+                    url=url,
+                    user_notifications=[
+                        UserNotification(user_id=user_id)
+                        for user_id in (user_ids or [])
+                    ],
+                )
+                create_notification_response = (
+                    await self.notification_repository.create(
+                        notification, session=session
+                    )
+                )
+                if not create_notification_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=create_notification_response.code,
+                        data=False,
+                        message=create_notification_response.message,
+                    )
+                created_notification = create_notification_response.data
+                if not created_notification:
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=False,
+                        message="Failed to create notification",
+                    )
+                await session.commit()  # Commit the transaction
+                return BaseResponseDto(
+                    success=True,
+                    code=200,
+                    data=True,
+                    message="Notification sent successfully",
+                )
+            except Exception as ex:
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="An error occurred while sending the notification",
+                    error=repr(ex),
+                )
+
+    async def send_notification(
+        self, notification_type, parent_id, user_ids, content, url=None
+    ):
+        asyncio.create_task(
+            self._send_notification(
+                notification_type, parent_id, user_ids, content, url
+            )
+        )
+        return BaseResponseDto(
+            success=True,
+            code=200,
+            data=True,
+            message="Notification sent successfully",
+        )
 
     # File Functions
     async def _request_with_retries(
@@ -769,7 +809,7 @@ class HelperService(IHelperService[U]):
         data: aiohttp.FormData | None = None,
         json_data: dict | None = None,
         max_retries=6,
-    ) -> BaseResponseDto[ClientResponse]:
+    ) -> BaseResponseDto[RequestResponseModel]:
         RATE_LIMIT_REASONS = [
             "userRateLimitExceeded",
             "rateLimitExceeded",
@@ -787,7 +827,20 @@ class HelperService(IHelperService[U]):
                         data=data,
                         json=json_data,
                     ) as response:
-                        json_response = await response.json()
+                        json_response = {}
+                        content = None
+                        try:
+                            json_response = await response.json()
+                        except Exception:
+                            pass
+                        try:
+                            content = await response.read()
+                        except Exception:
+                            pass
+                        response_model = RequestResponseModel(
+                            json_response=json_response,
+                            content=content,
+                        )
                         if response.status == 429:  # Too Many Requests
                             retry_after = int(response.headers.get("Retry-After", 1))
                             await asyncio.sleep(retry_after)
@@ -815,7 +868,7 @@ class HelperService(IHelperService[U]):
                         return BaseResponseDto(
                             success=True,
                             code=response.status,
-                            data=response,
+                            data=response_model,
                             message="Request successful",
                         )
             except Exception as ex:
@@ -836,8 +889,14 @@ class HelperService(IHelperService[U]):
             name=metadata.get("name", ""),
             mime_type=metadata.get("mimeType", ""),
             size=self._format_size(metadata.get("size", "0")),
-            web_content_link=metadata.get("webContentLink", ""),
-            web_view_link=metadata.get("webViewLink", ""),
+            web_content_link=metadata.get(
+                "webContentLink",
+                f"https://drive.google.com/uc?export=download&id={metadata.get('id', '')}",
+            ),
+            web_view_link=metadata.get(
+                "webViewLink",
+                f"https://drive.google.com/uc?export=view&id={metadata.get('id', '')}",
+            ),
             file_type=self.get_file_type(metadata.get("mimeType", "")),
         )
 
@@ -1027,6 +1086,14 @@ class HelperService(IHelperService[U]):
                     message=f"File not found on Google Drive for URL: {url}",
                     error="No file data returned from Google Drive",
                 )
+            if len(file_data.children) > 0:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"The provided URL points to a folder, not a file: {url}",
+                    error="URL points to a folder instead of a file",
+                )
             return BaseResponseDto(
                 success=True,
                 code=200,
@@ -1074,7 +1141,7 @@ class HelperService(IHelperService[U]):
                         error=f"User with ID {user_id} not found in the database",
                     )
                 access_token_response = await self.get_google_access_token(
-                    FernetHandler.decrypt(user.google_refresh_token or "")
+                    user.google_refresh_token
                 )
                 if not access_token_response.success:
                     return BaseResponseDto(
@@ -1173,7 +1240,7 @@ class HelperService(IHelperService[U]):
                     message="Bad Response from Google Drive API, please try again later",
                     error="Empty response data for file ID: {file_id}",
                 )
-            metadata = await response_data.json()
+            metadata = response_data.json_response
             if not metadata:
                 return BaseResponseDto(
                     success=False,
@@ -1232,7 +1299,7 @@ class HelperService(IHelperService[U]):
                     response_data = response.data
                     if not response_data:
                         break
-                    json_response = await response_data.json()
+                    json_response = response_data.json_response
                     if not json_response:
                         return BaseResponseDto(
                             success=False,
@@ -1330,10 +1397,11 @@ class HelperService(IHelperService[U]):
                 method="POST",
                 url="https://oauth2.googleapis.com/token",
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
-                json_data=data,
+                data=FormData(data),
                 max_retries=max_retries,
             )
             if not response.success:
+                print(response)
                 return BaseResponseDto(
                     success=False,
                     code=response.code,
@@ -1350,7 +1418,7 @@ class HelperService(IHelperService[U]):
                     message="Bad Response from Google OAuth API, please try again later",
                     error="Empty response data while fetching Google access token",
                 )
-            json_response = await response_data.json()
+            json_response = response_data.json_response
             if not json_response or "access_token" not in json_response:
                 return BaseResponseDto(
                     success=False,
@@ -1371,7 +1439,7 @@ class HelperService(IHelperService[U]):
                 success=False,
                 code=500,
                 data=None,
-                message="An error occurred while fetching Connecting with Google API, please try again later",
+                message="An error occurred while Connecting with Google API, please try again later",
                 error=repr(ex),
             )
 
@@ -1439,7 +1507,15 @@ class HelperService(IHelperService[U]):
                     message="Bad Response from Google Drive API, please try again later",
                     error=f"Empty response data while downloading file for file ID: {file_id}",
                 )
-            content = await response_data.read()
+            content = response_data.content
+            if not content:
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="Bad Response from Google Drive API, please try again later",
+                    error=f"Empty content while downloading file for file ID: {file_id}",
+                )
             downloaded_file = DownloadedFileModel(
                 name=file_metadata.name,
                 size=file_metadata.size,
@@ -1452,6 +1528,7 @@ class HelperService(IHelperService[U]):
                 message="File downloaded successfully",
             )
         except Exception as ex:
+            print(f"Error downloading file from Google Drive: {repr(ex)}")
             return BaseResponseDto(
                 success=False,
                 code=500,
@@ -1510,7 +1587,7 @@ class HelperService(IHelperService[U]):
                     message="Bad Response from Google Drive API, please try again later",
                     error=f"Empty response data while setting file public for file ID: {file_id}",
                 )
-            json_response = await response_data.json()
+            json_response = response_data.json_response
             if not json_response or "id" not in json_response:
                 return BaseResponseDto(
                     success=False,
@@ -1596,7 +1673,7 @@ class HelperService(IHelperService[U]):
                     message="Bad Response from Google Drive API, please try again later",
                     error=f"Empty response data while uploading file: {name}",
                 )
-            json_response = await response_data.json()
+            json_response = response_data.json_response
             if not json_response or "id" not in json_response:
                 return BaseResponseDto(
                     success=False,
@@ -1756,5 +1833,257 @@ class HelperService(IHelperService[U]):
                 code=500,
                 data=None,
                 message="An error occurred while copying the file on Google Drive",
+                error=repr(ex),
+            )
+
+    # Attachment Functions
+    async def create_attachment(
+        self,
+        is_file,
+        url,
+        author_id,
+        source_name,
+        source_id,
+        link_title=None,
+        fetched=None,
+    ):
+        custom_sources = {
+            "user_id": lambda: Attachment.user.has(User.id == source_id),
+            "event_logo_id": lambda: Attachment.event_logo.has(Event.id == source_id),
+            "event_organizer_logo_id": lambda: Attachment.event_organizer_logo.has(
+                EventOrganizer.id == source_id
+            ),
+        }
+        try:
+            if not url:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="URL is required",
+                    error="No URL provided for creating attachment",
+                )
+            if source_name not in custom_sources and not hasattr(
+                Attachment, source_name
+            ):
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"Invalid source name: {source_name}",
+                    error=f"Attachment entity does not have a field named '{source_name}'",
+                )
+            author_response = await self.user_repository.find_one(User.id == author_id)
+            if not author_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=author_response.code,
+                    data=None,
+                    message=author_response.message,
+                )
+            author = author_response.data
+            if not author:
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Author not found",
+                )
+            if source_name in custom_sources:
+                existing_attachment_predicate = custom_sources[source_name]()
+            else:
+                existing_attachment_predicate = (
+                    getattr(Attachment, source_name) == source_id
+                )
+            existing_attachment_response = await self.attachment_repository.find_one(
+                and_(
+                    Attachment.author_id == author_id,
+                    existing_attachment_predicate,
+                    Attachment.url == url,
+                )
+            )
+            if not existing_attachment_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_attachment_response.code,
+                    data=None,
+                    message=existing_attachment_response.message,
+                )
+            existing_attachment = existing_attachment_response.data
+            if existing_attachment:
+                return BaseResponseDto(
+                    success=True,
+                    code=200,
+                    data=existing_attachment,
+                    message="Attachment already exists",
+                )
+            details = {}
+            if is_file:
+                if not Validator.is_valid_drive_url(url):
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message="Invalid Google Drive URL",
+                        error=f"Provided URL is not a valid Google Drive URL: {url}",
+                    )
+                file_exists_response = await self.verify_file_exists_on_drive(url)
+                if not file_exists_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=file_exists_response.code,
+                        data=None,
+                        message=file_exists_response.message,
+                        error=file_exists_response.error,
+                    )
+                file_exists = file_exists_response.data
+                if not file_exists:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message="File not found on Google Drive",
+                        error=f"File at URL {url} does not exist on Google Drive",
+                    )
+                details["file_data"] = file_exists.model_dump(mode="json")
+                if fetched is not None:
+                    details["fetched"] = fetched
+            else:
+                if not Validator.is_valid_external_url(url):
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message="Invalid URL",
+                        error=f"Invalid URL: {url}",
+                    )
+                link_title = link_title or ""
+                details["link_title"] = link_title
+            attachment = Attachment(
+                is_file=is_file,
+                url=url,
+                details=details,
+                author_google_refresh_token=author.google_refresh_token,
+                author_id=author_id,
+            )
+            if source_name not in custom_sources:
+                setattr(attachment, source_name, source_id)
+            create_attachment_response = await self.attachment_repository.create(
+                attachment
+            )
+            if not create_attachment_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_attachment_response.code,
+                    data=None,
+                    message=create_attachment_response.message,
+                )
+            created_attachment = create_attachment_response.data
+            if not created_attachment:
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="Failed to create attachment",
+                    error="Attachment creation returned no data",
+                )
+            return BaseResponseDto(
+                success=True,
+                code=201,
+                data=created_attachment,
+                message="Attachment created successfully",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while creating the attachment, please try again later",
+                error=repr(ex),
+            )
+
+    async def delete_attachment(
+        self,
+        attachment_id=None,
+        attachment=None,
+    ):
+        try:
+            if not attachment_id and not attachment:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Attachment ID or Attachment object is required",
+                    error="No attachment ID or object provided for deletion",
+                )
+            if not attachment:
+                attachment_response = await self.attachment_repository.find_one(
+                    Attachment.id == attachment_id
+                )
+                if not attachment_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code,
+                        data=None,
+                        message=attachment_response.message,
+                        error=attachment_response.error,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message="Attachment not found",
+                        error=f"Attachment with ID {attachment_id} does not exist",
+                    )
+            to_be_removed = (
+                attachment.url
+                if attachment.is_file and not attachment.details.get("fetched", False)
+                else None
+            )
+            delete_response = await self.attachment_repository.delete(attachment)
+            if not delete_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=delete_response.code,
+                    data=None,
+                    message=delete_response.message,
+                )
+            if to_be_removed:
+                access_token_response = await self.get_google_access_token(
+                    attachment.author_google_refresh_token or ""
+                )
+                if not access_token_response.success or not access_token_response.data:
+                    return BaseResponseDto(
+                        success=True,
+                        code=200,
+                    )
+                access_token = access_token_response.data
+                file_id = self.get_file_id_from_url(to_be_removed)
+                if not file_id:
+                    return BaseResponseDto(
+                        success=True,
+                        code=200,
+                    )
+                delete_file_response = await self.delete_file_from_drive(
+                    access_token, file_id
+                )
+                if not delete_file_response.success:
+                    return BaseResponseDto(
+                        success=True,
+                        code=200,
+                    )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                message="Attachment deleted successfully",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while deleting the attachment, please try again later",
                 error=repr(ex),
             )

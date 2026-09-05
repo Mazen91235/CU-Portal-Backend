@@ -4,6 +4,7 @@ from typing import Type
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 from sqlalchemy import text, desc, func, inspect
+from sqlalchemy.orm import load_only
 from business.contextVars.sessionContext import session_context
 from core.iRepositories.iBaseRepository import IBaseRepository, T
 from core.dtos.baseDtos import BaseResponseDto
@@ -86,11 +87,21 @@ class BaseRepository(IBaseRepository):
         includes=None,
         selects=None,
         order_by=None,
+        join_entities=None,
         descending=False,
     ):
         try:
             session = self._resolve_session()
             query = select(self._model)
+
+            # Handling Joins
+            if join_entities:
+                for join_entity in join_entities:
+                    query = query.join(
+                        join_entity[0],
+                        join_entity[1],
+                        isouter=join_entity[2] if len(join_entity) > 2 else False,
+                    )
 
             # Handling Predicates
             if predicate is not None:
@@ -103,7 +114,7 @@ class BaseRepository(IBaseRepository):
 
             # Handling Projections (Selects)
             if selects and len(selects) > 0:
-                query = query.with_only_columns(*selects)
+                query = query.options(load_only(*selects))
 
             # Ordering
             if order_by:
@@ -145,6 +156,7 @@ class BaseRepository(IBaseRepository):
         includes=None,
         selects=None,
         order_by=None,
+        join_entities=None,
         descending=False,
         page=1,
         limit=50,
@@ -152,6 +164,15 @@ class BaseRepository(IBaseRepository):
         try:
             session = self._resolve_session()
             query = select(self._model)
+
+            # Handling Joins
+            if join_entities:
+                for join_entity in join_entities:
+                    query = query.join(
+                        join_entity[0],
+                        join_entity[1],
+                        isouter=join_entity[2] if len(join_entity) > 2 else False,
+                    )
 
             # Handling Predicates
             if predicate is not None:
@@ -164,7 +185,7 @@ class BaseRepository(IBaseRepository):
 
             # Handling Projections (Selects)
             if selects and len(selects) > 0:
-                query = query.with_only_columns(*selects)
+                query = query.options(load_only(*selects))
 
             # Ordering
             if order_by:
@@ -175,16 +196,17 @@ class BaseRepository(IBaseRepository):
                         query = query.order_by(ob)
 
             # Pagination
-            query = query.offset((page - 1) * limit).limit(limit)
+            query = query.offset((page - 1) * limit).limit(limit + 1)
 
             result = await session.execute(query)
             entities = result.scalars().all()
 
             return BaseResponseDto(
                 success=True,
-                data=list(entities),
+                data=list(entities[:-1]) if len(entities) > limit else list(entities),
                 message="Found Successfully",
                 code=200,
+                next_page=len(entities) > limit,
             )
         except Exception as ex:
             await self._log_error(
@@ -237,9 +259,56 @@ class BaseRepository(IBaseRepository):
                 error=repr(ex),
             )
 
-    async def create(self, entity):
+    async def find_distinct(
+        self,
+        predicate=None,
+        column=None,
+    ):
         try:
             session = self._resolve_session()
+            if column is None:
+                return BaseResponseDto(
+                    success=False,
+                    data=[],
+                    message="Column must be provided for distinct query",
+                    code=400,
+                )
+
+            query = select(column).distinct()
+
+            if predicate is not None:
+                query = query.where(predicate)
+
+            result = await session.execute(query)
+            distinct_values = result.scalars().all()
+
+            return BaseResponseDto(
+                success=True,
+                data=list(distinct_values),
+                message="Distinct Values Retrieved Successfully",
+                code=200,
+            )
+        except Exception as ex:
+            await self._log_error(
+                action="FindDistinct",
+                level="error",
+                code=500,
+                message=f"An error occurred while retrieving distinct values for {self._model.__name__}",
+                details={"error": repr(ex)},
+                source="BaseRepository",
+            )
+            return BaseResponseDto(
+                success=False,
+                data=[],
+                message="Distinct Query Failed",
+                code=500,
+                error=repr(ex),
+            )
+
+    async def create(self, entity, session=None):
+        try:
+            if not session:
+                session = self._resolve_session()
             session.add(entity)
             await session.flush()
             await session.refresh(entity)

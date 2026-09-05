@@ -108,28 +108,15 @@ class YearController(IYearController):
                 )
 
             years = response.data
-            if not years:
-                await self.logger.log(
-                    action="Find",
-                    entity="Year",
-                    level="info",
-                    code=404,
-                    message="Years not found",
-                    source="YearController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Years not found",
-                )
 
             years_mapped = Mapper[Year, YearResponseDto].map_list(
-                years, YearResponseDto, True
+                years or [], YearResponseDto, True
             )
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 data=years_mapped,
+                next_page=response.next_page,
             )
         except Exception as e:
             await self.logger.log(

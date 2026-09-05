@@ -19,6 +19,7 @@ from business.contextVars.sessionContext import session_context
 # Imports for Model Rebuild and Open-API Schema Generation
 from core.dtos.baseDtos import *
 from core.dtos.announcementDtos import *
+from core.dtos.attachmentDtos import *
 from core.dtos.departmentDtos import *
 from core.dtos.exactRoleDtos import *
 from core.dtos.examDtos import *
@@ -81,16 +82,25 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
         # Create one DB session per request and store it in ContextVar.
-        session = container.session_factory()()
-        session_token = session_context.set(session)
-        request_token = request_context.set(request)
-        try:
-            response = await call_next(request)
-            return response
-        finally:
-            session_context.reset(session_token)
-            request_context.reset(request_token)
-            await session.close()
+        async with container.session_factory()() as session:
+            session_token = session_context.set(session)
+            request_token = request_context.set(request)
+            try:
+                response = await call_next(request)
+                return response
+            except Exception:
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
+                raise
+            finally:
+                try:
+                    await session.close()
+                except Exception:
+                    pass
+                session_context.reset(session_token)
+                request_context.reset(request_token)
 
     # We resolve the router here at startup.
     # Because we are now using `Depends()` inside `create_user_router`,
@@ -109,9 +119,16 @@ def create_app() -> FastAPI:
     announcement_user_routes = container.announcement_user_routes()
     announcement_admin_routes = container.announcement_admin_routes()
     task_user_routes = container.task_user_routes()
+    calendar_user_routes = container.calendar_user_routes()
     task_admin_routes = container.task_admin_routes()
     exam_user_routes = container.exam_user_routes()
+    faculty_user_routes = container.faculty_user_routes()
+    department_user_routes = container.department_user_routes()
+    year_user_routes = container.year_user_routes()
+
     exam_admin_routes = container.exam_admin_routes()
+    attachment_public_routes = container.attachment_public_routes()
+    file_public_routes = container.file_public_routes()
     message_public_routes = container.message_public_routes()
     message_admin_routes = container.message_admin_routes()
     faculty_admin_routes = container.faculty_admin_routes()
@@ -124,10 +141,14 @@ def create_app() -> FastAPI:
     main_user_routes.include_router(material_user_routes)
     main_user_routes.include_router(notification_user_routes)
     main_user_routes.include_router(announcement_user_routes)
+    main_user_routes.include_router(calendar_user_routes)
     main_user_routes.include_router(task_user_routes)
     main_user_routes.include_router(exam_user_routes)
     main_user_routes.include_router(subject_user_routes)
     main_user_routes.include_router(week_user_routes)
+    main_user_routes.include_router(faculty_user_routes)
+    main_user_routes.include_router(department_user_routes)
+    main_user_routes.include_router(year_user_routes)
     main_admin_routes.include_router(user_admin_routes)
     main_admin_routes.include_router(role_admin_routes)
     main_admin_routes.include_router(faculty_admin_routes)
@@ -144,6 +165,8 @@ def create_app() -> FastAPI:
     app.include_router(main_user_routes)
     app.include_router(main_admin_routes)
     app.include_router(auth_routes)
+    app.include_router(attachment_public_routes)
+    app.include_router(file_public_routes)
     app.include_router(message_public_routes)
 
     app.add_middleware(
@@ -152,6 +175,7 @@ def create_app() -> FastAPI:
             "http://localhost:3000",
             "http://localhost:5173",
             "http://localhost:8000",
+            "https://cu-portal-dev.vercel.app",
         ],
         allow_methods=["*"],
         allow_headers=["*"],

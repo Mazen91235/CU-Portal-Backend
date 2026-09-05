@@ -63,6 +63,7 @@ class MessageService(IMessageService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
             )
             if not result.success:
@@ -127,6 +128,7 @@ class MessageService(IMessageService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
                 page,
                 limit,
@@ -139,7 +141,7 @@ class MessageService(IMessageService):
                     message=result.message,
                 )
             messages = result.data
-            return BaseResponseDto(success=True, data=messages)
+            return BaseResponseDto(success=True, data=messages, next_page=result.next_page)
         except Exception as ex:
             await self.logger.log(
                 action="Find",

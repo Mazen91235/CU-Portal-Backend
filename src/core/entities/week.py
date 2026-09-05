@@ -72,8 +72,8 @@ class Week(Base):
         nullable=False,
     )
     year: Mapped["Year"] = relationship("Year", back_populates="weeks")
-    materials: Mapped[list["Material"]] = relationship(
-        "Material", back_populates="week", cascade="all, delete-orphan"
+    materials: Mapped[set["Material"]] = relationship(
+        "Material", back_populates="week", cascade="all, delete-orphan", collection_class=set
     )
 
     # Indexes

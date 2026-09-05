@@ -34,6 +34,10 @@ class IUserController(
         pass
 
     @abstractmethod
+    async def change_google_account(self, request: Request) -> Response:
+        pass
+
+    @abstractmethod
     async def google_authentication_redirect(self, request: Request) -> Response:
         pass
 
@@ -72,6 +76,14 @@ class IUserController(
 
     @abstractmethod
     async def update_many(self, request: Request, data: UserUpdateUsersDto) -> Response:
+        pass
+
+    @abstractmethod
+    async def suspend(self, request: Request, id: int) -> Response:
+        pass
+
+    @abstractmethod
+    async def unsuspend(self, request: Request, id: int) -> Response:
         pass
 
     @abstractmethod

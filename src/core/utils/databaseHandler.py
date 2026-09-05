@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 import os
 import json
 from pathlib import Path
+from sqlalchemy.pool import NullPool
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -22,7 +23,7 @@ class DatabaseHandler:
         db = os.environ.get("POSTGRES_DB")
 
         if all([user, password, host, port, db]):
-            return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}"
+            return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}?prepared_statement_cache_size=0"
 
         # Local/test fallback so the API remains runnable without external infra.
         sqlite_path = os.environ.get("SQLITE_DB_PATH") or str(
@@ -37,7 +38,11 @@ class DatabaseHandler:
         if resolved_url.startswith("sqlite"):
             return {}
         return {
-            "pool_size": 20,
-            "max_overflow": 10,
+            "connect_args": {
+                "statement_cache_size": 0,
+                "prepared_statement_cache_size": 0,
+                "prepared_statement_name_func": lambda *args: "",  # Force anonymous prepared statements
+            },
+            "poolclass": NullPool,
             "json_serializer": lambda obj: json.dumps(obj, default=str),
         }

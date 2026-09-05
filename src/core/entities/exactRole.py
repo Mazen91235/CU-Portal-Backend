@@ -52,8 +52,8 @@ class ExactRole(Base):
             "core.entities.roleLink", fromlist=["RoleLink"]
         ).RoleLink(role=role),
     )
-    role_links: Mapped[list["RoleLink"]] = relationship(
-        "RoleLink", back_populates="exact_role", cascade="all, delete-orphan"
+    role_links: Mapped[set["RoleLink"]] = relationship(
+        "RoleLink", back_populates="exact_role", cascade="all, delete-orphan", collection_class=set
     )
 
     # Indexes

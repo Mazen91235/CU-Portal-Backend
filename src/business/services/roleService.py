@@ -63,6 +63,7 @@ class RoleService(IRoleService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
             )
 
@@ -124,6 +125,7 @@ class RoleService(IRoleService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
                 page,
                 limit,
@@ -134,7 +136,9 @@ class RoleService(IRoleService):
                     success=False, code=result.code, data=None, message=result.message
                 )
             roles = result.data
-            return BaseResponseDto(success=True, code=200, data=roles)
+            return BaseResponseDto(
+                success=True, code=200, data=roles, next_page=result.next_page
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -181,101 +185,9 @@ class RoleService(IRoleService):
                     data=None,
                     message="Role with the same name already exists.",
                 )
-            logged_in_user_permissions_response = (
-                await self.helper_service.get_logged_in_user_permissions()
-            )
-            if not logged_in_user_permissions_response.success:
-                await self.logger.log(
-                    action="Create",
-                    entity="Role",
-                    level="error",
-                    code=500,
-                    message="Failed to retrieve logged-in user permissions for Role Creation.",
-                    source="RoleService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=500,
-                    data=None,
-                    message="An error occurred while creating role",
-                )
-            logged_in_user_permissions = logged_in_user_permissions_response.data
-            if not logged_in_user_permissions:
-                await self.logger.log(
-                    action="Create",
-                    entity="Role",
-                    level="error",
-                    code=500,
-                    message="No logged-in user permissions found for Role Creation.",
-                    source="RoleService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=500,
-                    data=None,
-                    message="An error occurred while creating role",
-                )
-            if not set(data.permissions or []).issubset(
-                set(logged_in_user_permissions)
-            ):
-                await self.logger.log(
-                    action="Create",
-                    entity="Role",
-                    level="warning",
-                    code=403,
-                    message="User does not have permission to assign one or more of the specified permissions.",
-                    details={"permissions": data.permissions},
-                    source="RoleService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    data=None,
-                    message="You do not have permission to assign one or more of the specified permissions.",
-                )
-            validate_permissions_response = await self._validate_permissions(
-                data.permissions or []
-            )
-            if not validate_permissions_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=validate_permissions_response.code,
-                    data=None,
-                    message=validate_permissions_response.message,
-                )
-            exact_roles = []
-            for permission in data.permissions or []:
-                exact_role_response = await self.exact_role_repository.find_one(
-                    ExactRole.name == permission
-                )
-                if not exact_role_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=exact_role_response.code,
-                        data=None,
-                        message=exact_role_response.message,
-                    )
-                exact_role = exact_role_response.data
-                if not exact_role:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Role",
-                        level="warning",
-                        code=404,
-                        message=f"Exact role '{permission}' not found.",
-                        source="RoleService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message=f"Exact role '{permission}' not found.",
-                    )
-                exact_roles.append(exact_role)
             role = Role(
                 name=data.name,
                 level=3,
-                exact_roles=exact_roles,
             )
             create_role_response = await self.role_repository.create(role)
             if not create_role_response.success:
@@ -424,7 +336,7 @@ class RoleService(IRoleService):
                     data=None,
                     message="An error occurred while updating role",
                 )
-            if not set(data.permissions or []).issubset(
+            if data.permissions and not set(data.permissions or []).issubset(
                 set(logged_in_user_permissions)
             ):
                 await self.logger.log(
@@ -459,49 +371,50 @@ class RoleService(IRoleService):
                     data=None,
                     message="You do not have permission to assign one or more of the specified permissions.",
                 )
-            validate_permissions_response = await self._validate_permissions(
-                data.permissions or []
-            )
-            if not validate_permissions_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=validate_permissions_response.code,
-                    data=None,
-                    message=validate_permissions_response.message,
+            if data.permissions:
+                validate_permissions_response = await self._validate_permissions(
+                    data.permissions or []
                 )
-            exact_roles = []
-            for permission in data.permissions or []:
-                exact_role_response = await self.exact_role_repository.find_one(
-                    ExactRole.name == permission
-                )
-                if not exact_role_response.success:
+                if not validate_permissions_response.success:
                     return BaseResponseDto(
                         success=False,
-                        code=exact_role_response.code,
+                        code=validate_permissions_response.code,
                         data=None,
-                        message=exact_role_response.message,
+                        message=validate_permissions_response.message,
                     )
-                exact_role = exact_role_response.data
-                if not exact_role:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Role",
-                        level="warning",
-                        code=404,
-                        message=f"Exact role '{permission}' not found.",
-                        source="RoleService",
+                exact_roles = set()
+                for permission in data.permissions or []:
+                    exact_role_response = await self.exact_role_repository.find_one(
+                        ExactRole.name == permission
                     )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message=f"Exact role '{permission}' not found.",
-                    )
-                exact_roles.append(exact_role)
+                    if not exact_role_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=exact_role_response.code,
+                            data=None,
+                            message=exact_role_response.message,
+                        )
+                    exact_role = exact_role_response.data
+                    if not exact_role:
+                        await self.logger.log(
+                            action="Update",
+                            entity="Role",
+                            level="warning",
+                            code=404,
+                            message=f"Exact role '{permission}' not found.",
+                            source="RoleService",
+                        )
+                        return BaseResponseDto(
+                            success=False,
+                            code=404,
+                            data=None,
+                            message=f"Exact role '{permission}' not found.",
+                        )
+                    exact_roles.add(exact_role)
+                target_role.exact_roles = exact_roles
             target_role.name = data.name or ""
-            target_role.exact_roles = exact_roles
             update_response = await self.role_repository.update(
-                target_role, ["name", "role_links.exact_role"]
+                target_role, ["name", "role_links"]
             )
             if not update_response.success:
                 return BaseResponseDto(
@@ -560,7 +473,7 @@ class RoleService(IRoleService):
     async def delete(self, data):
         try:
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Role, ["role_links.exact_role"]
+                Role, ["users", "role_links.exact_role"]
             )
             target_role_response = await self.role_repository.find_one(
                 Role.id == data.id, dynamic_includes
@@ -587,6 +500,21 @@ class RoleService(IRoleService):
                     code=404,
                     data=None,
                     message="Role not found",
+                )
+            if target_role.users and len(target_role.users) > 0:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Role",
+                    level="warning",
+                    code=400,
+                    message="Cannot delete role with associated users.",
+                    source="RoleService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Cannot delete role with associated users.",
                 )
             logged_in_user_permissions_response = (
                 await self.helper_service.get_logged_in_user_permissions()
@@ -699,7 +627,7 @@ class RoleService(IRoleService):
         except Exception as ex:
             await self.logger.log(
                 action="CountPermissions",
-                entity="RoleService",
+                entity="Role",
                 level="error",
                 code=500,
                 message="An error occurred while counting permissions",
@@ -711,6 +639,58 @@ class RoleService(IRoleService):
                 code=500,
                 data=None,
                 message="An error occurred while counting permissions",
+            )
+
+    async def get_permissions(self):
+        try:
+            exact_roles_response = await self.exact_role_repository.find(
+                limit=math.floor(1e6)
+            )
+            if not exact_roles_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=exact_roles_response.code,
+                    data=None,
+                    message=exact_roles_response.message,
+                )
+            exact_roles = exact_roles_response.data
+            if not exact_roles:
+                await self.logger.log(
+                    action="GetPermissions",
+                    entity="Role",
+                    level="warning",
+                    code=404,
+                    message="No permissions found in the system.",
+                    source="RoleService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="No permissions found in the system.",
+                )
+            permissions = [perm.name for perm in exact_roles]
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=permissions,
+                message="Successfully retrieved permissions",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="GetPermissions",
+                entity="Role",
+                level="error",
+                code=500,
+                message="An error occurred while retrieving permissions",
+                details={"error": repr(ex)},
+                source="RoleService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while retrieving permissions",
             )
 
     async def reset_permissions(self):
@@ -729,7 +709,7 @@ class RoleService(IRoleService):
             if not current_exact_roles:
                 await self.logger.log(
                     action="ResetPermissions",
-                    entity="RoleService",
+                    entity="Role",
                     level="warning",
                     code=404,
                     message="No exact roles found to reset permissions.",
@@ -763,7 +743,7 @@ class RoleService(IRoleService):
                 if not created_exact_role:
                     await self.logger.log(
                         action="ResetPermissions",
-                        entity="RoleService",
+                        entity="Role",
                         level="error",
                         code=500,
                         message=f"Failed to create exact role '{permission}' without a specific error.",
@@ -796,7 +776,7 @@ class RoleService(IRoleService):
                 if not exact_role_to_remove:
                     await self.logger.log(
                         action="ResetPermissions",
-                        entity="RoleService",
+                        entity="Role",
                         level="warning",
                         code=404,
                         message=f"Exact role '{permission}' not found for removal.",
@@ -821,6 +801,9 @@ class RoleService(IRoleService):
                 all_exact_roles.pop(permission, None)
             exclusions = Role.RoleConfig.EXCLUSIONS
             for exclusion_role, excluded_permissions in exclusions.items():
+                role_required_permissions = set(required_permissions) - set(
+                    excluded_permissions
+                )
                 dynamic_includes = self.helper_service.generate_dynamic_includes(
                     Role, ["role_links.exact_role"]
                 )
@@ -836,95 +819,123 @@ class RoleService(IRoleService):
                     )
                 role = role_response.data
                 if not role:
-                    await self.logger.log(
-                        action="ResetPermissions",
-                        entity="RoleService",
-                        level="warning",
-                        code=404,
-                        message=f"Role '{exclusion_role}' not found for exclusion.",
-                        source="RoleService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message=f"Role '{exclusion_role}' not found for exclusion.",
-                    )
-                role_current_permissions = [perm.name for perm in role.exact_roles]
-                role_required_permissions = set(required_permissions) - set(
-                    excluded_permissions
-                )
-                role_permissions_to_add = set(role_required_permissions) - set(
-                    role_current_permissions
-                )
-                role_permissions_to_remove = set(role_current_permissions) - set(
-                    role_required_permissions
-                )
-                for permission in role_permissions_to_add:
-                    exact_role = all_exact_roles.get(permission)
-                    if not exact_role:
+                    level = 2 if exclusion_role != "admin" else 1
+                    role = Role(name=exclusion_role, level=level)
+                    for permission in role_required_permissions:
+                        exact_role = all_exact_roles.get(permission)
+                        if not exact_role:
+                            await self.logger.log(
+                                action="ResetPermissions",
+                                entity="Role",
+                                level="warning",
+                                code=404,
+                                message=f"Exact role '{permission}' not found for addition to role '{exclusion_role}'.",
+                                source="RoleService",
+                            )
+                            return BaseResponseDto(
+                                success=False,
+                                code=404,
+                                data=None,
+                                message=f"Exact role '{permission}' not found for addition to role '{exclusion_role}'.",
+                            )
+                        role.exact_roles.add(exact_role)
+                    create_role_response = await self.role_repository.create(role)
+                    if not create_role_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=create_role_response.code,
+                            data=None,
+                            message=create_role_response.message,
+                        )
+                    role = create_role_response.data
+                    if not role:
                         await self.logger.log(
                             action="ResetPermissions",
-                            entity="RoleService",
-                            level="warning",
-                            code=404,
-                            message=f"Exact role '{permission}' not found for addition to role '{exclusion_role}'.",
+                            entity="Role",
+                            level="error",
+                            code=500,
+                            message=f"Failed to create role '{exclusion_role}' without a specific error.",
                             source="RoleService",
                         )
                         return BaseResponseDto(
                             success=False,
-                            code=404,
+                            code=500,
                             data=None,
-                            message=f"Exact role '{permission}' not found for addition to role '{exclusion_role}'.",
+                            message=f"An error occurred while creating role '{exclusion_role}'",
                         )
-                    role.exact_roles.append(exact_role)
-                for permission in role_permissions_to_remove:
-                    exact_role = all_exact_roles.get(permission)
-                    if not exact_role:
+                else:
+                    role_current_permissions = [perm.name for perm in role.exact_roles]
+                    role_permissions_to_add = set(role_required_permissions) - set(
+                        role_current_permissions
+                    )
+                    role_permissions_to_remove = set(role_current_permissions) - set(
+                        role_required_permissions
+                    )
+                    for permission in role_permissions_to_add:
+                        exact_role = all_exact_roles.get(permission)
+                        if not exact_role:
+                            await self.logger.log(
+                                action="ResetPermissions",
+                                entity="Role",
+                                level="warning",
+                                code=404,
+                                message=f"Exact role '{permission}' not found for addition to role '{exclusion_role}'.",
+                                source="RoleService",
+                            )
+                            return BaseResponseDto(
+                                success=False,
+                                code=404,
+                                data=None,
+                                message=f"Exact role '{permission}' not found for addition to role '{exclusion_role}'.",
+                            )
+                        role.exact_roles.add(exact_role)
+                    for permission in role_permissions_to_remove:
+                        exact_role = all_exact_roles.get(permission)
+                        if not exact_role:
+                            await self.logger.log(
+                                action="ResetPermissions",
+                                entity="Role",
+                                level="warning",
+                                code=404,
+                                message=f"Exact role '{permission}' not found for removal from role '{exclusion_role}'.",
+                                source="RoleService",
+                            )
+                            return BaseResponseDto(
+                                success=False,
+                                code=404,
+                                data=None,
+                                message=f"Exact role '{permission}' not found for removal from role '{exclusion_role}'.",
+                            )
+                        role.exact_roles.remove(exact_role)
+                    update_response = await self.role_repository.update(
+                        role, ["role_links", "exact_roles"]
+                    )
+                    if not update_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=update_response.code,
+                            data=None,
+                            message=update_response.message,
+                        )
+                    updated_role = update_response.data
+                    if not updated_role:
                         await self.logger.log(
                             action="ResetPermissions",
-                            entity="RoleService",
-                            level="warning",
-                            code=404,
-                            message=f"Exact role '{permission}' not found for removal from role '{exclusion_role}'.",
+                            entity="Role",
+                            level="error",
+                            code=500,
+                            message=f"Failed to update role '{exclusion_role}' without a specific error.",
                             source="RoleService",
                         )
                         return BaseResponseDto(
                             success=False,
-                            code=404,
+                            code=500,
                             data=None,
-                            message=f"Exact role '{permission}' not found for removal from role '{exclusion_role}'.",
+                            message=f"An error occurred while updating role '{exclusion_role}'",
                         )
-                    role.exact_roles.remove(exact_role)
-                update_response = await self.role_repository.update(
-                    role, ["role_links", "exact_roles"]
-                )
-                if not update_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=update_response.code,
-                        data=None,
-                        message=update_response.message,
-                    )
-                updated_role = update_response.data
-                if not updated_role:
-                    await self.logger.log(
-                        action="ResetPermissions",
-                        entity="RoleService",
-                        level="error",
-                        code=500,
-                        message=f"Failed to update role '{exclusion_role}' without a specific error.",
-                        source="RoleService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=500,
-                        data=None,
-                        message=f"An error occurred while updating role '{exclusion_role}'",
-                    )
             await self.logger.log(
                 action="ResetPermissions",
-                entity="RoleService",
+                entity="Role",
                 level="info",
                 code=200,
                 message=f"Successfully reset permissions",
@@ -938,7 +949,7 @@ class RoleService(IRoleService):
         except Exception as ex:
             await self.logger.log(
                 action="ResetPermissions",
-                entity="RoleService",
+                entity="Role",
                 level="error",
                 code=500,
                 message="An error occurred while resetting permissions",
@@ -960,12 +971,12 @@ class RoleService(IRoleService):
                 category = permission.split(" ")[-1]
                 if category not in categories:
                     categories[category] = []
-                categories[category].append(permission[:-1])
+                categories[category].append(" ".join(permission.split(" ")[:-1]))
             for category, perms in categories.items():
                 if "View" not in perms:
                     await self.logger.log(
                         action="ValidatePermissions",
-                        entity="RoleService",
+                        entity="Role",
                         level="warning",
                         code=400,
                         message=f"Missing 'View' permission for category '{category}'",
@@ -981,7 +992,7 @@ class RoleService(IRoleService):
         except Exception as ex:
             await self.logger.log(
                 action="ValidatePermissions",
-                entity="RoleService",
+                entity="Role",
                 level="error",
                 code=500,
                 message="An error occurred while validating permissions",

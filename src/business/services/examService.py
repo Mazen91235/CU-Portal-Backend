@@ -1,4 +1,3 @@
-import os
 from sqlalchemy import and_
 from core.iServices.iExamService import IExamService
 from core.iServices.iHelperService import IHelperService
@@ -51,6 +50,11 @@ class ExamService(IExamService):
             predicate = self.helper_service.generate_dynamic_predicate(
                 Task, data, ["name"], is_and, starts_with, is_exact
             )
+            predicate = (
+                and_(predicate, Task.task_type == "exam")
+                if predicate is not None
+                else Task.task_type == "exam"
+            )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Task, includes
             )
@@ -60,12 +64,20 @@ class ExamService(IExamService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Task", order_by
             )
-
+            dynamic_join_predicate, dynamic_join_entities = (
+                await self.helper_service.generate_dynamic_join_entities(Task, [])
+            )
+            if dynamic_join_predicate is not None:
+                if predicate is None:
+                    predicate = dynamic_join_predicate
+                else:
+                    predicate = and_(predicate, dynamic_join_predicate)
             result = await self.task_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                dynamic_join_entities,
                 descending,
             )
 
@@ -112,6 +124,11 @@ class ExamService(IExamService):
             predicate = self.helper_service.generate_dynamic_predicate(
                 Task, data, ["name"], is_and, starts_with, is_exact
             )
+            predicate = (
+                and_(predicate, Task.task_type == "exam")
+                if predicate is not None
+                else Task.task_type == "exam"
+            )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Task, includes
             )
@@ -121,12 +138,20 @@ class ExamService(IExamService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Task", order_by
             )
-
+            dynamic_join_predicate, dynamic_join_entities = (
+                await self.helper_service.generate_dynamic_join_entities(Task, [])
+            )
+            if dynamic_join_predicate is not None:
+                if predicate is None:
+                    predicate = dynamic_join_predicate
+                else:
+                    predicate = and_(predicate, dynamic_join_predicate)
             result = await self.task_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                dynamic_join_entities,
                 descending,
                 page,
                 limit,
@@ -137,7 +162,9 @@ class ExamService(IExamService):
                     success=False, code=result.code, data=None, message=result.message
                 )
             exams = result.data
-            return BaseResponseDto(success=True, code=200, data=exams)
+            return BaseResponseDto(
+                success=True, code=200, data=exams, next_page=result.next_page
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -189,7 +216,7 @@ class ExamService(IExamService):
                     message="Exam with the same name already exists for this subject.",
                 )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
+                Subject, ["user_subject_links.user"]
             )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == data.subject_id, dynamic_includes
@@ -281,6 +308,7 @@ class ExamService(IExamService):
             data.faculty_id = data.faculty_id or logged_in_user.faculty_id
             data.department_id = data.department_id or logged_in_user.department_id
             data.year_id = data.year_id or logged_in_user.year_id
+            data.task_type = "exam"
             create_exam_response = await self.task_repository.create(data)
             if not create_exam_response.success:
                 return BaseResponseDto(
@@ -306,23 +334,13 @@ class ExamService(IExamService):
                     message="An error occurred while creating exam",
                 )
             share_link = f"/users/exams/{created_exam.id}"
-            notification_response = await self.helper_service.send_notification(
+            await self.helper_service.send_notification(
                 Notification.NotificationType.EXAM,
                 created_exam.id,
                 user_ids,
-                f"New exam '{created_exam.title}' has been created for subject {subject.name}.",
+                f"New exam '{created_exam.name}' has been created for subject {subject.name}.",
                 share_link,
             )
-            if not notification_response.success:
-                await self.logger.log(
-                    action="Create",
-                    entity="Exam",
-                    level="warning",
-                    code=400,
-                    message="Failed to send notifications for Exam Creation.",
-                    details={"exam_id": created_exam.id},
-                    source="ExamService",
-                )
             await self.logger.log(
                 action="Create",
                 entity="Exam",
@@ -414,7 +432,7 @@ class ExamService(IExamService):
                     message="Another exam with the same name already exists for this subject.",
                 )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
+                Subject, ["user_subject_links.user"]
             )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == data.subject_id, dynamic_includes
@@ -596,23 +614,13 @@ class ExamService(IExamService):
                     message="An error occurred while updating exam",
                 )
             share_link = f"/users/exams/{updated_exam.id}"
-            notification_response = await self.helper_service.send_notification(
+            await self.helper_service.send_notification(
                 Notification.NotificationType.EXAM,
                 updated_exam.id,
                 user_ids,
-                f"Exam '{updated_exam.title}' has been updated for subject {subject.name}.",
+                f"Exam '{updated_exam.name}' has been updated for subject {subject.name}.",
                 share_link,
             )
-            if not notification_response.success:
-                await self.logger.log(
-                    action="Update",
-                    entity="Exam",
-                    level="warning",
-                    code=400,
-                    message="Failed to send notifications for Exam Update.",
-                    details={"exam_id": updated_exam.id},
-                    source="ExamService",
-                )
             await self.logger.log(
                 action="Update",
                 entity="Exam",

@@ -108,6 +108,7 @@ class LogService(ILogService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
             )
             if not result.success:
@@ -172,6 +173,7 @@ class LogService(ILogService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
+                [],
                 descending,
                 page,
                 limit,
@@ -184,7 +186,7 @@ class LogService(ILogService):
                     message=result.message,
                 )
             logs = result.data
-            return BaseResponseDto(success=True, data=logs)
+            return BaseResponseDto(success=True, data=logs, next_page=result.next_page)
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -267,4 +269,67 @@ class LogService(ILogService):
                 code=500,
                 data=None,
                 message="An error occurred while deleting logs",
+            )
+
+    # Log Specific Functions
+    async def get_log_actions(self):
+        try:
+            result = await self.log_repository.find_distinct(
+                column=Log.action,
+            )
+            if not result.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=result.code,
+                    data=None,
+                    message=result.message,
+                )
+            log_actions = result.data
+            return BaseResponseDto(success=True, data=log_actions)
+        except Exception as ex:
+            await self.logger.log(
+                action="GetLogActions",
+                entity="Log",
+                level="error",
+                code=500,
+                message="An error occurred while retrieving log actions",
+                details={"error": repr(ex)},
+                source="LogService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while retrieving log actions",
+            )
+
+    async def get_log_entities(self):
+        try:
+            result = await self.log_repository.find_distinct(
+                column=Log.entity,
+            )
+            if not result.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=result.code,
+                    data=None,
+                    message=result.message,
+                )
+            log_entities = result.data
+            return BaseResponseDto(success=True, data=log_entities)
+        except Exception as ex:
+            await self.logger.log(
+                action="GetLogEntities",
+                entity="Log",
+                level="error",
+                code=500,
+                message="An error occurred while retrieving log entities",
+                details={"error": repr(ex)},
+                source="LogService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while retrieving log entities",
             )
