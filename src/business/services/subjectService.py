@@ -589,7 +589,7 @@ class SubjectService(ISubjectService):
             )
 
     # Subject Specific Functions
-    async def get_available(self):
+    async def get_available(self, data):
         try:
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
@@ -622,10 +622,20 @@ class SubjectService(ISubjectService):
                 return BaseResponseDto(
                     success=False, code=401, data=None, message="Unauthorized"
                 )
+            if not data.department_id or not data.year_id:
+                return BaseResponseDto(
+                    success=True,
+                    code=200,
+                    data=[],
+                    message="Department ID and Year ID are required to fetch available courses.",
+                )
             response = await self.subject_repository.execute_stored_function(
                 "get_user_available_subjects",
                 {
                     "p_user_id": logged_in_user.id,
+                    "p_department_id": data.department_id,
+                    "p_year_id": data.year_id,
+                    "p_query": data.query or "",
                 },
             )
             if not response.success:

@@ -151,7 +151,7 @@ def create_log_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Delete Logs")),
-            Depends(set_timeout(120)),
+            Depends(set_timeout(60)),
         ],
         response_model=BaseResponseDto[bool],
         status_code=200,

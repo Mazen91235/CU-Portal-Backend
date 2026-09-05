@@ -2,12 +2,14 @@ from abc import abstractmethod
 from core.iServices.bases.iCrudService import ICrudService
 from core.entities.subject import Subject
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.subjectDtos import SubjectSearchDto
+from core.dtos.subjectDtos import SubjectSearchDto, SubjectSearchAvailableDto
 
 
 class ISubjectService(ICrudService[Subject, SubjectSearchDto]):
     @abstractmethod
-    async def get_available(self) -> BaseResponseDto[list[Subject]]:
+    async def get_available(
+        self, data: SubjectSearchAvailableDto
+    ) -> BaseResponseDto[list[Subject]]:
         pass
 
     @abstractmethod

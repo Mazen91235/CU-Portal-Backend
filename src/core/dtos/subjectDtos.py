@@ -132,3 +132,10 @@ class SubjectSearchDto(BaseSearchDto):
     user_id: int | None = Field(
         default=None, description="ID of User to filter subjects by enrollment"
     )
+
+
+class SubjectSearchAvailableDto(BaseSearchDto):
+    department_id: int = Field(
+        ..., description="ID of Department to filter subjects by"
+    )
+    year_id: int = Field(..., description="ID of Year to filter subjects by")

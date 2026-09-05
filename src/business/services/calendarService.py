@@ -241,76 +241,7 @@ class CalendarService(ICalendarService):
                         "events": [],
                         "notes": [],
                     }
-                result[date_str]["events"].append(
-                    EventResponseDto(
-                        id=event.get("id"),
-                        title=event.get("title") or "",
-                        start_date=start_date,
-                        end_date=(
-                            TimezoneHandler.from_isoformat(event.get("end_date"))
-                            if event.get("end_date")
-                            else None
-                        ),
-                        price=event.get("price") or 0.0,
-                        location_type=cast(
-                            Event.LocationType, event.get("location_type") or ""
-                        ),
-                        location=event.get("location") or "",
-                        details=event.get("details") or {},
-                        created_at=(
-                            TimezoneHandler.from_isoformat(event.get("created_at"))
-                            if event.get("created_at")
-                            else None
-                        ),
-                        updated_at=(
-                            TimezoneHandler.from_isoformat(event.get("updated_at"))
-                            if event.get("updated_at")
-                            else None
-                        ),
-                        faculty=(
-                            FacultyResponseDto(
-                                id=event.get("faculty", {}).get("id"),
-                                name=event.get("faculty", {}).get("name"),
-                            )
-                            if event.get("faculty")
-                            else None
-                        ),
-                        department=(
-                            DepartmentResponseDto(
-                                id=event.get("department", {}).get("id"),
-                                name=event.get("department", {}).get("name"),
-                                code=event.get("department", {}).get("code"),
-                            )
-                            if event.get("department")
-                            else None
-                        ),
-                        year=(
-                            YearResponseDto(
-                                id=event.get("year", {}).get("id"),
-                                year=event.get("year", {}).get("year"),
-                            )
-                            if event.get("year")
-                            else None
-                        ),
-                        logo=(
-                            AttachmentResponseDto(
-                                id=event.get("logo", {}).get("id"),
-                                url=event.get("logo", {}).get("url"),
-                                details=event.get("logo", {}).get("details"),
-                            )
-                            if event.get("logo")
-                            else None
-                        ),
-                        attendees=(
-                            [
-                                UserResponseDto(id=attendee.get("id"))
-                                for attendee in event.get("attendees", [])
-                            ]
-                            if event.get("attendees")
-                            else []
-                        ),
-                    )
-                )
+                result[date_str]["events"].append(cast(EventResponseDto, event))
             for note in notes:
                 date = (
                     TimezoneHandler.from_isoformat(note.get("date"))
@@ -329,28 +260,7 @@ class CalendarService(ICalendarService):
                         "events": [],
                         "notes": [],
                     }
-                result[date_str]["notes"].append(
-                    NoteResponseDto(
-                        id=note.get("id"),
-                        title=note.get("title") or "",
-                        content=note.get("content") or "",
-                        date=(
-                            TimezoneHandler.from_isoformat(note.get("date"))
-                            if note.get("date")
-                            else None
-                        ),
-                        created_at=(
-                            TimezoneHandler.from_isoformat(note.get("created_at"))
-                            if note.get("created_at")
-                            else None
-                        ),
-                        updated_at=(
-                            TimezoneHandler.from_isoformat(note.get("updated_at"))
-                            if note.get("updated_at")
-                            else None
-                        ),
-                    )
-                )
+                result[date_str]["notes"].append(cast(NoteResponseDto, note))
             result = dict(
                 sorted(
                     result.items(),

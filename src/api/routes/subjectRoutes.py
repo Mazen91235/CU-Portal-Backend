@@ -9,6 +9,7 @@ from core.dtos.subjectDtos import (
     SubjectResponseDto,
     SubjectUpdateDto,
     SubjectSearchDto,
+    SubjectSearchAvailableDto,
 )
 from core.dtos.userSubjectLinkDtos import UserSubjectLinkActionDto
 from core.models.queryModel import QueryModel
@@ -65,9 +66,13 @@ def create_subject_user_router(
         description="Get courses available for the current user to register",
     )
     async def get_available_subjects(
-        request: Request, controller: ISubjectController = Depends(_get_controller)
+        request: Request,
+        query: QueryModel[SubjectSearchAvailableDto] = Depends(
+            Parser.parse_query(QueryModel[SubjectSearchAvailableDto])
+        ),
+        controller: ISubjectController = Depends(_get_controller),
     ):
-        return await controller.get_available(request)
+        return await controller.get_available(request, query=query)
 
     @router.get(
         "/enrolled",

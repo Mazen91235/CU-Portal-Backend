@@ -11,9 +11,10 @@ from core.utils.responseHandler import ResponseHandler
 from core.entities.subject import Subject
 from core.dtos.subjectDtos import (
     SubjectCreateDto,
+    SubjectResponseDto,
     SubjectUpdateDto,
     SubjectSearchDto,
-    SubjectResponseDto,
+    SubjectSearchAvailableDto,
 )
 
 
@@ -289,9 +290,12 @@ class SubjectController(ISubjectController):
             )
 
     # Subject Specific Functions
-    async def get_available(self, request):
+    async def get_available(self, request, query):
         try:
-            response = await self.subject_service.get_available()
+            entity_search_dto = Generator[
+                SubjectSearchAvailableDto
+            ].generate_from_query(SubjectSearchAvailableDto, query)
+            response = await self.subject_service.get_available(entity_search_dto)
             if not response.success:
                 return ResponseHandler.generate_response(
                     success=False, code=response.code, message=response.message

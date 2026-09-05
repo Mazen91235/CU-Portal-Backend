@@ -67,7 +67,7 @@ def create_auth_router(
                     "google_details_token",
                 )
             ),
-            Depends(set_timeout(120)),
+            Depends(set_timeout(60)),
         ],
         response_model=BaseResponseDto,
         status_code=201,
@@ -103,7 +103,7 @@ def create_auth_router(
         "/resend-token",
         dependencies=[
             Depends(_is_logged_out),
-            Depends(set_timeout(120)),
+            Depends(set_timeout(60)),
         ],
         response_model=BaseResponseDto,
         status_code=200,
@@ -174,7 +174,7 @@ def create_auth_router(
 
     @router.get(
         "/login-with-google",
-        dependencies=[Depends(_is_logged_out), Depends(set_timeout(120))],
+        dependencies=[Depends(_is_logged_out), Depends(set_timeout(60))],
         summary="Login with Google",
         description="Initiates the Google login process and redirects the user to the Google authentication page.",
     )
@@ -185,7 +185,7 @@ def create_auth_router(
 
     @router.get(
         "/google-authentication-redirect",
-        dependencies=[Depends(set_timeout(120))],
+        dependencies=[Depends(set_timeout(60))],
         summary="Handle Google authentication redirect",
         description="Handles the redirect from Google after user authentication and processes the login. User is then redirected to the frontend url with the authentication result and token if logged in.",
     )

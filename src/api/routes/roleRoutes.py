@@ -179,7 +179,7 @@ def create_role_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Is Admin")),
-            Depends(set_timeout(120)),
+            Depends(set_timeout(60)),
         ],
         response_model=BaseResponseDto,
         status_code=200,
