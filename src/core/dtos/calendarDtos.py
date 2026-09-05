@@ -4,7 +4,8 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from core.entities.note import Note
+    from core.dtos.noteDtos import NoteResponseDto
+    from core.dtos.eventDtos import EventResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
 
@@ -30,7 +31,10 @@ class CalendarDayDto(BaseModel):
     announcements: list[CalendarDayEventDto] = Field(
         default_factory=list, description="List of announcements for the day"
     )
-    notes: list[Note] = Field(  # Should be NoteResponseDto
+    events: list[EventResponseDto] = Field(
+        default_factory=list, description="List of events for the day"
+    )
+    notes: list[NoteResponseDto] = Field(  # Should be NoteResponseDto
         default_factory=list, description="List of notes for the day"
     )
 

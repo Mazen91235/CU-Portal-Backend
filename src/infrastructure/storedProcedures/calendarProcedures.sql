@@ -42,9 +42,26 @@ BEGIN
         WHERE a.date IS NOT NULL
           AND a.date >= p_date_from 
           AND a.date <= p_date_to
-    )
+    ),
+    filtered_events AS (
+        -- 5. Fetch Events with non-null date within range
+        SELECT e.*, json_build_object('id', f.id, 'name', f.name) AS faculty,
+                      json_build_object('id', d.id, 'name', d.name, 'code', d.code) AS department,
+                      json_build_object('id', y.id, 'year', y.year) AS year,
+                      json_build_object('id', a.id, 'url', a.url, 'details', a.details) AS logo,
+                      json_build_object('id', ue.id) AS attendees
+        FROM events e
+        LEFT JOIN faculties f ON f.id = e.faculty_id
+        LEFT JOIN departments d ON d.id = e.department_id
+        LEFT JOIN years y ON y.id = e.year_id
+        LEFT JOIN attachments a ON a.id = e.logo_id
+        LEFT JOIN user_events ue ON ue.event_id = e.id
+        WHERE e.start_date IS NOT NULL
+          AND e.start_date >= p_date_from 
+          AND e.start_date <= p_date_to
+    ),
     filtered_notes AS (
-        -- 4. Fetch Notes with non-null date within range
+        -- 6. Fetch Notes with non-null date within range
         SELECT n.*
         FROM notes n
         WHERE n.author_id = p_user_id
@@ -52,11 +69,12 @@ BEGIN
           AND n.date >= p_date_from 
           AND n.date <= p_date_to
     )
-    -- 5. Construct final JSON object matching CalendarResponseDto structure
+    -- 7. Construct final JSON object matching CalendarResponseDto structure
     SELECT json_build_object(
         'tasks', COALESCE((SELECT json_agg(ft ORDER BY ft.deadline ASC, ft.id ASC) FROM filtered_tasks ft), '[]'::json),
         'exams', COALESCE((SELECT json_agg(fe ORDER BY fe.deadline ASC, fe.id ASC) FROM filtered_exams fe), '[]'::json),
         'announcements', COALESCE((SELECT json_agg(fa ORDER BY fa.date DESC, fa.id ASC) FROM filtered_announcements fa), '[]'::json),
+        'events', COALESCE((SELECT json_agg(fe ORDER BY fe.start_date DESC, fe.id ASC) FROM filtered_events fe), '[]'::json),
         'notes', COALESCE((SELECT json_agg(fn ORDER BY fn.date DESC, fn.id ASC) FROM filtered_notes fn), '[]'::json)
     ) INTO v_result;
 

@@ -1,4 +1,4 @@
-import asyncio
+from typing import cast
 from sqlalchemy import and_
 from core.iServices.iCalendarService import ICalendarService
 from core.iServices.iHelperService import IHelperService
@@ -6,7 +6,14 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.task import Task
 from core.entities.announcement import Announcement
-from core.entities.note import Note
+from core.entities.event import Event
+from core.dtos.noteDtos import NoteResponseDto
+from core.dtos.eventDtos import EventResponseDto
+from core.dtos.facultyDtos import FacultyResponseDto
+from core.dtos.departmentDtos import DepartmentResponseDto
+from core.dtos.yearDtos import YearResponseDto
+from core.dtos.attachmentDtos import AttachmentResponseDto
+from core.dtos.userDtos import UserResponseDto
 from core.dtos.calendarDtos import CalendarDayEventDto, CalendarResponseDto
 from core.dtos.baseDtos import BaseResponseDto
 from core.utils.timezoneHandler import TimezoneHandler
@@ -105,6 +112,7 @@ class CalendarService(ICalendarService):
             tasks = response_data.get("tasks", [])
             exams = response_data.get("exams", [])
             announcements = response_data.get("announcements", [])
+            events = response_data.get("events", [])
             notes = response_data.get("notes", [])
             result = {}
             for task in tasks:
@@ -122,6 +130,7 @@ class CalendarService(ICalendarService):
                         "tasks": [],
                         "exams": [],
                         "announcements": [],
+                        "events": [],
                         "notes": [],
                     }
                 result[date_str]["tasks"].append(
@@ -157,6 +166,7 @@ class CalendarService(ICalendarService):
                         "tasks": [],
                         "exams": [],
                         "announcements": [],
+                        "events": [],
                         "notes": [],
                     }
                 result[date_str]["exams"].append(
@@ -192,6 +202,7 @@ class CalendarService(ICalendarService):
                         "tasks": [],
                         "exams": [],
                         "announcements": [],
+                        "events": [],
                         "notes": [],
                     }
                 result[date_str]["announcements"].append(
@@ -212,6 +223,94 @@ class CalendarService(ICalendarService):
                         ),
                     )
                 )
+            for event in events:
+                start_date = (
+                    TimezoneHandler.from_isoformat(event.get("start_date"))
+                    if event.get("start_date")
+                    else None
+                )
+                if start_date:
+                    date_str = start_date.strftime("%Y-%m-%d")
+                else:
+                    continue  # Skip events without a valid start date
+                if date_str not in result:
+                    result[date_str] = {
+                        "tasks": [],
+                        "exams": [],
+                        "announcements": [],
+                        "events": [],
+                        "notes": [],
+                    }
+                result[date_str]["events"].append(
+                    EventResponseDto(
+                        id=event.get("id"),
+                        title=event.get("title") or "",
+                        start_date=start_date,
+                        end_date=(
+                            TimezoneHandler.from_isoformat(event.get("end_date"))
+                            if event.get("end_date")
+                            else None
+                        ),
+                        price=event.get("price") or 0.0,
+                        location_type=cast(
+                            Event.LocationType, event.get("location_type") or ""
+                        ),
+                        location=event.get("location") or "",
+                        details=event.get("details") or {},
+                        created_at=(
+                            TimezoneHandler.from_isoformat(event.get("created_at"))
+                            if event.get("created_at")
+                            else None
+                        ),
+                        updated_at=(
+                            TimezoneHandler.from_isoformat(event.get("updated_at"))
+                            if event.get("updated_at")
+                            else None
+                        ),
+                        faculty=(
+                            FacultyResponseDto(
+                                id=event.get("faculty", {}).get("id"),
+                                name=event.get("faculty", {}).get("name"),
+                            )
+                            if event.get("faculty")
+                            else None
+                        ),
+                        department=(
+                            DepartmentResponseDto(
+                                id=event.get("department", {}).get("id"),
+                                name=event.get("department", {}).get("name"),
+                                code=event.get("department", {}).get("code"),
+                            )
+                            if event.get("department")
+                            else None
+                        ),
+                        year=(
+                            YearResponseDto(
+                                id=event.get("year", {}).get("id"),
+                                year=event.get("year", {}).get("year"),
+                            )
+                            if event.get("year")
+                            else None
+                        ),
+                        logo=(
+                            AttachmentResponseDto(
+                                id=event.get("logo", {}).get("id"),
+                                url=event.get("logo", {}).get("url"),
+                                details=event.get("logo", {}).get("details"),
+                            )
+                            if event.get("logo")
+                            else None
+                        ),
+                        attendees=(
+                            [
+                                UserResponseDto(id=attendee.get("id"))
+                                for attendee in event.get("attendees", [])
+                            ]
+                            if event.get("attendees")
+                            else []
+                        ),
+                    )
+                )
             for note in notes:
                 date = (
                     TimezoneHandler.from_isoformat(note.get("date"))
@@ -227,19 +326,28 @@ class CalendarService(ICalendarService):
                         "tasks": [],
                         "exams": [],
                         "announcements": [],
+                        "events": [],
                         "notes": [],
                     }
                 result[date_str]["notes"].append(
-                    Note(
+                    NoteResponseDto(
                         id=note.get("id"),
                         title=note.get("title") or "",
                         content=note.get("content") or "",
-                        date=(date.isoformat() if date else None),
-                        created_at=TimezoneHandler.from_isoformat(
-                            note.get("created_at")
+                        date=(
+                            TimezoneHandler.from_isoformat(note.get("date"))
+                            if note.get("date")
+                            else None
                         ),
-                        updated_at=TimezoneHandler.from_isoformat(
-                            note.get("updated_at")
+                        created_at=(
+                            TimezoneHandler.from_isoformat(note.get("created_at"))
+                            if note.get("created_at")
+                            else None
+                        ),
+                        updated_at=(
+                            TimezoneHandler.from_isoformat(note.get("updated_at"))
+                            if note.get("updated_at")
+                            else None
                         ),
                     )
                 )

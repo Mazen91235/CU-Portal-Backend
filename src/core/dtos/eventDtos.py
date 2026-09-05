@@ -44,38 +44,46 @@ class EventCreateDto(BaseModel):
 
 
 class EventResponseDto(BaseModel):
-    id: int | None = Field(..., description="ID of the event")
-    title: str | None = Field(..., description="Title of the event")
-    start_date: datetime | None = Field(..., description="Start date of the event")
-    end_date: datetime | None = Field(None, description="End date of the event")
-    price: float | None = Field(..., description="Price of the event")
-    location_type: Event.LocationType | None = Field(
-        ..., description="Location type of the event e.g. online , offline"
+    id: int | None = Field(default=None, description="ID of the event")
+    title: str | None = Field(default=None, description="Title of the event")
+    start_date: datetime | None = Field(
+        default=None, description="Start date of the event"
     )
-    location: str | None = Field(..., description="Location of the event")
-    details: dict | None = Field(None, description="Additional details about the event")
-    created_at: datetime | None = Field(None, description="Creation timestamp")
-    updated_at: datetime | None = Field(None, description="Last update timestamp")
+    end_date: datetime | None = Field(default=None, description="End date of the event")
+    price: float | None = Field(default=None, description="Price of the event")
+    location_type: Event.LocationType | None = Field(
+        default=None, description="Location type of the event e.g. online , offline"
+    )
+    location: str | None = Field(default=None, description="Location of the event")
+    details: dict | None = Field(
+        default=None, description="Additional details about the event"
+    )
+    created_at: datetime | None = Field(default=None, description="Creation timestamp")
+    updated_at: datetime | None = Field(
+        default=None, description="Last update timestamp"
+    )
 
     # Relationships
     author: UserResponseDto | None = Field(
-        None, description="User who created the event"
+        default=None, description="User who created the event"
     )
     faculty: FacultyResponseDto | None = Field(
-        None, description="Faculty associated with the event"
+        default=None, description="Faculty associated with the event"
     )
     department: DepartmentResponseDto | None = Field(
-        None, description="Department associated with the event"
+        default=None, description="Department associated with the event"
     )
     year: YearResponseDto | None = Field(
-        None, description="Year associated with the event"
+        default=None, description="Year associated with the event"
     )
     attendees: list[UserResponseDto] | None = Field(
-        None, description="Attendees of the event"
+        default=None, description="Attendees of the event"
     )
-    logo: AttachmentResponseDto | None = Field(None, description="Logo of the event")
+    logo: AttachmentResponseDto | None = Field(
+        default=None, description="Logo of the event"
+    )
     attachments: list[AttachmentResponseDto] | None = Field(
-        None, description="Attachments of the event"
+        default=None, description="Attachments of the event"
     )
     # event_organizer: EventOrganizerResponseDto | None = Field(
     #     None, description="Organizer of the event"

@@ -20,9 +20,12 @@ from business.contextVars.sessionContext import session_context
 from core.dtos.baseDtos import *
 from core.dtos.announcementDtos import *
 from core.dtos.attachmentDtos import *
+from core.dtos.calendarDtos import *
 from core.dtos.departmentDtos import *
 from core.dtos.exactRoleDtos import *
 from core.dtos.examDtos import *
+from core.dtos.noteDtos import *
+from core.dtos.eventDtos import *
 from core.dtos.facultyDtos import *
 from core.dtos.logDtos import *
 from core.dtos.materialDtos import *
@@ -45,7 +48,7 @@ from core.entities.subject import Subject
 from core.entities.task import Task
 from core.entities.announcement import Announcement
 from core.entities.user import User
-from core.entities.note import Note
+from core.entities.event import Event
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -63,7 +66,7 @@ def rebuild_response_dtos() -> None:
         Announcement=Announcement,
         Notification=Notification,
         User=User,
-        Note=Note,
+        Event=Event,
     )
     for dto in response_dtos:
         dto.model_rebuild(_types_namespace=dto_namespace)
