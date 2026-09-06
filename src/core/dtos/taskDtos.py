@@ -27,15 +27,6 @@ class TaskCreateDto(BaseModel):
     subject_id: int = Field(
         ..., gt=0, description="ID of the subject this task belongs to"
     )
-    faculty_id: int | None = Field(
-        default=None, description="ID of the faculty this task belongs to"
-    )
-    department_id: int | None = Field(
-        default=None, gt=0, description="ID of the department this task belongs to"
-    )
-    year_id: int | None = Field(
-        default=None, description="ID of the year this task belongs to"
-    )
     details: dict = Field(
         default_factory=dict,
         description="Additional details about the task (stored as JSON) (eg. urls, links, description)",
@@ -71,15 +62,6 @@ class TaskResponseDto(BaseModel):
     subject: SubjectResponseDto | None = Field(
         default=None, description="Subject associated with the task"
     )
-    faculty: FacultyResponseDto | None = Field(
-        default=None, description="Faculty associated with the task"
-    )
-    department: DepartmentResponseDto | None = Field(
-        default=None, description="Department associated with the task"
-    )
-    year: YearResponseDto | None = Field(
-        default=None, description="Year associated with the task"
-    )
     attachments: list[AttachmentResponseDto] | None = Field(
         default=None, description="List of attachments associated with the task"
     )
@@ -106,15 +88,6 @@ class TaskUpdateDto(BaseModel):
     subject_id: int = Field(
         ..., gt=0, description="ID of the subject this task belongs to"
     )
-    faculty_id: int | None = Field(
-        default=None, description="ID of the faculty this task belongs to"
-    )
-    department_id: int | None = Field(
-        default=None, gt=0, description="ID of the department this task belongs to"
-    )
-    year_id: int | None = Field(
-        default=None, description="ID of the year this task belongs to"
-    )
     details: dict = Field(
         default_factory=dict, description="Additional details about the task (eg. urls, links, description)"
     )
@@ -130,13 +103,6 @@ class TaskSearchDto(BaseSearchDto):
         default=None, description="ID of Subject to filter by"
     )
     author_id: int | None = Field(default=None, description="ID of Author to filter by")
-    faculty_id: int | None = Field(
-        default=None, description="ID of Faculty to filter by"
-    )
-    department_id: int | None = Field(
-        default=None, description="ID of Department to filter by"
-    )
-    year_id: int | None = Field(default=None, description="ID of Year to filter by")
     deadline_from: str | None = Field(
         default=None, description="Start date to filter by (>=)"
     )

@@ -62,30 +62,6 @@ class Task(Base):
     )
 
     # Relationships
-    year_id: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        ForeignKey("years.id", ondelete="CASCADE", name="fk_year_task"),
-        nullable=True,
-    )
-    year: Mapped[Optional["Year"]] = relationship(
-        "Year", back_populates="tasks", cascade="save-update, merge"
-    )
-    department_id: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        ForeignKey("departments.id", ondelete="CASCADE", name="fk_department_task"),
-        nullable=True,
-    )
-    department: Mapped[Optional["Department"]] = relationship(
-        "Department", back_populates="tasks"
-    )
-    faculty_id: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        ForeignKey("faculties.id", ondelete="CASCADE", name="fk_faculty_task"),
-        nullable=True,
-    )
-    faculty: Mapped[Optional["Faculty"]] = relationship(
-        "Faculty", back_populates="tasks", cascade="save-update, merge"
-    )
     subject_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("subjects.id", ondelete="CASCADE", name="fk_subject_task"),
@@ -111,11 +87,9 @@ class Task(Base):
     __table_args__ = (
         # Composite Indexes
         Index(
-            "idx_task_task_type_faculty_department_year_name",
+            "idx_task_task_type_subject_id_name",
             "task_type",
-            "faculty_id",
-            "department_id",
-            "year_id",
+            "subject_id",
             "name",
         ),
     )

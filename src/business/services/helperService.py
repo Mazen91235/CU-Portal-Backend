@@ -716,6 +716,49 @@ class HelperService(IHelperService[U]):
                         getattr(cls, "subject_id").is_(None),
                         getattr(cls, "subject_id").in_(user_subjects_subquery),
                     )
+        else:
+            if hasattr(cls, "faculty_id") and request.state.restrict_faculties:
+                if result is not None:
+                    result = and_(
+                        result,
+                        or_(
+                            getattr(cls, "faculty_id").is_(None),
+                            getattr(cls, "faculty_id") == user.faculty_id,
+                        ),
+                    )
+                else:
+                    result = or_(
+                        getattr(cls, "faculty_id").is_(None),
+                        getattr(cls, "faculty_id") == user.faculty_id,
+                    )
+            if hasattr(cls, "department_id") and request.state.restrict_departments:
+                if result is not None:
+                    result = and_(
+                        result,
+                        or_(
+                            getattr(cls, "department_id").is_(None),
+                            getattr(cls, "department_id") == user.department_id,
+                        ),
+                    )
+                else:
+                    result = or_(
+                        getattr(cls, "department_id").is_(None),
+                        getattr(cls, "department_id") == user.department_id,
+                    )
+            if hasattr(cls, "year_id") and request.state.restrict_years:
+                if result is not None:
+                    result = and_(
+                        result,
+                        or_(
+                            getattr(cls, "year_id").is_(None),
+                            getattr(cls, "year_id") == user.year_id,
+                        ),
+                    )
+                else:
+                    result = or_(
+                        getattr(cls, "year_id").is_(None),
+                        getattr(cls, "year_id") == user.year_id,
+                    )
 
         return result
 

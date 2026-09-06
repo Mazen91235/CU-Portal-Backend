@@ -36,9 +36,6 @@ class YearResponseDto(BaseModel):
     subjects: list[SubjectResponseDto] | None = Field(
         default=None, description="Subjects in this year"
     )
-    tasks: list[TaskResponseDto] | None = Field(
-        default=None, description="Tasks in this year"
-    )
     announcements: list[AnnouncementResponseDto] | None = Field(
         default=None, description="Announcements in this year"
     )

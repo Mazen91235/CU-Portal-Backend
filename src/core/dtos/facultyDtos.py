@@ -40,9 +40,6 @@ class FacultyResponseDto(BaseModel):
     announcements: list[AnnouncementResponseDto] | None = Field(
         default=None, description="List of announcements associated with the faculty"
     )
-    tasks: list[TaskResponseDto] | None = Field(
-        default=None, description="List of tasks associated with the faculty"
-    )
     subjects: list[SubjectResponseDto] | None = Field(
         default=None, description="List of subjects associated with the faculty"
     )

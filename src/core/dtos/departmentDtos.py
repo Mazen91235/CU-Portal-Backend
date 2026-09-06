@@ -54,9 +54,6 @@ class DepartmentResponseDto(BaseModel):
     subjects: list[SubjectResponseDto] | None = Field(
         default=None, description="Subjects in this department"
     )
-    tasks: list[TaskResponseDto] | None = Field(
-        default=None, description="Tasks in this department"
-    )
     announcements: list[AnnouncementResponseDto] | None = Field(
         default=None, description="Announcements in this department"
     )

@@ -74,9 +74,6 @@ class Department(Base):
     subjects: Mapped[set["Subject"]] = relationship(
         "Subject", back_populates="department", cascade="all, delete-orphan", collection_class=set
     )
-    tasks: Mapped[set["Task"]] = relationship(
-        "Task", back_populates="department", cascade="all, delete-orphan", collection_class=set
-    )
     announcements: Mapped[set["Announcement"]] = relationship(
         "Announcement", back_populates="department", cascade="all, delete-orphan", collection_class=set
     )
