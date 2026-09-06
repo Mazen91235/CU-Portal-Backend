@@ -15,6 +15,7 @@ from api.routes.userRoutes import create_user_user_router, create_user_admin_rou
 from api.routes.roleRoutes import create_role_admin_router
 from api.routes.examRoutes import create_exam_user_router, create_exam_admin_router
 from api.routes.taskRoutes import create_task_user_router, create_task_admin_router
+from api.routes.noteRoutes import create_note_user_router
 from api.routes.announcementRoutes import (
     create_announcement_user_router,
     create_announcement_admin_router,
@@ -68,6 +69,7 @@ from api.controllers.materialController import MaterialController
 from api.controllers.subjectController import SubjectController
 from api.controllers.announcementController import AnnouncementController
 from api.controllers.taskController import TaskController
+from api.controllers.noteController import NoteController
 from api.controllers.calendarController import CalendarController
 from api.controllers.notificationController import NotificationController
 from api.controllers.yearController import YearController
@@ -78,6 +80,7 @@ from api.controllers.attachmentController import AttachmentController
 from business.services.userService import UserService
 from business.services.roleService import RoleService
 from business.services.taskService import TaskService
+from business.services.noteService import NoteService
 from business.services.calendarService import CalendarService
 from business.services.subjectService import SubjectService
 from business.services.announcementService import AnnouncementService
@@ -109,6 +112,7 @@ from core.entities.subject import Subject
 from core.entities.userSubjectLink import UserSubjectLink
 from core.entities.announcement import Announcement
 from core.entities.task import Task
+from core.entities.note import Note
 from core.entities.subject import Subject
 from core.entities.year import Year
 from core.entities.department import Department
@@ -193,6 +197,9 @@ class Container(containers.DeclarativeContainer):
     )
     task_repository = providers.Factory(
         BaseRepository, session=db_session, model=Task, session_factory=session_factory
+    )
+    note_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Note, session_factory=session_factory
     )
     subject_repository = providers.Factory(
         BaseRepository,
@@ -399,6 +406,12 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
+    note_service = providers.Factory(
+        NoteService,
+        note_repository=note_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
     notification_service = providers.Factory(
         NotificationService,
         user_notification_repository=user_notification_repository,
@@ -456,6 +469,9 @@ class Container(containers.DeclarativeContainer):
     )
     task_controller = providers.Factory(
         TaskController, task_service=task_service, logger=logger
+    )
+    note_controller = providers.Factory(
+        NoteController, note_service=note_service, logger=logger
     )
     calendar_controller = providers.Factory(
         CalendarController, calendar_service=calendar_service, logger=logger
@@ -638,6 +654,12 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    note_user_routes = providers.Factory(
+        create_note_user_router,
+        controller_provider=note_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
     calendar_user_routes = providers.Factory(
         create_calendar_user_router,
         controller_provider=calendar_controller.provider,
