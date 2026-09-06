@@ -81,8 +81,8 @@ BEGIN
     WHERE u.faculty_id IS NOT NULL
       AND u.department_id IS NOT NULL
       AND u.year_id IS NOT NULL
-      AND u.type IS NOT NULL
-      AND u.type <> ''
+      AND u.study_type IS NOT NULL
+      AND u.study_type <> ''
       AND u.status = FALSE
       AND (p_faculty_id IS NULL OR u.faculty_id = p_faculty_id)
       AND (p_department_id IS NULL OR u.department_id = p_department_id)
@@ -99,5 +99,199 @@ BEGIN
     );
 
     RETURN v_result;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION get_user_with_details(
+    p_user_id INT
+)
+RETURNS JSON AS $$
+DECLARE
+    v_user_json JSON;
+    v_user_registered_subject_ids INT[];
+    
+    v_tasks_published JSON;
+    v_tasks JSON;
+    v_exams_published JSON;
+    v_exams JSON;
+    v_announcements_published JSON;
+    v_announcements JSON;
+    v_materials JSON;
+    v_subjects JSON;
+    v_logs JSON;
+    
+    v_result JSON;
+BEGIN
+    -- 1. Fetch user with nested faculty, department, year, and role
+    SELECT JSON_BUILD_OBJECT(
+        'id', u.id,
+        'name', u.name,
+        'email', u.email,
+        'phone', u.phone,
+        'status', u.status,
+        'gender', u.gender,
+        'section', u.section,
+        'is_early_access', u.is_early_access,
+        'details', u.details,
+        'google_id', u.google_id,
+        'google_name', u.google_name,
+        'google_email', u.google_email,
+        'google_avatar', u.google_avatar,
+        'study_type', u.study_type,
+        'created_at', u.created_at,
+        'updated_at', u.updated_at,
+        'faculty', CASE WHEN f.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', f.id, 'name', f.name) ELSE NULL END,
+        'department', CASE WHEN d.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', d.id, 'name', d.name) ELSE NULL END,
+        'year', CASE WHEN y.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', y.id, 'year', y.year) ELSE NULL END,
+        'role', CASE WHEN r.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', r.id, 'name', r.name) ELSE NULL END,
+        'avatar', CASE WHEN u.avatar_id IS NOT NULL THEN JSON_BUILD_OBJECT('id', a.id, 'url', a.url, 'details', a.details) ELSE NULL END
+    ) INTO v_user_json
+    FROM users u
+    LEFT JOIN faculties f ON f.id = u.faculty_id
+    LEFT JOIN departments d ON d.id = u.department_id
+    LEFT JOIN years y ON y.id = u.year_id
+    LEFT JOIN roles r ON r.id = u.role_id
+    LEFT JOIN attachments a ON a.id = u.avatar_id
+    WHERE u.id = p_user_id;
+
+    IF v_user_json IS NULL THEN
+        RETURN NULL;
+    END IF;
+
+    -- 2. Fetch user's registered subject IDs into an array
+    SELECT ARRAY_AGG(subject_id) INTO v_user_registered_subject_ids
+    FROM user_subject_links
+    WHERE user_id = p_user_id;
+
+    -- 3. Tasks Published (author_id = p_user_id AND task_type = 'task')
+    SELECT COALESCE(JSON_AGG(t_pub), '[]'::json) INTO v_tasks_published
+    FROM (
+        SELECT 
+            t.id, t.name, t.task_type, t.deadline, t.details, t.created_at, t.updated_at,
+            JSON_BUILD_OBJECT('id', s.id, 'name', s.name, 'code', s.code) AS subject
+        FROM tasks t
+        JOIN subjects s ON s.id = t.subject_id
+        WHERE t.author_id = p_user_id 
+          AND t.task_type = 'task'
+        ORDER BY t.created_at DESC, t.id DESC
+        LIMIT 5
+    ) t_pub;
+
+    -- 4. Tasks (In registered subjects AND task_type = 'task')
+    SELECT COALESCE(JSON_AGG(t_reg), '[]'::json) INTO v_tasks
+    FROM (
+        SELECT 
+            t.id, t.name, t.task_type, t.deadline, t.details, t.created_at, t.updated_at,
+            JSON_BUILD_OBJECT('id', s.id, 'name', s.name, 'code', s.code) AS subject
+        FROM tasks t
+        JOIN subjects s ON s.id = t.subject_id
+        WHERE t.subject_id = ANY(v_user_registered_subject_ids)
+          AND t.task_type = 'task'
+        ORDER BY t.created_at DESC, t.id DESC
+        LIMIT 5
+    ) t_reg;
+
+    -- 5. Exams Published (author_id = p_user_id AND task_type = 'exam')
+    SELECT COALESCE(JSON_AGG(e_pub), '[]'::json) INTO v_exams_published
+    FROM (
+        SELECT 
+            t.id, t.name, t.task_type, t.deadline, t.details, t.created_at, t.updated_at,
+            JSON_BUILD_OBJECT('id', s.id, 'name', s.name, 'code', s.code) AS subject
+        FROM tasks t
+        JOIN subjects s ON s.id = t.subject_id
+        WHERE t.author_id = p_user_id 
+          AND t.task_type = 'exam'
+        ORDER BY t.created_at DESC, t.id DESC
+        LIMIT 5
+    ) e_pub;
+
+    -- 6. Exams (In registered subjects AND task_type = 'exam')
+    SELECT COALESCE(JSON_AGG(e_reg), '[]'::json) INTO v_exams
+    FROM (
+        SELECT 
+            t.id, t.name, t.task_type, t.deadline, t.details, t.created_at, t.updated_at,
+            JSON_BUILD_OBJECT('id', s.id, 'name', s.name, 'code', s.code) AS subject
+        FROM tasks t
+        JOIN subjects s ON s.id = t.subject_id
+        WHERE t.subject_id = ANY(v_user_registered_subject_ids)
+          AND t.task_type = 'exam'
+        ORDER BY t.created_at DESC, t.id DESC
+        LIMIT 5
+    ) e_reg;
+
+    -- 7. Announcements Published (author_id = p_user_id)
+    SELECT COALESCE(JSON_AGG(a_pub), '[]'::json) INTO v_announcements_published
+    FROM (
+        SELECT 
+            a.id, a.title, a.content, a.date, a.details, a.created_at, a.updated_at,
+            JSON_BUILD_OBJECT('id', s.id, 'name', s.name, 'code', s.code) AS subject
+        FROM announcements a
+        JOIN subjects s ON s.id = a.subject_id
+        WHERE a.author_id = p_user_id
+        ORDER BY a.created_at DESC, a.id DESC
+        LIMIT 5
+    ) a_pub;
+
+    -- 8. Announcements (In registered subjects)
+    SELECT COALESCE(JSON_AGG(a_reg), '[]'::json) INTO v_announcements
+    FROM (
+        SELECT 
+            a.id, a.title, a.content, a.date, a.details, a.created_at, a.updated_at,
+            JSON_BUILD_OBJECT('id', s.id, 'name', s.name, 'code', s.code) AS subject
+        FROM announcements a
+        JOIN subjects s ON s.id = a.subject_id
+        WHERE a.subject_id = ANY(v_user_registered_subject_ids)
+        ORDER BY a.created_at DESC, a.id DESC
+        LIMIT 5
+    ) a_reg;
+
+    -- 9. Materials (In registered subjects)
+    SELECT COALESCE(JSON_AGG(m_reg), '[]'::json) INTO v_materials
+    FROM (
+        SELECT 
+            m.id, m.name, m.url, m.details, m.created_at, m.updated_at,
+            JSON_BUILD_OBJECT('id', s.id, 'name', s.name, 'code', s.code) AS subject
+        FROM materials m
+        JOIN subjects s ON s.id = m.subject_id
+        WHERE m.subject_id = ANY(v_user_registered_subject_ids)
+        ORDER BY m.created_at DESC, m.id DESC
+        LIMIT 5
+    ) m_reg;
+
+    -- 10. Subjects (User's registered subjects)
+    SELECT COALESCE(JSON_AGG(s_reg), '[]'::json) INTO v_subjects
+    FROM (
+        SELECT s.id, s.name, s.code, s.faculty_id, s.department_id, s.year_id
+        FROM subjects s
+        JOIN user_subject_links usl ON usl.subject_id = s.id
+        WHERE usl.user_id = p_user_id
+        ORDER BY s.name ASC
+        LIMIT 5
+    ) s_reg;
+
+    -- 11. User Logs
+    SELECT COALESCE(JSON_AGG(l_user), '[]'::json) INTO v_logs
+    FROM (
+        SELECT l.*
+        FROM logs l
+        WHERE l.user_id = p_user_id
+        ORDER BY l.created_at DESC, l.id DESC
+        LIMIT 5
+    ) l_user;
+
+    -- 12. Combine user base details with nested relationship top 5s
+    v_result := v_user_json::jsonb || JSON_BUILD_OBJECT(
+        'tasks_published', v_tasks_published,
+        'tasks', v_tasks,
+        'exams_published', v_exams_published,
+        'exams', v_exams,
+        'announcements_published', v_announcements_published,
+        'announcements', v_announcements,
+        'materials', v_materials,
+        'subjects', v_subjects,
+        'logs', v_logs
+    )::jsonb;
+
+    RETURN v_result::json;
 END;
 $$ LANGUAGE plpgsql;

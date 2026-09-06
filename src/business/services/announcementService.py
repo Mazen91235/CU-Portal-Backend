@@ -1,16 +1,11 @@
-import os
 from sqlalchemy import and_
 from core.iServices.iAnnouncementService import IAnnouncementService
-from core.iServices.iUserService import IUserService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.announcement import Announcement
 from core.entities.subject import Subject
-from core.entities.role import Role
-from core.entities.faculty import Faculty
-from core.entities.department import Department
-from core.entities.year import Year
+from core.entities.notification import Notification
 from core.dtos.baseDtos import BaseResponseDto
 from core.utils.validator import Validator
 
@@ -20,23 +15,13 @@ class AnnouncementService(IAnnouncementService):
         self,
         announcement_repository: IBaseRepository[Announcement],
         subject_repository: IBaseRepository[Subject],
-        role_repository: IBaseRepository[Role],
-        faculty_repository: IBaseRepository[Faculty],
-        department_repository: IBaseRepository[Department],
-        year_repository: IBaseRepository[Year],
         logger: IBaseLogger,
         helper_service: IHelperService,
-        notification_service=None,
     ):
         self.announcement_repository = announcement_repository
         self.subject_repository = subject_repository
-        self.role_repository = role_repository
-        self.faculty_repository = faculty_repository
-        self.department_repository = department_repository
-        self.year_repository = year_repository
         self.logger = logger
         self.helper_service = helper_service
-        self.notification_service = notification_service
 
     # Transaction Functions
     async def begin_transaction(self):
@@ -100,7 +85,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while finding announcement",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(
@@ -136,7 +121,6 @@ class AnnouncementService(IAnnouncementService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Announcement", order_by
             )
-
             result = await self.announcement_repository.find(
                 predicate,
                 dynamic_includes,
@@ -156,7 +140,9 @@ class AnnouncementService(IAnnouncementService):
                 )
 
             announcements = result.data
-            return BaseResponseDto(success=True, data=announcements)
+            return BaseResponseDto(
+                success=True, data=announcements, next_page=result.next_page
+            )
 
         except Exception as ex:
             await self.logger.log(
@@ -165,7 +151,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while finding announcements",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(
@@ -182,6 +168,7 @@ class AnnouncementService(IAnnouncementService):
                     and_(
                         Announcement.title == data.title,
                         Announcement.subject_id == data.subject_id,
+                        Announcement.date.is_not_distinct_from(data.date),
                     )
                 )
             )
@@ -209,62 +196,33 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="Announcement with the same title already exists for this subject.",
                 )
-            files = []
-            for url in data.urls:
-                file_exists_response = (
-                    await self.helper_service.verify_file_exists_on_drive(url)
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == data.subject_id
+            )
+            if not subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=subject_response.code,
+                    data=None,
+                    message=subject_response.message,
                 )
-                if not file_exists_response.success:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Announcement",
-                        level="warning",
-                        code=400,
-                        message="File does not exist on Google Drive for Announcement Creation.",
-                        details={"url": url},
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=file_exists_response.code,
-                        data=None,
-                        message=file_exists_response.message,
-                    )
-                file_data = file_exists_response.data
-                if not file_data:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Announcement",
-                        level="warning",
-                        code=400,
-                        message="Failed to fetch file data from Google Drive for Announcement Creation.",
-                        details={"url": url},
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Failed to fetch file data from Google Drive",
-                    )
-                files.append(file_data.model_dump())
-            for link_name, link_url in (data.links).items():
-                if not Validator.is_valid_external_url(link_url):
-                    await self.logger.log(
-                        action="Create",
-                        entity="Announcement",
-                        level="warning",
-                        code=400,
-                        message="Invalid URL provided for Announcement Creation.",
-                        details={"link_name": link_name, "link_url": link_url},
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid URL provided",
-                    )
+            subject = subject_response.data
+            if not subject:
+                await self.logger.log(
+                    action="Create",
+                    entity="Announcement",
+                    level="warning",
+                    code=404,
+                    message="Subject not found for Announcement Creation.",
+                    details={"subject_id": data.subject_id},
+                    source="AnnouncementService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Subject not found",
+                )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -298,231 +256,37 @@ class AnnouncementService(IAnnouncementService):
                     message="An error occurred while creating announcement",
                 )
             data.author_id = logged_in_user.id
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Role, ["exact_roles"]
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                    subject_id=data.subject_id,
+                )
             )
-            logged_in_user_role_response = await self.role_repository.find_one(
-                Role.id == logged_in_user.role_id, dynamic_includes
-            )
-            if not logged_in_user_role_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=logged_in_user_role_response.code,
-                    data=None,
-                    message=logged_in_user_role_response.message,
-                )
-            logged_in_user_role = logged_in_user_role_response.data
-            if not logged_in_user_role:
-                await self.logger.log(
-                    action="Create",
-                    entity="Announcement",
-                    level="error",
-                    code=500,
-                    message="Logged-in user's role not found for Announcement Creation.",
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=500,
-                    data=None,
-                    message="An error occurred while creating announcement",
-                )
-            logged_in_user_permissions = [
-                perm.name for perm in logged_in_user_role.exact_roles
-            ]
-            if "Access All Faculties" not in logged_in_user_permissions:
-                data.faculty_id = logged_in_user.faculty_id
-            else:
-                if not data.faculty_id:
-                    data.faculty_id = logged_in_user.faculty_id
-                faculty_response = await self.faculty_repository.find_one(
-                    Faculty.id == data.faculty_id
-                )
-                if not faculty_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=faculty_response.code,
-                        data=None,
-                        message=faculty_response.message,
-                    )
-                faculty = faculty_response.data
-                if not faculty:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Announcement",
-                        level="warning",
-                        code=404,
-                        message="Faculty not found for Announcement Creation.",
-                        details={"faculty_id": data.faculty_id},
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message="Faculty not found",
-                    )
-            if "Access All Departments" not in logged_in_user_permissions:
-                data.department_id = logged_in_user.department_id
-            else:
-                if not data.department_id:
-                    data.department_id = logged_in_user.department_id
-                department_response = await self.department_repository.find_one(
-                    Department.id == data.department_id
-                )
-                if not department_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=department_response.code,
-                        data=None,
-                        message=department_response.message,
-                    )
-                department = department_response.data
-                if not department:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Announcement",
-                        level="warning",
-                        code=404,
-                        message="Department not found for Announcement Creation.",
-                        details={"department_id": data.department_id},
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message="Department not found",
-                    )
-                if department.faculty_id != data.faculty_id:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Announcement",
-                        level="warning",
-                        code=400,
-                        message="Department does not belong to the specified faculty for Announcement Creation.",
-                        details={
-                            "department_id": data.department_id,
-                            "faculty_id": data.faculty_id,
-                        },
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Department does not belong to the specified faculty",
-                    )
-                if (
-                    department.faculty_id != logged_in_user.faculty_id
-                    and "Access All Faculties" not in logged_in_user_permissions
-                ):
-                    await self.logger.log(
-                        action="Create",
-                        entity="Announcement",
-                        level="warning",
-                        code=403,
-                        message="User does not have permission to create announcement for this department.",
-                        details={
-                            "user_id": logged_in_user.id,
-                            "department_id": data.department_id,
-                        },
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=403,
-                        data=None,
-                        message="You do not have permission to create an announcement for this department.",
-                    )
-            if "Access All Years" not in logged_in_user_permissions:
-                data.year_id = logged_in_user.year_id
-            else:
-                if not data.year_id:
-                    data.year_id = logged_in_user.year_id
-                year_response = await self.year_repository.find_one(
-                    Year.id == data.year_id
-                )
-                if not year_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=year_response.code,
-                        data=None,
-                        message=year_response.message,
-                    )
-                year = year_response.data
-                if not year:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Announcement",
-                        level="warning",
-                        code=404,
-                        message="Year not found for Announcement Creation.",
-                        details={"year_id": data.year_id},
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message="Year not found",
-                    )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
-            )
-            subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id, dynamic_includes
-            )
-            if not subject_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=subject_response.code,
-                    data=None,
-                    message=subject_response.message,
-                )
-            subject = subject_response.data
-            if not subject:
-                await self.logger.log(
-                    action="Create",
-                    entity="Announcement",
-                    level="warning",
-                    code=404,
-                    message="Subject not found for Announcement Creation.",
-                    details={"subject_id": data.subject_id},
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="Subject not found",
-                )
-            user_ids = [user.id for user in subject.users] if subject.users else []
-            if (
-                logged_in_user.id not in user_ids
-                and "Access All Courses" not in logged_in_user_permissions
-            ):
+            if not verify_restricted_access_response.success:
                 await self.logger.log(
                     action="Create",
                     entity="Announcement",
                     level="warning",
                     code=403,
-                    message="User does not have permission to create announcement for this subject.",
-                    details={
-                        "user_id": logged_in_user.id,
-                        "subject_id": data.subject_id,
-                    },
+                    message=f"Failed to verify restricted access for user {logged_in_user.id}: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
                     source="AnnouncementService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=403,
-                    data=None,
-                    message="You do not have permission to create an announcement for this subject.",
+                    message="User does not have access to create announcement for the specified criteria.",
                 )
-
-            data.details = {"files_data": files} if files else {}
-
+            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
+            data.department_id = data.department_id or logged_in_user.department_id
+            data.year_id = data.year_id or logged_in_user.year_id
+            data.details = {} if not data.details else data.details
+            urls = data.details.get("urls", [])
+            links = data.details.get("links", [])
+            data.details.pop("urls", None)
+            data.details.pop("links", None)
             create_announcement_response = await self.announcement_repository.create(
                 data
             )
@@ -549,6 +313,99 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="An error occurred while creating announcement",
                 )
+            for url in urls:
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=True,
+                    url=url,
+                    author_id=logged_in_user.id,
+                    source_name="announcement_id",
+                    source_id=created_announcement.id,
+                )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Announcement",
+                        level="warning",
+                        code=400,
+                        message="Failed to create attachment for announcement.",
+                        details={"url": url},
+                        source="AnnouncementService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Announcement",
+                        level="warning",
+                        code=400,
+                        message="Failed to create attachment for announcement without a specific error.",
+                        details={"url": url},
+                        source="AnnouncementService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message="An error occurred while creating attachment for announcement",
+                    )
+            for link in links:
+                link_name = link.get("name", link.get("title", ""))
+                link_url = link.get("url", "")
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=False,
+                    url=link_url,
+                    author_id=logged_in_user.id,
+                    source_name="announcement_id",
+                    source_id=created_announcement.id,
+                    link_title=link_name,
+                )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Announcement",
+                        level="warning",
+                        code=attachment_response.code or 500,
+                        message="Failed to create attachment for announcement.",
+                        details={"url": link_url},
+                        source="AnnouncementService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Announcement",
+                        level="warning",
+                        code=400,
+                        message="Failed to create attachment for announcement without a specific error.",
+                        details={"url": link_url},
+                        source="AnnouncementService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message="An error occurred while creating attachment for announcement",
+                    )
+            share_link = f"/users/announcements/{created_announcement.id}"
+            await self.helper_service.send_notification(
+                Notification.NotificationType.ANNOUNCEMENT,
+                created_announcement.id,
+                f"New announcement '{created_announcement.title}' has been created for subject {subject.name}.",
+                share_link,
+                subject_id=created_announcement.subject_id,
+            )
             await self.logger.log(
                 action="Create",
                 entity="Announcement",
@@ -564,13 +421,14 @@ class AnnouncementService(IAnnouncementService):
                 message="Announcement created successfully",
             )
         except Exception as ex:
+            print(ex)
             await self.logger.log(
                 action="Create",
                 entity="Announcement",
                 level="error",
                 code=500,
                 message="An error occurred while creating announcement",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(
@@ -582,8 +440,11 @@ class AnnouncementService(IAnnouncementService):
 
     async def update(self, data):
         try:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Announcement, ["attachments"]
+            )
             target_announcement_response = await self.announcement_repository.find_one(
-                Announcement.id == data.id
+                Announcement.id == data.id, dynamic_includes
             )
             if not target_announcement_response.success:
                 return BaseResponseDto(
@@ -608,11 +469,39 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="Announcement not found",
                 )
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == data.subject_id, dynamic_includes
+            )
+            if not subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=subject_response.code,
+                    data=None,
+                    message=subject_response.message,
+                )
+            subject = subject_response.data
+            if not subject:
+                await self.logger.log(
+                    action="Update",
+                    entity="Announcement",
+                    level="warning",
+                    code=404,
+                    message="Subject not found for Announcement Update.",
+                    details={"subject_id": data.subject_id},
+                    source="AnnouncementService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Subject not found",
+                )
             existing_announcement_response = (
                 await self.announcement_repository.find_one(
                     and_(
                         Announcement.title == data.title,
                         Announcement.subject_id == data.subject_id,
+                        Announcement.date.is_not_distinct_from(data.date),
                     )
                 )
             )
@@ -672,27 +561,42 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="An error occurred while updating announcement",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Role, ["exact_roles"]
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                    subject_id=data.subject_id,
+                )
             )
-            logged_in_user_role_response = await self.role_repository.find_one(
-                Role.id == logged_in_user.role_id, dynamic_includes
-            )
-            if not logged_in_user_role_response.success:
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Announcement",
+                    level="warning",
+                    code=403,
+                    message=f"Failed to verify restricted access for user {logged_in_user.id}: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="AnnouncementService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=logged_in_user_role_response.code,
-                    data=None,
-                    message=logged_in_user_role_response.message,
+                    code=403,
+                    message="User does not have access to update announcement for the specified criteria.",
                 )
-            logged_in_user_role = logged_in_user_role_response.data
-            if not logged_in_user_role:
+            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
+            data.department_id = data.department_id or logged_in_user.department_id
+            data.year_id = data.year_id or logged_in_user.year_id
+            logged_in_user_permissions_response = (
+                await self.helper_service.get_logged_in_user_permissions()
+            )
+            if not logged_in_user_permissions_response.success:
                 await self.logger.log(
                     action="Update",
                     entity="Announcement",
                     level="error",
                     code=500,
-                    message="Logged-in user's role not found for Announcement Update.",
+                    message="Failed to retrieve logged-in user permissions for Announcement Update.",
                     source="AnnouncementService",
                 )
                 return BaseResponseDto(
@@ -701,212 +605,22 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="An error occurred while updating announcement",
                 )
-            logged_in_user_permissions = [
-                perm.name for perm in logged_in_user_role.exact_roles
-            ]
-            if (
-                "Access All Faculties" not in logged_in_user_permissions
-                and target_announcement.faculty_id != logged_in_user.faculty_id
-            ):
+            logged_in_user_permissions = logged_in_user_permissions_response.data
+            if not logged_in_user_permissions:
                 await self.logger.log(
                     action="Update",
                     entity="Announcement",
-                    level="warning",
-                    code=403,
-                    message="User does not have permission to update this announcement.",
-                    details={
-                        "user_id": logged_in_user.id,
-                        "announcement_id": target_announcement.id,
-                    },
+                    level="error",
+                    code=500,
+                    message="No logged-in user permissions found for Announcement Update.",
                     source="AnnouncementService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=403,
+                    code=500,
                     data=None,
-                    message="You do not have permission to update this announcement.",
+                    message="An error occurred while updating announcement",
                 )
-            if "Access All Faculties" not in logged_in_user_permissions:
-                data.faculty_id = logged_in_user.faculty_id
-            else:
-                if not data.faculty_id:
-                    data.faculty_id = target_announcement.faculty_id
-                faculty_response = await self.faculty_repository.find_one(
-                    Faculty.id == data.faculty_id
-                )
-                if not faculty_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=faculty_response.code,
-                        data=None,
-                        message=faculty_response.message,
-                    )
-                faculty = faculty_response.data
-                if not faculty:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Announcement",
-                        level="warning",
-                        code=404,
-                        message="Faculty not found for Announcement Update.",
-                        details={"faculty_id": data.faculty_id},
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message="Faculty not found",
-                    )
-            if (
-                "Access All Departments" not in logged_in_user_permissions
-                and target_announcement.department_id != logged_in_user.department_id
-            ):
-                await self.logger.log(
-                    action="Update",
-                    entity="Announcement",
-                    level="warning",
-                    code=403,
-                    message="User does not have permission to update this announcement.",
-                    details={
-                        "user_id": logged_in_user.id,
-                        "announcement_id": target_announcement.id,
-                    },
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    data=None,
-                    message="You do not have permission to update this announcement.",
-                )
-            if "Access All Departments" not in logged_in_user_permissions:
-                data.department_id = logged_in_user.department_id
-            else:
-                if not data.department_id:
-                    data.department_id = target_announcement.department_id
-                department_response = await self.department_repository.find_one(
-                    Department.id == data.department_id
-                )
-                if not department_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=department_response.code,
-                        data=None,
-                        message=department_response.message,
-                    )
-                department = department_response.data
-                if not department:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Announcement",
-                        level="warning",
-                        code=404,
-                        message="Department not found for Announcement Update.",
-                        details={"department_id": data.department_id},
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message="Department not found",
-                    )
-                if department.faculty_id != data.faculty_id:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Announcement",
-                        level="warning",
-                        code=400,
-                        message="Department does not belong to the specified faculty for Announcement Update.",
-                        details={
-                            "department_id": data.department_id,
-                            "faculty_id": data.faculty_id,
-                        },
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Department does not belong to the specified faculty",
-                    )
-                if (
-                    department.faculty_id != logged_in_user.faculty_id
-                    and "Access All Faculties" not in logged_in_user_permissions
-                ):
-                    await self.logger.log(
-                        action="Update",
-                        entity="Announcement",
-                        level="warning",
-                        code=403,
-                        message="User does not have permission to update announcement for this department.",
-                        details={
-                            "user_id": logged_in_user.id,
-                            "department_id": data.department_id,
-                        },
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=403,
-                        data=None,
-                        message="You do not have permission to update an announcement for this department.",
-                    )
-            if (
-                "Access All Years" not in logged_in_user_permissions
-                and target_announcement.year_id != logged_in_user.year_id
-            ):
-                await self.logger.log(
-                    action="Update",
-                    entity="Announcement",
-                    level="warning",
-                    code=403,
-                    message="User does not have permission to update this announcement.",
-                    details={
-                        "user_id": logged_in_user.id,
-                        "announcement_id": target_announcement.id,
-                    },
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    data=None,
-                    message="You do not have permission to update this announcement.",
-                )
-            if "Access All Years" not in logged_in_user_permissions:
-                data.year_id = logged_in_user.year_id
-            else:
-                if not data.year_id:
-                    data.year_id = target_announcement.year_id
-                year_response = await self.year_repository.find_one(
-                    Year.id == data.year_id
-                )
-                if not year_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=year_response.code,
-                        data=None,
-                        message=year_response.message,
-                    )
-                year = year_response.data
-                if not year:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Announcement",
-                        level="warning",
-                        code=404,
-                        message="Year not found for Announcement Update.",
-                        details={"year_id": data.year_id},
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message="Year not found",
-                    )
             if (
                 logged_in_user.id != target_announcement.author_id
                 and "Manage All Announcements" not in logged_in_user_permissions
@@ -930,181 +644,12 @@ class AnnouncementService(IAnnouncementService):
                     message="You do not have permission to update this announcement.",
                 )
             data.author_id = logged_in_user.id
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
-            )
-            target_announcement_subject_response = (
-                await self.subject_repository.find_one(
-                    Subject.id == target_announcement.subject_id, dynamic_includes
-                )
-            )
-            if not target_announcement_subject_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=target_announcement_subject_response.code,
-                    data=None,
-                    message=target_announcement_subject_response.message,
-                )
-            target_announcement_subject = target_announcement_subject_response.data
-            if not target_announcement_subject:
-                await self.logger.log(
-                    action="Update",
-                    entity="Announcement",
-                    level="warning",
-                    code=404,
-                    message="Subject of the target announcement not found for update.",
-                    details={"subject_id": target_announcement.subject_id},
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="Subject of the target announcement not found.",
-                )
-            target_announcement_subject_user_ids = (
-                [user.id for user in target_announcement_subject.users]
-                if target_announcement_subject.users
-                else []
-            )
-            if (
-                logged_in_user.id not in target_announcement_subject_user_ids
-                and "Access All Courses" not in logged_in_user_permissions
-            ):
-                await self.logger.log(
-                    action="Update",
-                    entity="Announcement",
-                    level="warning",
-                    code=403,
-                    message="User does not have permission to update announcement for this subject.",
-                    details={
-                        "user_id": logged_in_user.id,
-                        "target_subject_id": target_announcement.subject_id,
-                        "new_subject_id": data.subject_id,
-                    },
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    data=None,
-                    message="You do not have permission to update announcement for this subject.",
-                )
-            subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id, dynamic_includes
-            )
-            if not subject_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=subject_response.code,
-                    data=None,
-                    message=subject_response.message,
-                )
-            subject = subject_response.data
-            if not subject:
-                await self.logger.log(
-                    action="Update",
-                    entity="Announcement",
-                    level="warning",
-                    code=404,
-                    message="New subject not found for announcement update.",
-                    details={"new_subject_id": data.subject_id},
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="New subject not found.",
-                )
-            subject_user_ids = (
-                [user.id for user in subject.users] if subject.users else []
-            )
-            if (
-                logged_in_user.id not in subject_user_ids
-                and "Access All Courses" not in logged_in_user_permissions
-            ):
-                await self.logger.log(
-                    action="Update",
-                    entity="Announcement",
-                    level="warning",
-                    code=403,
-                    message="User does not have permission to update announcement for the new subject.",
-                    details={
-                        "user_id": logged_in_user.id,
-                        "new_subject_id": data.subject_id,
-                    },
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    data=None,
-                    message="You do not have permission to update announcement for the new subject.",
-                )
-            old_urls = target_announcement.urls or []
-            to_be_removed_urls = (
-                [url for url in old_urls if url not in data.urls]
-                if data.urls
-                else old_urls
-            )
-            files = []
-            for url in data.urls:
-                file_exists_response = (
-                    await self.helper_service.verify_file_exists_on_drive(url)
-                )
-                if not file_exists_response.success:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Announcement",
-                        level="warning",
-                        code=400,
-                        message="File does not exist on Google Drive for Announcement Update.",
-                        details={"url": url},
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=file_exists_response.code,
-                        data=None,
-                        message=file_exists_response.message,
-                    )
-                file_data = file_exists_response.data
-                if not file_data:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Announcement",
-                        level="error",
-                        code=500,
-                        message="Failed to fetch file data from Google Drive for Announcement Update.",
-                        details={"url": url},
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=500,
-                        data=None,
-                        message="An error occurred while updating announcement",
-                    )
-                files.append(file_data.model_dump())
-            for link_name, link_url in (data.links).items():
-                if not Validator.is_valid_external_url(link_url):
-                    await self.logger.log(
-                        action="Update",
-                        entity="Announcement",
-                        level="warning",
-                        code=400,
-                        message="Invalid URL provided for Announcement Update.",
-                        details={"link_name": link_name, "link_url": link_url},
-                        source="AnnouncementService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid URL provided",
-                    )
-            data.details = {"files_data": files} if files else {}
+            old_attachments = target_announcement.attachments or set()
+            data.details = {} if not data.details else data.details
+            urls = data.details.get("urls", [])
+            links = data.details.get("links", [])
+            data.details.pop("urls", None)
+            data.details.pop("links", None)
             target_announcement.title = data.title
             target_announcement.content = data.content
             target_announcement.date = data.date
@@ -1112,8 +657,6 @@ class AnnouncementService(IAnnouncementService):
             target_announcement.faculty_id = data.faculty_id
             target_announcement.department_id = data.department_id
             target_announcement.year_id = data.year_id
-            target_announcement.urls = data.urls
-            target_announcement.links = data.links
             target_announcement.details = data.details
             target_announcement.author_id = data.author_id
             update_response = await self.announcement_repository.update(
@@ -1142,26 +685,118 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="An error occurred while updating announcement",
                 )
-            if len(to_be_removed_urls) > 0:
-                remove_response = await self.helper_service.remove_files_from_drive(
-                    [
-                        {
-                            "user_id": updated_announcement.author_id,
-                            "file_id": self.helper_service.get_file_id_from_url(url),
-                        }
-                        for url in to_be_removed_urls
-                    ]
+            new_urls = [
+                u
+                for u in urls
+                if u not in [a.url for a in old_attachments if a.is_file]
+            ]
+            new_links = [
+                l
+                for l in links
+                if l.get("url", "")
+                not in [a.url for a in old_attachments if not a.is_file]
+            ]
+            to_be_removed_attachments = []
+            for attachment in old_attachments:
+                if attachment.is_file and attachment.url not in urls:
+                    to_be_removed_attachments.append(attachment)
+                elif not attachment.is_file and not any(
+                    link.get("url", "") == attachment.url for link in links
+                ):
+                    to_be_removed_attachments.append(attachment)
+            for attachment in to_be_removed_attachments:
+                await self.helper_service.delete_attachment(attachment=attachment)
+            for url in new_urls:
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=True,
+                    url=url,
+                    author_id=logged_in_user.id,
+                    source_name="announcement_id",
+                    source_id=updated_announcement.id,
                 )
-                if not remove_response.success:
+                if not attachment_response.success:
                     await self.logger.log(
-                        action="Update",
-                        entity="Announcement",
-                        level="warning",
-                        code=400,
-                        message="Failed to Remove Files from Drive during Announcement Update.",
-                        details={"urls": to_be_removed_urls},
+                        action="Create",
+                        entity="Attachment",
+                        level="error",
+                        code=attachment_response.code or 500,
+                        message=f"Failed to create attachment for URL {url}: {attachment_response.message}",
+                        details={"error": attachment_response.error},
                         source="AnnouncementService",
                     )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Attachment",
+                        level="error",
+                        code=500,
+                        message=f"Failed to create attachment for URL {url} without a specific error.",
+                        source="AnnouncementService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while creating attachment for announcement",
+                    )
+            for link in new_links:
+                link_name = link.get("name", link.get("title", ""))
+                link_url = link.get("url", "")
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=False,
+                    url=link_url,
+                    author_id=logged_in_user.id,
+                    source_name="announcement_id",
+                    source_id=updated_announcement.id,
+                    link_title=link_name,
+                )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Attachment",
+                        level="error",
+                        code=attachment_response.code or 500,
+                        message=f"Failed to create attachment for link {link_url}: {attachment_response.message}",
+                        details={"error": attachment_response.error},
+                        source="AnnouncementService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Attachment",
+                        level="error",
+                        code=500,
+                        message=f"Failed to create attachment for link {link_url} without a specific error.",
+                        source="AnnouncementService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while creating attachment for announcement",
+                    )
+            share_link = f"/users/announcements/{updated_announcement.id}"
+            await self.helper_service.send_notification(
+                Notification.NotificationType.ANNOUNCEMENT,
+                updated_announcement.id,
+                f"Announcement '{updated_announcement.title}' has been updated for subject {subject.name}.",
+                share_link,
+                subject_id=updated_announcement.subject_id,
+            )
             await self.logger.log(
                 action="Update",
                 entity="Announcement",
@@ -1183,7 +818,7 @@ class AnnouncementService(IAnnouncementService):
                 level="error",
                 code=500,
                 message="An error occurred while updating announcement",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(
@@ -1195,8 +830,11 @@ class AnnouncementService(IAnnouncementService):
 
     async def delete(self, data):
         try:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Announcement, ["attachments"]
+            )
             target_announcement_response = await self.announcement_repository.find_one(
-                Announcement.id == data.id
+                Announcement.id == data.id, dynamic_includes
             )
             if not target_announcement_response.success:
                 return BaseResponseDto(
@@ -1253,27 +891,39 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="An error occurred while deleting announcement",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Role, ["exact_roles"]
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                    subject_id=data.subject_id,
+                )
             )
-            logged_in_user_role_response = await self.role_repository.find_one(
-                Role.id == logged_in_user.role_id, dynamic_includes
-            )
-            if not logged_in_user_role_response.success:
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Announcement",
+                    level="warning",
+                    code=403,
+                    message=f"Failed to verify restricted access for user {logged_in_user.id}: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="AnnouncementService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=logged_in_user_role_response.code,
-                    data=None,
-                    message=logged_in_user_role_response.message,
+                    code=403,
+                    message="User does not have access to delete announcement for the specified criteria.",
                 )
-            logged_in_user_role = logged_in_user_role_response.data
-            if not logged_in_user_role:
+            logged_in_user_permissions_response = (
+                await self.helper_service.get_logged_in_user_permissions()
+            )
+            if not logged_in_user_permissions_response.success:
                 await self.logger.log(
                     action="Delete",
                     entity="Announcement",
                     level="error",
                     code=500,
-                    message="Logged-in user's role not found for Announcement Deletion.",
+                    message="Failed to retrieve logged-in user permissions for Announcement Delete.",
                     source="AnnouncementService",
                 )
                 return BaseResponseDto(
@@ -1282,9 +932,22 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="An error occurred while deleting announcement",
                 )
-            logged_in_user_permissions = [
-                perm.name for perm in logged_in_user_role.exact_roles
-            ]
+            logged_in_user_permissions = logged_in_user_permissions_response.data
+            if not logged_in_user_permissions:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Announcement",
+                    level="error",
+                    code=500,
+                    message="No logged-in user permissions found for Announcement Delete.",
+                    source="AnnouncementService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while deleting announcement",
+                )
             if (
                 logged_in_user.id != target_announcement.author_id
                 and "Manage All Announcements" not in logged_in_user_permissions
@@ -1307,131 +970,7 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="You do not have permission to delete this announcement.",
                 )
-            if (
-                "Access All Faculties" not in logged_in_user_permissions
-                and target_announcement.faculty_id != logged_in_user.faculty_id
-            ):
-                await self.logger.log(
-                    action="Delete",
-                    entity="Announcement",
-                    level="warning",
-                    code=403,
-                    message="User does not have permission to delete this announcement.",
-                    details={
-                        "user_id": logged_in_user.id,
-                        "announcement_id": target_announcement.id,
-                    },
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    data=None,
-                    message="You do not have permission to delete this announcement.",
-                )
-            if (
-                "Access All Departments" not in logged_in_user_permissions
-                and target_announcement.department_id != logged_in_user.department_id
-            ):
-                await self.logger.log(
-                    action="Delete",
-                    entity="Announcement",
-                    level="warning",
-                    code=403,
-                    message="User does not have permission to delete this announcement.",
-                    details={
-                        "user_id": logged_in_user.id,
-                        "announcement_id": target_announcement.id,
-                    },
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    data=None,
-                    message="You do not have permission to delete this announcement.",
-                )
-            if (
-                "Access All Years" not in logged_in_user_permissions
-                and target_announcement.year_id != logged_in_user.year_id
-            ):
-                await self.logger.log(
-                    action="Delete",
-                    entity="Announcement",
-                    level="warning",
-                    code=403,
-                    message="User does not have permission to delete this announcement.",
-                    details={
-                        "user_id": logged_in_user.id,
-                        "announcement_id": target_announcement.id,
-                    },
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    data=None,
-                    message="You do not have permission to delete this announcement.",
-                )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
-            )
-            target_announcement_subject_response = (
-                await self.subject_repository.find_one(
-                    Subject.id == target_announcement.subject_id, dynamic_includes
-                )
-            )
-            if not target_announcement_subject_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=target_announcement_subject_response.code,
-                    data=None,
-                    message=target_announcement_subject_response.message,
-                )
-            target_announcement_subject = target_announcement_subject_response.data
-            if not target_announcement_subject:
-                await self.logger.log(
-                    action="Delete",
-                    entity="Announcement",
-                    level="warning",
-                    code=404,
-                    message="Subject of the target announcement not found for deletion.",
-                    details={"subject_id": target_announcement.subject_id},
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="Subject of the target announcement not found.",
-                )
-            target_announcement_subject_user_ids = (
-                [user.id for user in target_announcement_subject.users]
-                if target_announcement_subject.users
-                else []
-            )
-            if (
-                logged_in_user.id not in target_announcement_subject_user_ids
-                and "Access All Courses" not in logged_in_user_permissions
-            ):
-                await self.logger.log(
-                    action="Delete",
-                    entity="Announcement",
-                    level="warning",
-                    code=403,
-                    message="User does not have permission to delete announcement for this subject.",
-                    details={
-                        "user_id": logged_in_user.id,
-                        "target_subject_id": target_announcement.subject_id,
-                    },
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=403,
-                    data=None,
-                    message="You do not have permission to delete announcement for this subject.",
-                )
+            to_be_removed_attachments = target_announcement.attachments or set()
             delete_response = await self.announcement_repository.delete(
                 target_announcement
             )
@@ -1442,6 +981,8 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message=delete_response.message,
                 )
+            for attachment in to_be_removed_attachments:
+                await self.helper_service.delete_attachment(attachment=attachment)
             await self.logger.log(
                 action="Delete",
                 entity="Announcement",
@@ -1457,13 +998,14 @@ class AnnouncementService(IAnnouncementService):
                 message="Announcement deleted successfully",
             )
         except Exception as ex:
+            print(ex)
             await self.logger.log(
                 action="Delete",
                 entity="Announcement",
                 level="error",
                 code=500,
                 message="An error occurred while deleting announcement",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="AnnouncementService",
             )
             return BaseResponseDto(

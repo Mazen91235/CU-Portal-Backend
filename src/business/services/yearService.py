@@ -76,7 +76,7 @@ class YearService(IYearService):
                 level="error",
                 code=500,
                 message="An error occurred while finding academic year",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="YearService",
             )
             return BaseResponseDto(
@@ -128,7 +128,9 @@ class YearService(IYearService):
                     data=None,
                     message=result.message,
                 )
-            return BaseResponseDto(success=True, data=result.data)
+            return BaseResponseDto(
+                success=True, data=result.data, next_page=result.next_page
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -136,7 +138,7 @@ class YearService(IYearService):
                 level="error",
                 code=500,
                 message="An error occurred while finding academic years",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="YearService",
             )
             return BaseResponseDto(
@@ -218,7 +220,7 @@ class YearService(IYearService):
                 level="error",
                 code=500,
                 message="An error occurred while creating academic year",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="YearService",
             )
             return BaseResponseDto(
@@ -241,7 +243,7 @@ class YearService(IYearService):
             year = year_response.data
             if not year:
                 await self.logger.log(
-                    action="Edit",
+                    action="Update",
                     entity="Year",
                     level="warning",
                     code=404,
@@ -269,7 +271,7 @@ class YearService(IYearService):
             existing_year = existing_response.data
             if existing_year and existing_year.id != data.id:
                 await self.logger.log(
-                    action="Edit",
+                    action="Update",
                     entity="Year",
                     level="warning",
                     code=400,
@@ -298,7 +300,7 @@ class YearService(IYearService):
             updated_year = result.data
             if not updated_year:
                 await self.logger.log(
-                    action="Edit",
+                    action="Update",
                     entity="Year",
                     level="error",
                     code=500,
@@ -314,7 +316,7 @@ class YearService(IYearService):
                 )
 
             await self.logger.log(
-                action="Edit",
+                action="Update",
                 entity="Year",
                 level="info",
                 code=200,
@@ -325,12 +327,12 @@ class YearService(IYearService):
             return BaseResponseDto(success=True, code=200, data=updated_year)
         except Exception as ex:
             await self.logger.log(
-                action="Edit",
+                action="Update",
                 entity="Year",
                 level="error",
                 code=500,
                 message="An error occurred while updating academic year",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="YearService",
             )
             return BaseResponseDto(
@@ -373,7 +375,6 @@ class YearService(IYearService):
                     data=None,
                     message="Year not found",
                 )
-
             if year.users and len(year.users) > 0:
                 await self.logger.log(
                     action="Delete",
@@ -390,7 +391,6 @@ class YearService(IYearService):
                     data=None,
                     message="Year cannot be deleted because it has users associated with it",
                 )
-
             result = await self.year_repository.delete(year)
             if not result.success:
                 return BaseResponseDto(
@@ -405,7 +405,7 @@ class YearService(IYearService):
                 level="info",
                 code=200,
                 message="Year deleted successfully",
-                details={"year_id": data.id},
+                details={},
                 source="YearService",
             )
             return BaseResponseDto(success=True, code=200, data=True)
@@ -416,7 +416,7 @@ class YearService(IYearService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting academic year",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="YearService",
             )
             return BaseResponseDto(

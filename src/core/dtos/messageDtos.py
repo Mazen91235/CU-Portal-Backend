@@ -5,8 +5,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, EmailStr, Field
 
-if TYPE_CHECKING:
-    from .baseDtos import BaseSearchDto
+from core.dtos.baseDtos import BaseSearchDto
 
 
 class MessageCreateDto(BaseModel):
@@ -23,16 +22,16 @@ class MessageCreateDto(BaseModel):
 
 
 class MessageResponseDto(BaseModel):
-    id: int | None = Field(None, description="ID of the message")
-    name: str = Field(..., description="Sender name")
-    email: EmailStr = Field(..., description="Sender email address")
-    phone: str = Field(..., description="Sender phone number")
-    content: str = Field(..., description="Message content")
+    id: int | None = Field(default=None, description="ID of the message")
+    name: str | None = Field(default=None, description="Sender name")
+    email: EmailStr | None = Field(default=None, description="Sender email address")
+    phone: str | None = Field(default=None, description="Sender phone number")
+    content: str | None = Field(default=None, description="Message content")
     created_at: datetime | None = Field(
-        None, description="Creation Date of the message"
+        default=None, description="Creation Date of the message"
     )
     updated_at: datetime | None = Field(
-        None, description="Last Update Date of the message"
+        default=None, description="Last Update Date of the message"
     )
 
     # Pydantic Configuration
@@ -41,7 +40,7 @@ class MessageResponseDto(BaseModel):
     }
 
 
-class MessageSearchDto(BaseSearchDto, BaseModel):
+class MessageSearchDto(BaseSearchDto):
     id: int | None = Field(default=None, description="ID of the message to filter by")
     created_at_from: datetime | None = Field(
         default=None, description="Creation Date from sender to filter by"

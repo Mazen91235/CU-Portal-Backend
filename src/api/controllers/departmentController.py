@@ -1,3 +1,4 @@
+from typing import cast
 from core.iControllers.iDepartmentController import IDepartmentController
 from core.iServices.iDepartmentService import IDepartmentService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -8,11 +9,9 @@ from core.dtos.departmentDtos import (
     DepartmentSearchDto,
     DepartmentResponseDto,
 )
-from core.models.queryModel import QueryModel
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
-from core.utils.parser import Parser
 
 
 class DepartmentController(IDepartmentController):
@@ -20,17 +19,10 @@ class DepartmentController(IDepartmentController):
         self.department_service = department_service
         self.logger = logger
 
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         try:
-            department_id = request.path_params.get("department_id")
-            if not department_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Department ID is required",
-                )
             entity_search_dto = Generator[DepartmentSearchDto].generate(
-                DepartmentSearchDto, {"id": int(department_id)}
+                DepartmentSearchDto, {"id": id}
             )
             response = await self.department_service.find_one(
                 entity_search_dto,
@@ -73,7 +65,7 @@ class DepartmentController(IDepartmentController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="DepartmentController",
             )
             return ResponseHandler.generate_response(
@@ -82,12 +74,8 @@ class DepartmentController(IDepartmentController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def find(self, request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[DepartmentSearchDto],
-            )
             entity_search_dto = Generator[DepartmentSearchDto].generate_from_query(
                 DepartmentSearchDto, query
             )
@@ -122,28 +110,14 @@ class DepartmentController(IDepartmentController):
                 )
 
             departments = response.data
-            if not departments:
-                await self.logger.log(
-                    action="Find",
-                    entity="Department",
-                    level="info",
-                    code=404,
-                    message="Departments not found",
-                    source="DepartmentController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Departments not found",
-                )
-
             departments_mapped = Mapper[Department, DepartmentResponseDto].map_list(
-                departments, DepartmentResponseDto, True
+                departments or [], DepartmentResponseDto, True
             )
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 data=departments_mapped,
+                next_page=response.next_page,
             )
         except Exception as e:
             await self.logger.log(
@@ -152,7 +126,7 @@ class DepartmentController(IDepartmentController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="DepartmentController",
             )
             return ResponseHandler.generate_response(
@@ -161,11 +135,9 @@ class DepartmentController(IDepartmentController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def create(self, request):
+    async def create(self, request, data):
         try:
             await self.department_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[DepartmentCreateDto].generate(DepartmentCreateDto, payload)
             department = Mapper[DepartmentCreateDto, Department].map(data, Department)
             response = await self.department_service.create(department)
             if not response.success:
@@ -192,7 +164,7 @@ class DepartmentController(IDepartmentController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="DepartmentController",
             )
             return ResponseHandler.generate_response(
@@ -201,21 +173,14 @@ class DepartmentController(IDepartmentController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update(self, request):
+    async def update(self, request, id, data):
         try:
             await self.department_service.begin_transaction()
-            department_id = request.path_params.get("department_id")
-            if not department_id:
-                await self.department_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Department ID is required",
-                )
-            payload = await request.json()
-            payload["id"] = int(department_id)
-            data = Generator[DepartmentUpdateDto].generate(DepartmentUpdateDto, payload)
-            department = Mapper[DepartmentUpdateDto, Department].map(data, Department)
+            department = cast(
+                Department,
+                Mapper[DepartmentUpdateDto, Department].map(data, Department),
+            )
+            department.id = id
             response = await self.department_service.update(department)
             if not response.success:
                 await self.department_service.rollback_transaction()
@@ -241,7 +206,7 @@ class DepartmentController(IDepartmentController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="DepartmentController",
             )
             return ResponseHandler.generate_response(
@@ -250,20 +215,10 @@ class DepartmentController(IDepartmentController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def delete(self, request):
+    async def delete(self, request, id):
         try:
             await self.department_service.begin_transaction()
-            department_id = request.path_params.get("department_id")
-            if not department_id:
-                await self.department_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Department ID is required",
-                )
-            department = Generator[Department].generate(
-                Department, {"id": int(department_id)}
-            )
+            department = Generator[Department].generate(Department, {"id": id})
             response = await self.department_service.delete(department)
             if not response.success:
                 await self.department_service.rollback_transaction()
@@ -286,7 +241,7 @@ class DepartmentController(IDepartmentController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="DepartmentController",
             )
             return ResponseHandler.generate_response(

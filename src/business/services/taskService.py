@@ -1,23 +1,14 @@
-import os
-import math
-from datetime import datetime
-from typing import cast
-from fastapi import Request
+from sqlalchemy import and_
 from core.iServices.iTaskService import ITaskService
-from core.iServices.bases.iQueryableService import IQueryableService
-from core.iServices.bases.iUpdatableService import IUpdatableService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
-
 from core.entities.task import Task
-from core.entities.user import User
 from core.entities.subject import Subject
-from core.entities.role import Role
+from core.entities.notification import Notification
 from core.dtos.baseDtos import BaseResponseDto
-from core.utils.timezoneHandler import TimezoneHandler
 from core.utils.validator import Validator
-from core.utils.mapper import Mapper
+from core.utils.timezoneHandler import TimezoneHandler
 
 
 class TaskService(ITaskService):
@@ -27,18 +18,14 @@ class TaskService(ITaskService):
         subject_repository: IBaseRepository[Subject],
         logger: IBaseLogger,
         helper_service: IHelperService,
-        role_repository: IBaseRepository[Role],
-        notification_service=None, 
     ):
         self.task_repository = task_repository
         self.subject_repository = subject_repository
         self.logger = logger
         self.helper_service = helper_service
-        self.role_repository = role_repository
-        self.notification_service = notification_service 
 
     # Transaction Functions
-    
+
     async def begin_transaction(self):
         await self.task_repository.begin_transaction()
 
@@ -64,6 +51,11 @@ class TaskService(ITaskService):
             predicate = self.helper_service.generate_dynamic_predicate(
                 Task, data, ["name"], is_and, starts_with, is_exact
             )
+            predicate = (
+                and_(predicate, Task.task_type == "task")
+                if predicate is not None
+                else Task.task_type == "task"
+            )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Task, includes
             )
@@ -73,7 +65,6 @@ class TaskService(ITaskService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Task", order_by
             )
-
             result = await self.task_repository.find_one(
                 predicate,
                 dynamic_includes,
@@ -84,34 +75,12 @@ class TaskService(ITaskService):
 
             if not result.success:
                 return BaseResponseDto(
-                    success=False,
-                    code=result.code,
-                    data=None,
-                    message=result.message
+                    success=False, code=result.code, data=None, message=result.message
                 )
-            
+
             task = result.data
 
-            if task:
-                current_user = await self.helper_service.get_logged_in_user()
-                permissions = await self.role_repository.get_user_permissions(current_user.role_id)
-                
-                if "View Tasks" not in permissions:
-                    if (task.faculty_id != current_user.faculty_id or 
-                        task.department_id != current_user.department_id or 
-                        task.year_id != current_user.year_id):
-                        return BaseResponseDto(
-                            success=False, 
-                            code=403, 
-                            data=None,
-                            message="You are not authorized to view this task"
-                        )
-
-            return BaseResponseDto(
-                success=True,
-                code=200,
-                data=result.data
-            )
+            return BaseResponseDto(success=True, code=200, data=task)
 
         except Exception as ex:
             await self.logger.log(
@@ -120,7 +89,7 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="Error finding task",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(
@@ -129,7 +98,6 @@ class TaskService(ITaskService):
                 data=None,
                 message="An error occurred while finding the task",
             )
-
 
     async def find(
         self,
@@ -145,20 +113,23 @@ class TaskService(ITaskService):
         limit=50,
     ):
         try:
-            current_user = await self.helper_service.get_logged_in_user()
-            permissions = await self.role_repository.get_user_permissions(current_user.role_id)
-            
-            if current_user and "View Tasks" not in permissions:
-                data.faculty_id = current_user.faculty_id
-                data.department_id = current_user.department_id
-                data.year_id = current_user.year_id
             predicate = self.helper_service.generate_dynamic_predicate(
                 Task, data, ["name"], is_and, starts_with, is_exact
             )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(Task, includes)
-            dynamic_selects = self.helper_service.generate_dynamic_selects("Task", selects)
-            dynamic_order_by = self.helper_service.generate_dynamic_order_by("Task", order_by)
-
+            predicate = (
+                and_(predicate, Task.task_type == "task")
+                if predicate is not None
+                else Task.task_type == "task"
+            )
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Task, includes
+            )
+            dynamic_selects = self.helper_service.generate_dynamic_selects(
+                "Task", selects
+            )
+            dynamic_order_by = self.helper_service.generate_dynamic_order_by(
+                "Task", order_by
+            )
             result = await self.task_repository.find(
                 predicate,
                 dynamic_includes,
@@ -171,14 +142,12 @@ class TaskService(ITaskService):
 
             if not result.success:
                 return BaseResponseDto(
-                    success=False,
-                    code=result.code,
-                    data=None,
-                    message=result.message
+                    success=False, code=result.code, data=None, message=result.message
+                )
+            tasks = result.data
+            return BaseResponseDto(
+                success=True, code=200, data=tasks, next_page=result.next_page
             )
-
-            return BaseResponseDto(success=True, code=200, data=result.data)
-
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -186,47 +155,52 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="An error occurred while finding tasks",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(
                 success=False,
                 code=500,
                 data=None,
-                message="An error occurred while finding tasks"
+                message="An error occurred while finding tasks",
             )
 
-   
     async def create(self, data):
-        urls_to_cleanup = []
-        
         try:
-            files = []
-            urls = data.urls or []
-            api_key = os.environ.get("GOOGLE_TOKEN_API_KEY")
-
-            for url in urls:
-                drive_id = self.helper_service.get_drive_id(url)
-                file_response = await self.helper_service.fetch_public_drive(
-                    drive_id,
-                    api_key,
+            existing_task_response = await self.task_repository.find_one(
+                and_(
+                    Task.name == data.name,
+                    Task.task_type == "task",
+                    Task.subject_id == data.subject_id,
                 )
-                
-                if not file_response.success or not file_response.data:
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message="Invalid File provided",
-                    )
-                
-                files.append(file_response.data)
-                urls_to_cleanup.append(url)
-
-            subject_response = await self.subject_repository.find_one(
-                predicate=(Subject.id == data.subject_id)
             )
-            
+            if not existing_task_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_task_response.code,
+                    data=None,
+                    message=existing_task_response.message,
+                )
+            existing_task = existing_task_response.data
+            if existing_task:
+                await self.logger.log(
+                    action="Create",
+                    entity="Task",
+                    level="warning",
+                    code=400,
+                    message="Task with the same name already exists for this subject.",
+                    details={"name": data.name, "subject_id": data.subject_id},
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Task with the same name already exists for this subject.",
+                )
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == data.subject_id
+            )
             if not subject_response.success:
                 return BaseResponseDto(
                     success=False,
@@ -234,38 +208,47 @@ class TaskService(ITaskService):
                     data=None,
                     message=subject_response.message,
                 )
-
-            if not data.details:
-                data.details = {}
-            data.details["files_data"] = files if files else []
-            
-            if data.links:
-                data.links = [{"url": link} for link in data.links]
-            
-            create_res = await self.task_repository.create(data)
-            
-            if not create_res.success:
-                for url in urls_to_cleanup:
-                    try:
-                        await self.helper_service.remove_file_from_drive(url)
-                    except Exception:
-                        pass
+            subject = subject_response.data
+            if not subject:
+                await self.logger.log(
+                    action="Create",
+                    entity="Task",
+                    level="warning",
+                    code=404,
+                    message="Subject not found for Task Creation.",
+                    details={"subject_id": data.subject_id},
+                    source="TaskService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=create_res.code,
+                    code=404,
                     data=None,
-                    message=create_res.message,
+                    message="Subject not found",
                 )
-            
-            created_task = create_res.data
-            
-            if not created_task:
+            if data.url and not Validator.is_valid_external_url(data.url):
+                await self.logger.log(
+                    action="Create",
+                    entity="Task",
+                    level="warning",
+                    code=400,
+                    message="Invalid Submission URL provided for Task Creation.",
+                    details={"url": data.url},
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"Invalid Submission URL provided: {data.url}",
+                )
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
                 await self.logger.log(
                     action="Create",
                     entity="Task",
                     level="error",
                     code=500,
-                    message="Failed to create task without a specific error",
+                    message="Failed to retrieve logged-in user for Task Creation.",
                     source="TaskService",
                 )
                 return BaseResponseDto(
@@ -274,7 +257,175 @@ class TaskService(ITaskService):
                     data=None,
                     message="An error occurred while creating task",
                 )
-
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="Create",
+                    entity="Task",
+                    level="error",
+                    code=500,
+                    message="No logged-in user found for Task Creation.",
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while creating task",
+                )
+            data.author_id = logged_in_user.id
+            data.due_date = (
+                TimezoneHandler.to_date(data.deadline) if data.deadline else None
+            )
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                    subject_id=data.subject_id,
+                )
+            )
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Create",
+                    entity="Task",
+                    level="warning",
+                    code=403,
+                    message=f"Failed to verify restricted access for user {logged_in_user.id}: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="User does not have access to create task for the specified criteria.",
+                )
+            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
+            data.department_id = data.department_id or logged_in_user.department_id
+            data.year_id = data.year_id or logged_in_user.year_id
+            data.details = {} if not data.details else data.details
+            urls = data.details.get("urls", [])
+            links = data.details.get("links", [])
+            data.details.pop("urls", None)
+            data.details.pop("links", None)
+            data.task_type = "task"
+            create_task_response = await self.task_repository.create(data)
+            if not create_task_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_task_response.code,
+                    data=None,
+                    message=create_task_response.message,
+                )
+            created_task = create_task_response.data
+            if not created_task:
+                await self.logger.log(
+                    action="Create",
+                    entity="Task",
+                    level="error",
+                    code=500,
+                    message="Failed to create task without a specific error.",
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while creating task",
+                )
+            for url in urls:
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=True,
+                    url=url,
+                    author_id=logged_in_user.id,
+                    source_name="task_id",
+                    source_id=created_task.id,
+                )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Task",
+                        level="warning",
+                        code=attachment_response.code or 500,
+                        message="Failed to create attachment for task.",
+                        details={"url": url},
+                        source="TaskService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code or 500,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Task",
+                        level="error",
+                        code=500,
+                        message="Failed to create attachment for task without a specific error.",
+                        details={"url": url},
+                        source="TaskService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while creating task",
+                    )
+            for link in links:
+                link_name = link.get("name", link.get("title", ""))
+                link_url = link.get("url", "")
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=False,
+                    url=link_url,
+                    author_id=logged_in_user.id,
+                    source_name="task_id",
+                    source_id=created_task.id,
+                    link_title=link_name,
+                )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Task",
+                        level="warning",
+                        code=attachment_response.code or 500,
+                        message="Failed to create attachment for task.",
+                        details={"url": link_url},
+                        source="TaskService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code or 500,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Task",
+                        level="error",
+                        code=500,
+                        message="Failed to create attachment for task without a specific error.",
+                        details={"url": link_url},
+                        source="TaskService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while creating task",
+                    )
+            share_link = f"/users/tasks/{created_task.id}"
+            await self.helper_service.send_notification(
+                Notification.NotificationType.TASK,
+                created_task.id,
+                f"New task '{created_task.name}' has been created for subject {subject.name}.",
+                share_link,
+                subject_id=created_task.subject_id,
+            )
             await self.logger.log(
                 action="Create",
                 entity="Task",
@@ -283,28 +434,20 @@ class TaskService(ITaskService):
                 message="Task created successfully",
                 source="TaskService",
             )
-            
             return BaseResponseDto(
                 success=True,
                 code=201,
                 data=created_task,
+                message="Task created successfully",
             )
-
         except Exception as ex:
-            if urls_to_cleanup:
-                for url in urls_to_cleanup:
-                    try:
-                        await self.helper_service.remove_file_from_drive(url)
-                    except Exception:
-                        pass
-                    
             await self.logger.log(
                 action="Create",
                 entity="Task",
                 level="error",
                 code=500,
                 message="An error occurred while creating task",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(
@@ -313,31 +456,30 @@ class TaskService(ITaskService):
                 data=None,
                 message="An error occurred while creating task",
             )
+
     async def update(self, data):
-        new_urls_to_cleanup = []
-        old_urls_to_remove = []
-        
         try:
-            target_res = await self.task_repository.find_one(
-                Task.id == data.id
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Task, ["attachments"]
             )
-            
-            if not target_res.success:
+            target_task_response = await self.task_repository.find_one(
+                and_(Task.id == data.id, Task.task_type == "task"), dynamic_includes
+            )
+            if not target_task_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=target_res.code,
+                    code=target_task_response.code,
                     data=None,
-                    message=target_res.message,
+                    message=target_task_response.message,
                 )
-            
-            target_task = target_res.data
+            target_task = target_task_response.data
             if not target_task:
                 await self.logger.log(
                     action="Update",
                     entity="Task",
                     level="info",
                     code=404,
-                    message="Task not found",
+                    message="Task not found for update",
                     source="TaskService",
                 )
                 return BaseResponseDto(
@@ -346,92 +488,72 @@ class TaskService(ITaskService):
                     data=None,
                     message="Task not found",
                 )
-
-            if data.subject_id is not None:
-                subject_response = await self.subject_repository.find_one(
-                    Subject.id == data.subject_id
+            existing_task_response = await self.task_repository.find_one(
+                and_(
+                    Task.name == data.name,
+                    Task.task_type == "task",
+                    Task.subject_id == data.subject_id,
                 )
-                if not subject_response.success or not subject_response.data:
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message="Subject not found",
-                    )
-                target_task.subject_id = subject_response.data.id
-
-            task_details = target_task.details or {}
-            
-            if data.urls is not None:
-                urls = data.urls
-                files = []
-                api_key = os.environ.get("GOOGLE_TOKEN_API_KEY")
-                existing_urls = target_task.urls or []
-                
-                old_urls_to_remove = [u for u in existing_urls if u not in urls]
-
-                for url in urls:
-                    drive_id = self.helper_service.get_drive_id(url)
-                    file_response = await self.helper_service.fetch_public_drive(
-                        drive_id, 
-                        api_key,
-                    )
-                    
-                    if not file_response.success or not file_response.data:
-                        return BaseResponseDto(
-                            success=False,
-                            code=400,
-                            data=None,
-                            message="Invalid File provided from Drive",
-                        )
-                    
-                    files.append(file_response.data.get("data"))
-                    
-                    if url not in existing_urls:
-                        new_urls_to_cleanup.append(url)
-                
-                target_task.urls = urls
-                task_details["files_data"] = files
-
-            if data.links is not None:
-                target_task.links = [link.model_dump() for link in data.links]
-            if data.name is not None: 
-                target_task.name = data.name
-            if data.deadline is not None: 
-                target_task.deadline = data.deadline
-            if data.due_date is not None: 
-                target_task.due_date = data.due_date
-            if data.url is not None: 
-                target_task.url = data.url
-            if data.details is not None and data.details.description is not None:
-                task_details["description"] = data.details.description
-
-            target_task.details = task_details
-
-            update_res = await self.task_repository.update(target_task)
-            
-            if not update_res.success:
-                for url in new_urls_to_cleanup:
-                    try:
-                        await self.helper_service.remove_file_from_drive(url)
-                    except Exception:
-                        pass
+            )
+            if not existing_task_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=update_res.code,
+                    code=existing_task_response.code,
                     data=None,
-                    message=update_res.message,
+                    message=existing_task_response.message,
                 )
-
-            updated_task = update_res.data
-            
-            if not updated_task:
+            existing_task = existing_task_response.data
+            if existing_task and existing_task.id != data.id:
+                await self.logger.log(
+                    action="Update",
+                    entity="Task",
+                    level="warning",
+                    code=400,
+                    message="Another task with the same name already exists for this subject.",
+                    details={"name": data.name, "subject_id": data.subject_id},
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Another task with the same name already exists for this subject.",
+                )
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == data.subject_id, dynamic_includes
+            )
+            if not subject_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=subject_response.code,
+                    data=None,
+                    message=subject_response.message,
+                )
+            subject = subject_response.data
+            if not subject:
+                await self.logger.log(
+                    action="Update",
+                    entity="Task",
+                    level="warning",
+                    code=404,
+                    message="Subject not found for Task Update.",
+                    details={"subject_id": data.subject_id},
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Subject not found",
+                )
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
                 await self.logger.log(
                     action="Update",
                     entity="Task",
                     level="error",
                     code=500,
-                    message="Failed to update task without a specific error",
+                    message="Failed to retrieve logged-in user for Task Update.",
                     source="TaskService",
                 )
                 return BaseResponseDto(
@@ -440,21 +562,278 @@ class TaskService(ITaskService):
                     data=None,
                     message="An error occurred while updating task",
                 )
-            
-            for old_url in old_urls_to_remove:
-                try:
-                    await self.helper_service.remove_file_from_drive(old_url)
-                except Exception as e:
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="Update",
+                    entity="Task",
+                    level="error",
+                    code=500,
+                    message="No logged-in user found for Task Update.",
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while updating task",
+                )
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                    subject_id=data.subject_id,
+                )
+            )
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Task",
+                    level="warning",
+                    code=403,
+                    message=f"Failed to verify restricted access for user {logged_in_user.id}: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="User does not have access to update task for the specified criteria.",
+                )
+            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
+            data.department_id = data.department_id or logged_in_user.department_id
+            data.year_id = data.year_id or logged_in_user.year_id
+            logged_in_user_permissions_response = (
+                await self.helper_service.get_logged_in_user_permissions()
+            )
+            if not logged_in_user_permissions_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Task",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve logged-in user permissions for Task Update.",
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while updating task",
+                )
+            logged_in_user_permissions = logged_in_user_permissions_response.data
+            if not logged_in_user_permissions:
+                await self.logger.log(
+                    action="Update",
+                    entity="Task",
+                    level="error",
+                    code=500,
+                    message="No logged-in user permissions found for Task Update.",
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while updating task",
+                )
+            if (
+                logged_in_user.id != target_task.author_id
+                and "Manage All Tasks" not in logged_in_user_permissions
+            ):
+                await self.logger.log(
+                    action="Update",
+                    entity="Task",
+                    level="warning",
+                    code=403,
+                    message="User does not have permission to update this task.",
+                    details={
+                        "user_id": logged_in_user.id,
+                        "task_id": target_task.id,
+                    },
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message="You do not have permission to update this task.",
+                )
+            data.author_id = logged_in_user.id
+            data.due_date = (
+                TimezoneHandler.to_date(data.deadline) if data.deadline else None
+            )
+            old_attachments = target_task.attachments or set()
+            if data.url and not Validator.is_valid_external_url(data.url):
+                await self.logger.log(
+                    action="Update",
+                    entity="Task",
+                    level="warning",
+                    code=400,
+                    message="Invalid Submission URL provided for Task Update.",
+                    details={"url": data.url},
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Invalid Submission URL provided",
+                )
+            data.details = {} if not data.details else data.details
+            urls = data.details.get("urls", [])
+            links = data.details.get("links", [])
+            data.details.pop("urls", None)
+            data.details.pop("links", None)
+            target_task.name = data.name
+            target_task.deadline = data.deadline
+            target_task.due_date = data.due_date
+            target_task.subject_id = data.subject_id
+            target_task.faculty_id = data.faculty_id
+            target_task.department_id = data.department_id
+            target_task.year_id = data.year_id
+            target_task.url = data.url
+            target_task.details = data.details
+            target_task.author_id = data.author_id
+            update_response = await self.task_repository.update(target_task)
+            if not update_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_response.code,
+                    data=None,
+                    message=update_response.message,
+                )
+            updated_task = update_response.data
+            if not updated_task:
+                await self.logger.log(
+                    action="Update",
+                    entity="Task",
+                    level="error",
+                    code=500,
+                    message="Failed to update task without a specific error.",
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while updating task",
+                )
+            new_urls = [
+                u
+                for u in urls
+                if u not in [a.url for a in old_attachments if a.is_file]
+            ]
+            new_links = [
+                l
+                for l in links
+                if l.get("url", "")
+                not in [a.url for a in old_attachments if not a.is_file]
+            ]
+            to_be_removed_attachments = []
+            for attachment in old_attachments:
+                if attachment.is_file and attachment.url not in urls:
+                    to_be_removed_attachments.append(attachment)
+                elif not attachment.is_file and not any(
+                    link.get("url", "") == attachment.url for link in links
+                ):
+                    to_be_removed_attachments.append(attachment)
+            for attachment in to_be_removed_attachments:
+                await self.helper_service.delete_attachment(attachment=attachment)
+            for url in new_urls:
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=True,
+                    url=url,
+                    author_id=logged_in_user.id,
+                    source_name="task_id",
+                    source_id=updated_task.id,
+                )
+                if not attachment_response.success:
                     await self.logger.log(
                         action="Update",
                         entity="Task",
                         level="warning",
-                        code=500,
-                        message="Task updated successfully but failed to remove old file from Drive",
-                        details={"url": old_url, "error": str(e)},
+                        code=attachment_response.code or 500,
+                        message="Failed to create attachment for task.",
+                        details={"url": url},
                         source="TaskService",
                     )
-
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Task",
+                        level="error",
+                        code=500,
+                        message="Failed to create attachment for task without a specific error.",
+                        details={"url": url},
+                        source="TaskService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while updating task",
+                    )
+            for link in new_links:
+                link_name = link.get("name", link.get("title", ""))
+                link_url = link.get("url", "")
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=False,
+                    url=link_url,
+                    author_id=logged_in_user.id,
+                    source_name="task_id",
+                    source_id=updated_task.id,
+                    link_title=link_name,
+                )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Task",
+                        level="warning",
+                        code=attachment_response.code or 500,
+                        message="Failed to create attachment for task.",
+                        details={"url": link_url},
+                        source="TaskService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code or 500,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Task",
+                        level="error",
+                        code=500,
+                        message="Failed to create attachment for task without a specific error.",
+                        details={"url": link_url},
+                        source="TaskService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while updating task",
+                    )
+            share_link = f"/users/tasks/{updated_task.id}"
+            await self.helper_service.send_notification(
+                Notification.NotificationType.TASK,
+                updated_task.id,
+                f"Task '{updated_task.name}' has been updated for subject {subject.name}.",
+                share_link,
+                subject_id=updated_task.subject_id,
+            )
             await self.logger.log(
                 action="Update",
                 entity="Task",
@@ -463,28 +842,20 @@ class TaskService(ITaskService):
                 message="Task updated successfully",
                 source="TaskService",
             )
-            
             return BaseResponseDto(
                 success=True,
                 code=200,
                 data=updated_task,
+                message="Task updated successfully",
             )
-
         except Exception as ex:
-            if new_urls_to_cleanup:
-                for url in new_urls_to_cleanup:
-                    try:
-                        await self.helper_service.remove_file_from_drive(url)
-                    except Exception:
-                        pass
-                    
             await self.logger.log(
                 action="Update",
                 entity="Task",
                 level="error",
                 code=500,
                 message="An error occurred while updating task",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(
@@ -493,28 +864,30 @@ class TaskService(ITaskService):
                 data=None,
                 message="An error occurred while updating task",
             )
+
     async def delete(self, data):
         try:
-            result = await self.task_repository.find_one(
-                predicate=(Task.id == data.id)
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Task, ["attachments"]
             )
-            
-            if not result.success:
+            target_task_response = await self.task_repository.find_one(
+                and_(Task.id == data.id, Task.task_type == "task"), dynamic_includes
+            )
+            if not target_task_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=result.code,
+                    code=target_task_response.code,
                     data=None,
-                    message=result.message,
+                    message=target_task_response.message,
                 )
-            
-            task = result.data
-            if not task:
+            target_task = target_task_response.data
+            if not target_task:
                 await self.logger.log(
                     action="Delete",
                     entity="Task",
-                    level="info",
+                    level="warning",
                     code=404,
-                    message="Task not found",
+                    message="Task not found for deletion",
                     source="TaskService",
                 )
                 return BaseResponseDto(
@@ -523,32 +896,128 @@ class TaskService(ITaskService):
                     data=None,
                     message="Task not found",
                 )
-
-            delete_res = await self.task_repository.delete(task)
-            
-            if not delete_res.success:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Task",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve logged-in user for Task Deletion.",
+                    source="TaskService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=delete_res.code,
+                    code=500,
                     data=None,
-                    message=delete_res.message,
+                    message="An error occurred while deleting task",
                 )
-
-            urls = task.urls or []
-            for url in urls:
-                try:
-                    await self.helper_service.remove_file_from_drive(url)
-                except Exception as e:
-                    await self.logger.log(
-                        action="Delete", 
-                        entity="Task", 
-                        level="error", 
-                        code=500,
-                        message="Task deleted from DB, but failed to remove file from Drive", 
-                        details={"url": url, "error": str(e)}, 
-                        source="TaskService",
-                    )
-
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Task",
+                    level="error",
+                    code=500,
+                    message="No logged-in user found for Task Deletion.",
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while deleting task",
+                )
+            verify_restricted_access_response = (
+                await self.helper_service.verify_restricted_access(
+                    faculty_id=data.faculty_id,
+                    department_id=data.department_id,
+                    year_id=data.year_id,
+                    subject_id=data.subject_id,
+                )
+            )
+            if not verify_restricted_access_response.success:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Task",
+                    level="warning",
+                    code=403,
+                    message=f"Failed to verify restricted access for user {logged_in_user.id}: {verify_restricted_access_response.message}",
+                    details={"error": verify_restricted_access_response.error},
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    message="User does not have access to delete task for the specified criteria.",
+                )
+            logged_in_user_permissions_response = (
+                await self.helper_service.get_logged_in_user_permissions()
+            )
+            if not logged_in_user_permissions_response.success:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Task",
+                    level="error",
+                    code=500,
+                    message="Failed to retrieve logged-in user permissions for Task Delete.",
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while deleting task",
+                )
+            logged_in_user_permissions = logged_in_user_permissions_response.data
+            if not logged_in_user_permissions:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Task",
+                    level="error",
+                    code=500,
+                    message="No logged-in user permissions found for Task Delete.",
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while deleting task",
+                )
+            if (
+                logged_in_user.id != target_task.author_id
+                and "Manage All Tasks" not in logged_in_user_permissions
+            ):
+                await self.logger.log(
+                    action="Delete",
+                    entity="Task",
+                    level="warning",
+                    code=403,
+                    message="User does not have permission to delete this task.",
+                    details={
+                        "user_id": logged_in_user.id,
+                        "task_id": target_task.id,
+                    },
+                    source="TaskService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message="You do not have permission to delete this task.",
+                )
+            to_be_removed_attachments = target_task.attachments or set()
+            delete_response = await self.task_repository.delete(target_task)
+            if not delete_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=delete_response.code,
+                    data=None,
+                    message=delete_response.message,
+                )
+            for attachment in to_be_removed_attachments:
+                await self.helper_service.delete_attachment(attachment=attachment)
             await self.logger.log(
                 action="Delete",
                 entity="Task",
@@ -560,9 +1029,9 @@ class TaskService(ITaskService):
             return BaseResponseDto(
                 success=True,
                 code=200,
-                data=True
+                data=None,
+                message="Task deleted successfully",
             )
-
         except Exception as ex:
             await self.logger.log(
                 action="Delete",
@@ -570,7 +1039,7 @@ class TaskService(ITaskService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting task",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="TaskService",
             )
             return BaseResponseDto(

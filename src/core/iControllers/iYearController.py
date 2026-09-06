@@ -1,8 +1,6 @@
-from abc import abstractmethod
-from fastapi import Request, Response
-
 from core.iControllers.bases.iCrudController import ICrudController
+from core.dtos.yearDtos import YearCreateDto, YearUpdateDto, YearSearchDto
 
 
-class IYearController(ICrudController):
+class IYearController(ICrudController[YearCreateDto, YearUpdateDto, YearSearchDto]):
     pass

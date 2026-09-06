@@ -1,8 +1,10 @@
+import json
 from datetime import datetime
-from typing import Type, List
+from typing import Type
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 from sqlalchemy import text, desc, func, inspect
+from sqlalchemy.orm import load_only
 from business.contextVars.sessionContext import session_context
 from core.iRepositories.iBaseRepository import IBaseRepository, T
 from core.dtos.baseDtos import BaseResponseDto
@@ -10,11 +12,11 @@ from core.utils.entitiesHandler import EntitiesHandler
 from core.utils.timezoneHandler import TimezoneHandler
 
 
-class BaseRepository(IBaseRepository[T]):
+class BaseRepository(IBaseRepository):
     def __init__(
         self,
         session: AsyncSession | None,
-        model: Type[T],
+        model: Type,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
     ):
         self._session = session
@@ -58,6 +60,10 @@ class BaseRepository(IBaseRepository[T]):
         if len(safe_message) > max_message_len:
             safe_message = safe_message[: max_message_len - 3] + "..."
 
+        formatted_details = (
+            json.dumps(details, default=str) if details is not None else None
+        )
+
         query = f"INSERT INTO {EntitiesHandler.TABLES.get('Log')} (action, entity, level, response_code, message, details, source, route, ip, user_id, created_at, updated_at) VALUES (:action, :entity, :level, :response_code, :message, :details, :source, :route, :ip, :user_id, :created_at, :updated_at)"
         params = {
             "action": action,
@@ -65,7 +71,7 @@ class BaseRepository(IBaseRepository[T]):
             "level": level,
             "response_code": code,
             "message": safe_message,
-            "details": details,
+            "details": formatted_details,
             "source": source,
             "route": route,
             "ip": ip,
@@ -82,9 +88,11 @@ class BaseRepository(IBaseRepository[T]):
         selects=None,
         order_by=None,
         descending=False,
+        session=None,
     ):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             query = select(self._model)
 
             # Handling Predicates
@@ -98,7 +106,7 @@ class BaseRepository(IBaseRepository[T]):
 
             # Handling Projections (Selects)
             if selects and len(selects) > 0:
-                query = query.with_only_columns(*selects)
+                query = query.options(load_only(*selects))
 
             # Ordering
             if order_by:
@@ -111,7 +119,7 @@ class BaseRepository(IBaseRepository[T]):
             result = await session.execute(query)
             entity = result.scalars().first()
 
-            return BaseResponseDto[T](
+            return BaseResponseDto(
                 success=True,
                 data=entity,
                 message="Found Successfully",
@@ -123,15 +131,15 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while searching for {self._model.__name__}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[T](
+            return BaseResponseDto(
                 success=False,
                 data=None,
                 message="An error occurred while searching for the entity",
                 code=500,
-                error=str(ex),
+                error=repr(ex),
             )
 
     async def find(
@@ -143,9 +151,11 @@ class BaseRepository(IBaseRepository[T]):
         descending=False,
         page=1,
         limit=50,
+        session=None,
     ):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             query = select(self._model)
 
             # Handling Predicates
@@ -159,7 +169,7 @@ class BaseRepository(IBaseRepository[T]):
 
             # Handling Projections (Selects)
             if selects and len(selects) > 0:
-                query = query.with_only_columns(*selects)
+                query = query.options(load_only(*selects))
 
             # Ordering
             if order_by:
@@ -170,16 +180,17 @@ class BaseRepository(IBaseRepository[T]):
                         query = query.order_by(ob)
 
             # Pagination
-            query = query.offset((page - 1) * limit).limit(limit)
+            query = query.offset((page - 1) * limit).limit(limit + 1)
 
             result = await session.execute(query)
             entities = result.scalars().all()
 
-            return BaseResponseDto[List[T]](
+            return BaseResponseDto(
                 success=True,
-                data=list(entities),
+                data=list(entities[:-1]) if len(entities) > limit else list(entities),
                 message="Found Successfully",
                 code=200,
+                next_page=len(entities) > limit,
             )
         except Exception as ex:
             await self._log_error(
@@ -187,16 +198,21 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while searching for {self._model.__name__}s",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[List[T]](
-                success=False, data=[], message="Search Failed", code=500, error=str(ex)
+            return BaseResponseDto(
+                success=False,
+                data=[],
+                message="Search Failed",
+                code=500,
+                error=repr(ex),
             )
 
-    async def count(self, predicate=None):
+    async def count(self, predicate=None, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             query = select(func.count(getattr(self._model, "id")))
 
             if predicate is not None:
@@ -205,7 +221,7 @@ class BaseRepository(IBaseRepository[T]):
             result = await session.execute(query)
             count = result.scalar()
 
-            return BaseResponseDto[int](
+            return BaseResponseDto(
                 success=True,
                 data=count if count else 0,
                 message="Count Retrieved Successfully",
@@ -217,24 +233,73 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while counting {self._model.__name__}s",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[int](
+            return BaseResponseDto(
                 success=False,
                 data=0,
                 message="Count Failed",
                 code=500,
-                error=str(ex),
+                error=repr(ex),
             )
 
-    async def create(self, entity):
+    async def find_distinct(
+        self,
+        predicate=None,
+        column=None,
+        session=None,
+    ):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
+            if column is None:
+                return BaseResponseDto(
+                    success=False,
+                    data=[],
+                    message="Column must be provided for distinct query",
+                    code=400,
+                )
+
+            query = select(column).distinct()
+
+            if predicate is not None:
+                query = query.where(predicate)
+
+            result = await session.execute(query)
+            distinct_values = result.scalars().all()
+
+            return BaseResponseDto(
+                success=True,
+                data=list(distinct_values),
+                message="Distinct Values Retrieved Successfully",
+                code=200,
+            )
+        except Exception as ex:
+            await self._log_error(
+                action="FindDistinct",
+                level="error",
+                code=500,
+                message=f"An error occurred while retrieving distinct values for {self._model.__name__}",
+                details={"error": repr(ex)},
+                source="BaseRepository",
+            )
+            return BaseResponseDto(
+                success=False,
+                data=[],
+                message="Distinct Query Failed",
+                code=500,
+                error=repr(ex),
+            )
+
+    async def create(self, entity, session=None):
+        try:
+            if session is None:
+                session = self._resolve_session()
             session.add(entity)
             await session.flush()
             await session.refresh(entity)
-            return BaseResponseDto[T](
+            return BaseResponseDto(
                 success=True,
                 data=entity,
                 message="Entity Added Successfully",
@@ -246,20 +311,21 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while creating {self._model.__name__}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[T](
+            return BaseResponseDto(
                 success=False,
                 data=None,
                 message=f"Error Creating {self._model.__name__}",
-                error=str(ex),
+                error=repr(ex),
                 code=500,
             )
 
-    async def update(self, entity, updates=None):
+    async def update(self, entity, updates=None, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             # Similar to EF Core's nuclear Clear(), we ensure the instance is merged
             updated_entity = await session.merge(entity)
 
@@ -277,7 +343,7 @@ class BaseRepository(IBaseRepository[T]):
                     setattr(updated_entity, attr, val)
 
             await session.flush()
-            return BaseResponseDto[T](
+            return BaseResponseDto(
                 success=True,
                 data=updated_entity,
                 message="Updated Successfully",
@@ -289,24 +355,25 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while updating {self._model.__name__}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[T](
+            return BaseResponseDto(
                 success=False,
                 data=None,
                 message="Update Failed",
                 code=500,
-                error=str(ex),
+                error=repr(ex),
             )
 
-    async def delete(self, entity):
+    async def delete(self, entity, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             merged = await session.merge(entity)
             await session.delete(merged)
             await session.flush()
-            return BaseResponseDto[bool](
+            return BaseResponseDto(
                 success=True, data=True, message="Deleted Successfully", code=200
             )
         except Exception as ex:
@@ -315,26 +382,27 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while deleting {self._model.__name__}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[bool](
+            return BaseResponseDto(
                 success=False,
                 data=False,
                 message="Delete Failed",
                 code=500,
-                error=str(ex),
+                error=repr(ex),
             )
 
-    async def execute_sql(self, command, params=None):
+    async def execute_sql(self, command, params=None, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             if self._session_factory is None:
                 await session.execute(text(command), params or {})
                 await session.commit()
             else:
                 await self._execute_isolated_sql(command, params)
-            return BaseResponseDto[bool](
+            return BaseResponseDto(
                 success=True, data=True, message="SQL Executed", code=200
             )
         except Exception as ex:
@@ -343,20 +411,21 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while executing SQL",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
-            return BaseResponseDto[bool](
+            return BaseResponseDto(
                 success=False,
                 data=False,
                 message="SQL Execution Failed",
                 code=500,
-                error=str(ex),
+                error=repr(ex),
             )
 
-    async def execute_stored_function(self, function_name, params=None):
+    async def execute_stored_function(self, function_name, params=None, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             if not params:
                 params = {}
             param_placeholders = ", ".join([f":{key}" for key in params.keys()])
@@ -375,7 +444,7 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while executing stored function {function_name}",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
             return BaseResponseDto(
@@ -383,12 +452,13 @@ class BaseRepository(IBaseRepository[T]):
                 data=None,
                 message="Stored Function Execution Failed",
                 code=500,
-                error=str(ex),
+                error=repr(ex),
             )
 
-    async def begin_transaction(self):
+    async def begin_transaction(self, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             if session.in_transaction():
                 return
             await session.begin()
@@ -398,13 +468,14 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while beginning the transaction.",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
 
-    async def commit_transaction(self):
+    async def commit_transaction(self, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             if not session.in_transaction():
                 return
             await session.commit()
@@ -414,13 +485,14 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while committing the transaction.",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )
 
-    async def rollback_transaction(self):
+    async def rollback_transaction(self, session=None):
         try:
-            session = self._resolve_session()
+            if session is None:
+                session = self._resolve_session()
             if not session.in_transaction():
                 return
             await session.rollback()
@@ -430,6 +502,6 @@ class BaseRepository(IBaseRepository[T]):
                 level="error",
                 code=500,
                 message=f"An error occurred while rolling back the transaction.",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="BaseRepository",
             )

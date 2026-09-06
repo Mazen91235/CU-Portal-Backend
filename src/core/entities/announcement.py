@@ -40,15 +40,9 @@ class Announcement(Base):
     date: Mapped[Optional[datetime]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
-    urls: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
-    links: Mapped[dict[str, str]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True, default=dict
-    )
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
-    )
+    )  # includes urls, links, and other additional details
 
     # Timestamps
     created_at: Mapped[Optional[datetime]] = mapped_column(
@@ -104,8 +98,11 @@ class Announcement(Base):
     subject: Mapped[Optional["Subject"]] = relationship(
         "Subject", back_populates="announcements"
     )
-    attachments: Mapped[list["Attachment"]] = relationship(
-        "Attachment", back_populates="announcement", cascade="all, delete-orphan"
+    attachments: Mapped[set["Attachment"]] = relationship(
+        "Attachment",
+        back_populates="announcement",
+        cascade="save-update, merge",
+        collection_class=set,
     )
 
     # Indexes

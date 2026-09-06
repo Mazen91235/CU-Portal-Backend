@@ -14,6 +14,24 @@ class TimezoneHandler:
         CAIRO_TZ = timezone.utc
 
     @classmethod
+    def _clean_datetime(cls, iso_datetime: str | datetime) -> str:
+        if isinstance(iso_datetime, datetime):
+            iso_datetime = iso_datetime.astimezone(cls.UTC_TZ).isoformat()
+        if "T" in iso_datetime:
+            return iso_datetime
+        if " " in iso_datetime:
+            return iso_datetime.replace(" ", "T")
+        return iso_datetime + "T00:00:00.000Z"
+    
+    @classmethod
+    def to_isoformat(cls, dt: datetime, timezone: str = "UTC") -> str:
+        if timezone.lower() == "cairo":
+            return dt.astimezone(cls.CAIRO_TZ).isoformat()
+        else:
+            return dt.astimezone(cls.UTC_TZ).isoformat()
+        
+
+    @classmethod
     def now(cls, timezone: str = "UTC") -> datetime:
         if timezone.lower() == "cairo":
             return datetime.now(cls.CAIRO_TZ)
@@ -21,12 +39,18 @@ class TimezoneHandler:
             return datetime.now(cls.UTC_TZ)
 
     @classmethod
-    def from_isoformat(cls, iso_string: str, timezone: str = "UTC") -> datetime:
-        dt = datetime.fromisoformat(iso_string)
+    def from_isoformat(
+        cls, iso_string: str | datetime, timezone: str = "UTC"
+    ) -> datetime:
+        dt = datetime.fromisoformat(cls._clean_datetime(iso_string))
         if timezone.lower() == "cairo":
             return dt.astimezone(cls.CAIRO_TZ)
         else:
             return dt.astimezone(cls.UTC_TZ)
+
+    @classmethod
+    def to_date(cls, dt: datetime) -> datetime:
+        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
 
     @classmethod
     def add_days(cls, days: int, dt: datetime | None = None) -> datetime:

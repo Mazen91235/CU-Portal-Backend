@@ -1,23 +1,18 @@
-from fastapi import Request, Response
 from core.iControllers.iNotificationController import INotificationController
 from core.iServices.iNotificationService import INotificationService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
-from core.utils.parser import Parser
 
 # Entities & DTOs
-from core.entities.userNotification import UserNotification
 from core.entities.notification import Notification
 from core.dtos.userNotificationDtos import (
     UserNotificationSearchDto,
-    UserNotificationResponseDto,
 )
 from core.dtos.notificationDtos import (
     NotificationResponseDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class NotificationController(INotificationController):
@@ -25,15 +20,11 @@ class NotificationController(INotificationController):
         self.notification_service = notification_service
         self.logger = logger
 
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         raise NotImplementedError("There's no implementation for this method.")
 
-    async def find(self, request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[UserNotificationSearchDto],
-            )
             entity_search_dto = Generator[
                 UserNotificationSearchDto
             ].generate_from_query(UserNotificationSearchDto, query)
@@ -69,29 +60,15 @@ class NotificationController(INotificationController):
 
             notifications = response.data
 
-            if not notifications:
-                await self.logger.log(
-                    action="Find",
-                    entity="Notification",
-                    level="info",
-                    code=404,
-                    message="Notifications not found",
-                    source="NotificationController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Notifications not found",
-                )
-
             notifications_mapped = Mapper[
                 Notification, NotificationResponseDto
-            ].map_list(notifications, NotificationResponseDto, True)
+            ].map_list(notifications or [], NotificationResponseDto, True)
 
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 data=notifications_mapped,
+                next_page=response.next_page,
             )
         except Exception as e:
             await self.logger.log(
@@ -100,7 +77,7 @@ class NotificationController(INotificationController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="NotificationController",
             )
             return ResponseHandler.generate_response(
@@ -109,29 +86,10 @@ class NotificationController(INotificationController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def mark_notification_as_seen(self, request: Request):
+    async def mark_notification_as_seen(self, request, id):
         try:
             await self.notification_service.begin_transaction()
-            notification_id = request.path_params.get("notification_id")
-            if not notification_id:
-                await self.notification_service.rollback_transaction()
-                await self.logger.log(
-                    action="MarkNotificationAsSeen",
-                    entity="Notification",
-                    level="error",
-                    code=400,
-                    message="Notification ID is required",
-                    source="NotificationController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Notification ID is required",
-                )
-            notification_id = int(notification_id)
-            response = await self.notification_service.mark_notification_as_seen(
-                notification_id
-            )
+            response = await self.notification_service.mark_notification_as_seen(id)
 
             if not response.success:
                 await self.notification_service.rollback_transaction()
@@ -154,7 +112,7 @@ class NotificationController(INotificationController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="NotificationController",
             )
             return ResponseHandler.generate_response(

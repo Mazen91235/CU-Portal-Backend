@@ -17,13 +17,7 @@ from core.dtos.userDtos import (
     UserResponseDto,
     UserUpdateDto,
     UserSearchDto,
-    UserVerifyEmailDto,
-    UserGetStoredAccessTokenDto,
-    UserUpdateUsersDto,
-    UserUpdateAcademicDataDto,
-    UserHasPermissionsDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class UserController(IUserController):
@@ -32,30 +26,9 @@ class UserController(IUserController):
         self.logger = logger
 
     # CRUD Functions
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         try:
-            user_id = request.path_params.get("user_id")
-            if not user_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="User ID is required",
-                )
-            entity_search_dto = Generator[UserSearchDto].generate(
-                UserSearchDto, {"id": user_id}
-            )
-            response = await self.user_service.find_one(
-                entity_search_dto,
-                [
-                    "role.exact_roles",
-                    "faculty",
-                    "department",
-                    "year",
-                    "pending_user",
-                    "notifications",
-                    "subjects",
-                ],
-            )
+            response = await self.user_service.get_user_with_details(id)
             if not response.success:
                 return ResponseHandler.generate_response(
                     success=False,
@@ -77,11 +50,10 @@ class UserController(IUserController):
                     code=404,
                     message="User not found",
                 )
-            user_mapped = Mapper[User, UserResponseDto].map(user, UserResponseDto, True)
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
-                data=user_mapped,
+                data=user,
             )
         except Exception as e:
             await self.logger.log(
@@ -90,7 +62,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -99,12 +71,8 @@ class UserController(IUserController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def find(self, request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[UserSearchDto],
-            )
             entity_search_dto = Generator[UserSearchDto].generate_from_query(
                 UserSearchDto, query
             )
@@ -140,29 +108,15 @@ class UserController(IUserController):
 
             users = response.data
 
-            if not users:
-                await self.logger.log(
-                    action="Find",
-                    entity="User",
-                    level="info",
-                    code=404,
-                    message="Users not found",
-                    source="UserController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Users not found",
-                )
-
             users_mapped = Mapper[User, UserResponseDto].map_list(
-                users, UserResponseDto, True
+                users or [], UserResponseDto, True
             )
 
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 data=users_mapped,
+                next_page=response.next_page,
             )
         except Exception as e:
             await self.logger.log(
@@ -171,7 +125,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -180,11 +134,16 @@ class UserController(IUserController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def create(self, request):
+    async def create(self, request, data):
         try:
             await self.user_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserCreateDto].generate(UserCreateDto, payload)
+            if not data.agreed:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=400,
+                    message="You must agree to the terms and conditions to create an account",
+                )
             user = Mapper[UserCreateDto, User].map(data, User)
             response = await self.user_service.create(user)
             if not response.success:
@@ -239,7 +198,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -248,11 +207,9 @@ class UserController(IUserController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update(self, request):
+    async def update(self, request, data):
         try:
             await self.user_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserUpdateDto].generate(UserUpdateDto, payload)
             user = Mapper[UserUpdateDto, User].map(data, User)
             response = await self.user_service.update(user)
             if not response.success:
@@ -294,7 +251,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -305,11 +262,9 @@ class UserController(IUserController):
 
     # User Specific Functions
     # Auth Functions
-    async def verify_email(self, request):
+    async def verify_email(self, request, data):
         try:
             await self.user_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserVerifyEmailDto].generate(UserVerifyEmailDto, payload)
             response = await self.user_service.verify_email(data.token)
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -334,7 +289,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -385,7 +340,58 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def change_google_account(self, request):
+        try:
+            await self.user_service.begin_transaction()
+            response = await self.user_service.change_google_account()
+            if not response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            response_data = response.data
+            if not response_data:
+                await self.user_service.rollback_transaction()
+                await self.logger.log(
+                    action="ChangeGoogleAccount",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to generate Google login URL",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+            await self.user_service.commit_transaction()
+            return await OAuthHandler.authorize_google_redirect(
+                request,
+                redirect_url=response_data.redirect_response_url,
+                state=response_data.state,
+                nonce=response_data.nonce,
+            )
+        except Exception as e:
+            await self.user_service.rollback_transaction()
+            await self.logger.log(
+                action="ChangeGoogleAccount",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -444,7 +450,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -489,7 +495,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -525,7 +531,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing logout",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -609,7 +615,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -685,12 +691,29 @@ class UserController(IUserController):
                     code=response.code,
                     message=response.message,
                 )
+            response_data = response.data
+            if not response_data:
+                await self.user_service.rollback_transaction()
+                await self.logger.log(
+                    action="ResendToken",
+                    entity="User",
+                    level="error",
+                    code=500,
+                    message="Failed to resend token",
+                    source="UserController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
             await self.user_service.commit_transaction()
             response = ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 message="Token resent successfully if email exists",
             )
+            token_details["token"] = response_data.token
             token_details["can_resend_after"] = TimezoneHandler.add_minutes(
                 1
             ).isoformat()
@@ -713,7 +736,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -722,12 +745,8 @@ class UserController(IUserController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def get_google_stored_token(self, request):
+    async def get_google_stored_token(self, request, data):
         try:
-            payload = await request.json()
-            data = Generator[UserGetStoredAccessTokenDto].generate(
-                UserGetStoredAccessTokenDto, payload
-            )
             response = await self.user_service.get_google_stored_token(
                 data.google_details_token
             )
@@ -764,7 +783,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -809,7 +828,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -819,12 +838,8 @@ class UserController(IUserController):
             )
 
     # User Functions
-    async def get_statistics(self, request):
+    async def get_statistics(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[UserSearchDto],
-            )
             entity_search_dto = Generator[UserSearchDto].generate_from_query(
                 UserSearchDto, query
             )
@@ -862,7 +877,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -871,11 +886,9 @@ class UserController(IUserController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update_many(self, request):
+    async def update_many(self, request, data):
         try:
             await self.user_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserUpdateUsersDto].generate(UserUpdateUsersDto, payload)
             response = await self.user_service.update_many(data)
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -898,7 +911,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -907,13 +920,77 @@ class UserController(IUserController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update_academic_data(self, request):
+    async def suspend(self, request, id):
         try:
             await self.user_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[UserUpdateAcademicDataDto].generate(
-                UserUpdateAcademicDataDto, payload
+            response = await self.user_service.suspend(id)
+            if not response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            await self.user_service.commit_transaction()
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                message="User suspended successfully",
             )
+        except Exception as e:
+            await self.user_service.rollback_transaction()
+            await self.logger.log(
+                action="Suspend",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def unsuspend(self, request, id):
+        try:
+            await self.user_service.begin_transaction()
+            response = await self.user_service.unsuspend(id)
+            if not response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            await self.user_service.commit_transaction()
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                message="User unsuspended successfully",
+            )
+        except Exception as e:
+            await self.user_service.rollback_transaction()
+            await self.logger.log(
+                action="Unsuspend",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def update_academic_data(self, request, data):
+        try:
+            await self.user_service.begin_transaction()
             response = await self.user_service.update_academic_data(data)
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -936,7 +1013,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -945,12 +1022,8 @@ class UserController(IUserController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def get_current_user(self, request):
+    async def get_current_user(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[UserSearchDto],
-            )
             includes = query.includes
             response = await self.user_service.get_current_user(includes)
             if not response.success:
@@ -987,7 +1060,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -1032,7 +1105,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(
@@ -1041,12 +1114,8 @@ class UserController(IUserController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def has_permissions(self, request):
+    async def has_permissions(self, request, data):
         try:
-            payload = await request.json()
-            data = Generator[UserHasPermissionsDto].generate(
-                UserHasPermissionsDto, payload
-            )
             response = await self.user_service.has_permissions(data)
             if not response.success:
                 return ResponseHandler.generate_response(
@@ -1067,7 +1136,7 @@ class UserController(IUserController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="UserController",
             )
             return ResponseHandler.generate_response(

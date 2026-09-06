@@ -36,7 +36,6 @@ class Week(Base):
     start_date: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False
     )
-    end_date: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
 
     # Timestamps
     created_at: Mapped[Optional[datetime]] = mapped_column(
@@ -57,27 +56,26 @@ class Week(Base):
         ForeignKey("faculties.id", ondelete="CASCADE", name="fk_faculty_week"),
         nullable=False,
     )
-    faculty: Mapped["Faculty"] = relationship(
-        "Faculty", back_populates="weeks", cascade="all, delete-orphan"
-    )
+    faculty: Mapped["Faculty"] = relationship("Faculty", back_populates="weeks")
     department_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("departments.id", ondelete="CASCADE", name="fk_department_week"),
         nullable=False,
     )
     department: Mapped["Department"] = relationship(
-        "Department", back_populates="weeks", cascade="all, delete-orphan"
+        "Department", back_populates="weeks"
     )
     year_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("years.id", ondelete="CASCADE", name="fk_year_week"),
         nullable=False,
     )
-    year: Mapped["Year"] = relationship(
-        "Year", back_populates="weeks", cascade="all, delete-orphan"
-    )
-    materials: Mapped[list["Material"]] = relationship(
-        "Material", back_populates="week", cascade="all, delete-orphan"
+    year: Mapped["Year"] = relationship("Year", back_populates="weeks")
+    materials: Mapped[set["Material"]] = relationship(
+        "Material",
+        back_populates="week",
+        cascade="save-update, merge",
+        collection_class=set,
     )
 
     # Indexes

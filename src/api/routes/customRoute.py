@@ -1,13 +1,26 @@
+import os
 import asyncio
+import json
+from dotenv import load_dotenv
 from typing import Callable
 from fastapi import Request, Response, Depends, HTTPException
 from fastapi.routing import APIRoute
-from core.iMiddlewares.iRequestLimitMiddleware import IRequestLimitMiddleware
-from core.iLoggers.iBaseLogger import IBaseLogger
+from fastapi.responses import JSONResponse
 from business.contextVars.userContext import user_context
 from business.contextVars.sessionContext import session_context
+from core.iMiddlewares.iRequestLimitMiddleware import IRequestLimitMiddleware
+from core.iLoggers.iBaseLogger import IBaseLogger
+from core.utils.cachingHandler import CachingHandler
+from core.utils.responseHandler import ResponseHandler
 
-DEFAULT_TIMEOUT_SECONDS = 2.0
+load_dotenv()  # Load environment variables from .env file
+
+DEFAULT_TIMEOUT_SECONDS = int(
+    os.environ.get("DEFAULT_TIMEOUT_SECONDS", "10")
+)  # Default request timeout in seconds
+CACHE_TTL = int(os.environ.get("CACHE_TTL", "120"))  # Default cache TTL in seconds
+
+caching_handler = CachingHandler()
 
 
 def set_timeout(seconds: float):
@@ -54,6 +67,86 @@ async def _enforce_active_user(request: Request):
     return None
 
 
+class CacheHitException(Exception):
+    def __init__(self, response: JSONResponse):
+        self.response = response
+
+
+async def _check_cache(request: Request):
+    try:
+        if os.environ.get("TESTING", "false").lower() == "true":
+            return None
+        if request.method.upper() == "GET":
+            token = request.cookies.get("token", "")
+            cache_key = f"{token}:{request.url.path}?{request.url.query}"
+            cached_response = await caching_handler.get(cache_key)
+            if cached_response:
+                response = ResponseHandler.generate_response(
+                    success=cached_response["success"],
+                    code=cached_response["code"],
+                    message=cached_response["message"],
+                    data=cached_response["data"],
+                    next_page=cached_response["next_page"],
+                )
+                raise CacheHitException(response)
+        return None
+    except CacheHitException as ex:
+        raise ex
+    except Exception:
+        return None
+
+
+async def _update_cache(request: Request, response: Response):
+    try:
+        if os.environ.get("TESTING", "false").lower() == "true":
+            return None
+        if (
+            request.method.upper() == "GET"
+            and str(response.status_code)[0] == "2"
+            and issubclass(type(response), JSONResponse)
+        ):
+            token = request.cookies.get("token", "")
+            cache_key = f"{token}:{request.url.path}?{request.url.query}"
+            body_bytes = getattr(response, "body", b"{}")
+            body = json.loads(body_bytes.decode("utf-8"))
+            asyncio.create_task(
+                caching_handler.set(
+                    cache_key,
+                    {
+                        "success": body.get("success", True),
+                        "code": response.status_code,
+                        "message": body.get("message", ""),
+                        "data": body.get("data", None),
+                        "next_page": body.get("next_page", False),
+                    },
+                    expire=CACHE_TTL,
+                )
+            )
+        elif (
+            request.method.upper() in ["POST", "PATCH", "PUT", "DELETE"]
+            and str(response.status_code)[0] == "2"
+        ):
+            module = extract_module_from_path(request.url.path)
+            if module:
+                asyncio.create_task(caching_handler.invalidate_module_cache(module))
+        return None
+    except Exception:
+        return None
+
+
+def extract_module_from_path(path: str) -> str:
+    if "/user/" in path:
+        if not "/" in path.split("/user/")[1]:
+            return "user/"
+        return path.split("/user/")[1].split("/")[0]
+    elif "/admin/" in path:
+        return path.split("/admin/")[1].split("/")[0]
+    elif "/auth/" in path:
+        return path.split("/auth/")[1].split("/")[0]
+    else:
+        return ""
+
+
 class CustomRoute(APIRoute):
     def __init__(self, *args, dependencies=None, **kwargs):
         dependencies = list(dependencies) if dependencies else []
@@ -71,6 +164,8 @@ class CustomRoute(APIRoute):
         if not skip_active_check:
             dependencies.append(Depends(_enforce_active_user))
 
+        dependencies.append(Depends(_check_cache))
+
         self.timeout_seconds = timeout_seconds
 
         super().__init__(*args, dependencies=dependencies, **kwargs)
@@ -81,21 +176,22 @@ class CustomRoute(APIRoute):
 
         async def custom_route_handler(request: Request) -> Response:
             def _get_rate_limit_middleware() -> IRequestLimitMiddleware:
-                return request.app.state.container.request_limit_middleware.provider()
+                return request.app.state.container.request_limit_middleware()
 
             async def _rate_limit(
                 request: Request,
-                rate_middleware: IRequestLimitMiddleware = Depends(
-                    _get_rate_limit_middleware
-                ),
             ):
-                return await rate_middleware.throttle(request)
+                return await _get_rate_limit_middleware().throttle(request)
 
             try:
                 await _rate_limit(request)
-                return await asyncio.wait_for(
+                response = await asyncio.wait_for(
                     original_route_handler(request), timeout=timeout_seconds
                 )
+                await _update_cache(request, response)
+                return response
+            except CacheHitException as ex:
+                return ex.response
             except asyncio.TimeoutError:
                 try:
                     logger: IBaseLogger = request.app.state.container.logger()
