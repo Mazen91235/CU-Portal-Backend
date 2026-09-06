@@ -1,6 +1,9 @@
 import os
 from fastapi import Request, Response
+from fastapi.security import APIKeyCookie
 from typing import Literal
+
+cookie_scheme = APIKeyCookie(name="token", auto_error=False)
 
 
 class CookieHandler:
@@ -19,7 +22,7 @@ class CookieHandler:
         domain: str | None = None,
         secure: bool = True,
         httponly: bool = True,
-        samesite: Literal["lax"] = "lax",
+        samesite: Literal["lax", "none"] = "none",
     ):
         if not value:
             response.delete_cookie(key=key, path=path, domain=domain)

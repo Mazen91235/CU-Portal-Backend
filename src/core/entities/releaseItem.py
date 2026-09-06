@@ -51,9 +51,7 @@ class ReleaseItem(Base):
     release_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("releases.id"), nullable=False
     )
-    release: Mapped["Release"] = relationship(
-        "Release", back_populates="release_items", cascade="all, delete-orphan"
-    )
+    release: Mapped["Release"] = relationship("Release", back_populates="release_items")
 
     # Indexes
     __table_args__ = (Index("idx_release_item_release_id", "release_id", unique=False),)

@@ -1,4 +1,3 @@
-import os
 from sqlalchemy import and_
 from core.iServices.iExamService import IExamService
 from core.iServices.iHelperService import IHelperService
@@ -51,6 +50,11 @@ class ExamService(IExamService):
             predicate = self.helper_service.generate_dynamic_predicate(
                 Task, data, ["name"], is_and, starts_with, is_exact
             )
+            predicate = (
+                and_(predicate, Task.task_type == "exam")
+                if predicate is not None
+                else Task.task_type == "exam"
+            )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Task, includes
             )
@@ -60,7 +64,6 @@ class ExamService(IExamService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Task", order_by
             )
-
             result = await self.task_repository.find_one(
                 predicate,
                 dynamic_includes,
@@ -85,7 +88,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="Error finding exam",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(
@@ -112,6 +115,11 @@ class ExamService(IExamService):
             predicate = self.helper_service.generate_dynamic_predicate(
                 Task, data, ["name"], is_and, starts_with, is_exact
             )
+            predicate = (
+                and_(predicate, Task.task_type == "exam")
+                if predicate is not None
+                else Task.task_type == "exam"
+            )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Task, includes
             )
@@ -121,7 +129,6 @@ class ExamService(IExamService):
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
                 "Task", order_by
             )
-
             result = await self.task_repository.find(
                 predicate,
                 dynamic_includes,
@@ -137,7 +144,9 @@ class ExamService(IExamService):
                     success=False, code=result.code, data=None, message=result.message
                 )
             exams = result.data
-            return BaseResponseDto(success=True, code=200, data=exams)
+            return BaseResponseDto(
+                success=True, code=200, data=exams, next_page=result.next_page
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -145,7 +154,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="An error occurred while finding exams",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(
@@ -160,7 +169,7 @@ class ExamService(IExamService):
             existing_exam_response = await self.task_repository.find_one(
                 and_(
                     Task.name == data.name,
-                    Task.type == "exam",
+                    Task.task_type == "exam",
                     Task.subject_id == data.subject_id,
                 )
             )
@@ -188,11 +197,8 @@ class ExamService(IExamService):
                     data=None,
                     message="Exam with the same name already exists for this subject.",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
-            )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id, dynamic_includes
+                Subject.id == data.subject_id
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -218,7 +224,6 @@ class ExamService(IExamService):
                     data=None,
                     message="Subject not found for exam creation",
                 )
-            user_ids = [user.id for user in subject.users] if subject.users else []
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -281,6 +286,7 @@ class ExamService(IExamService):
             data.faculty_id = data.faculty_id or logged_in_user.faculty_id
             data.department_id = data.department_id or logged_in_user.department_id
             data.year_id = data.year_id or logged_in_user.year_id
+            data.task_type = "exam"
             create_exam_response = await self.task_repository.create(data)
             if not create_exam_response.success:
                 return BaseResponseDto(
@@ -306,23 +312,13 @@ class ExamService(IExamService):
                     message="An error occurred while creating exam",
                 )
             share_link = f"/users/exams/{created_exam.id}"
-            notification_response = await self.helper_service.send_notification(
-                Notification.Type.EXAM,
+            await self.helper_service.send_notification(
+                Notification.NotificationType.EXAM,
                 created_exam.id,
-                user_ids,
-                f"New exam '{created_exam.title}' has been created for subject {subject.name}.",
+                f"New exam '{created_exam.name}' has been created for subject {subject.name}.",
                 share_link,
+                subject_id=created_exam.subject_id,
             )
-            if not notification_response.success:
-                await self.logger.log(
-                    action="Create",
-                    entity="Exam",
-                    level="warning",
-                    code=400,
-                    message="Failed to send notifications for Exam Creation.",
-                    details={"exam_id": created_exam.id},
-                    source="ExamService",
-                )
             await self.logger.log(
                 action="Create",
                 entity="Exam",
@@ -344,7 +340,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="An error occurred while creating exam",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(
@@ -357,7 +353,7 @@ class ExamService(IExamService):
     async def update(self, data):
         try:
             target_exam_response = await self.task_repository.find_one(
-                and_(Task.id == data.id, Task.type == "exam")
+                and_(Task.id == data.id, Task.task_type == "exam")
             )
             if not target_exam_response.success:
                 return BaseResponseDto(
@@ -385,7 +381,7 @@ class ExamService(IExamService):
             existing_exam_response = await self.task_repository.find_one(
                 and_(
                     Task.name == data.name,
-                    Task.type == "exam",
+                    Task.task_type == "exam",
                     Task.subject_id == data.subject_id,
                 )
             )
@@ -413,11 +409,8 @@ class ExamService(IExamService):
                     data=None,
                     message="Another exam with the same name already exists for this subject.",
                 )
-            dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Subject, ["users"]
-            )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id, dynamic_includes
+                Subject.id == data.subject_id
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -443,7 +436,6 @@ class ExamService(IExamService):
                     data=None,
                     message="Subject not found for exam update",
                 )
-            user_ids = [user.id for user in subject.users] if subject.users else []
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -596,23 +588,13 @@ class ExamService(IExamService):
                     message="An error occurred while updating exam",
                 )
             share_link = f"/users/exams/{updated_exam.id}"
-            notification_response = await self.helper_service.send_notification(
-                Notification.Type.EXAM,
+            await self.helper_service.send_notification(
+                Notification.NotificationType.EXAM,
                 updated_exam.id,
-                user_ids,
-                f"Exam '{updated_exam.title}' has been updated for subject {subject.name}.",
+                f"Exam '{updated_exam.name}' has been updated for subject {subject.name}.",
                 share_link,
+                subject_id=updated_exam.subject_id,
             )
-            if not notification_response.success:
-                await self.logger.log(
-                    action="Update",
-                    entity="Exam",
-                    level="warning",
-                    code=400,
-                    message="Failed to send notifications for Exam Update.",
-                    details={"exam_id": updated_exam.id},
-                    source="ExamService",
-                )
             await self.logger.log(
                 action="Update",
                 entity="Exam",
@@ -634,7 +616,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="An error occurred while updating exam",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(
@@ -647,7 +629,7 @@ class ExamService(IExamService):
     async def delete(self, data):
         try:
             target_exam_response = await self.task_repository.find_one(
-                and_(Task.id == data.id, Task.type == "exam")
+                and_(Task.id == data.id, Task.task_type == "exam")
             )
             if not target_exam_response.success:
                 return BaseResponseDto(
@@ -812,7 +794,7 @@ class ExamService(IExamService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting exam",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="ExamService",
             )
             return BaseResponseDto(

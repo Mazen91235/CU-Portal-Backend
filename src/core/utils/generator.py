@@ -1,9 +1,11 @@
 from typing import Any, TypeVar, Generic, Type, get_args, get_origin
 from pydantic import BaseModel
+from sqlalchemy.inspection import inspect
+from sqlalchemy.orm import Mapper
 from .typesHandler import TypesHandler
 from core.models.queryModel import QueryModel
 
-T = TypeVar("T", bound=BaseModel)
+T = TypeVar("T")
 
 
 class Generator(Generic[T]):
@@ -25,44 +27,123 @@ class Generator(Generic[T]):
         return None
 
     @staticmethod
+    def _is_pydantic(cls: Type) -> bool:
+        """Check if the class is a Pydantic model."""
+        return isinstance(cls, type) and issubclass(cls, BaseModel)
+
+    @staticmethod
+    def _is_sqlalchemy(cls: Type) -> bool:
+        """Check if the class is a mapped SQLAlchemy ORM model."""
+        try:
+            return inspect(cls) is not None
+        except Exception:
+            return False
+
+    @staticmethod
     def generate(cls: Type[T], data: dict) -> T:
         if not data:
-            return cls.model_construct()
+            if Generator._is_pydantic(cls):
+                return cls.model_construct()
+            elif Generator._is_sqlalchemy(cls):
+                return cls()
+            return cls()
 
         init_kwargs = {}
-        fields = cls.model_fields
 
-        for key, value in data.items():
-            if key not in fields:
-                continue
+        # ---------------------------------------------------------------------
+        # PATH A: Pydantic Model
+        # ---------------------------------------------------------------------
+        if Generator._is_pydantic(cls):
+            fields = cls.model_fields
 
-            field_def = fields[key]
-            annotation = field_def.annotation
-            inner_type = Generator._unwrap_list_type(annotation)
+            for key, value in data.items():
+                if key not in fields:
+                    continue
 
-            if inner_type and isinstance(value, list):
-                if inner_type not in TypesHandler.PRIMITIVE_TYPES and issubclass(
-                    inner_type, BaseModel
+                field_def = fields[key]
+                annotation = field_def.annotation
+                inner_type = Generator._unwrap_list_type(annotation)
+
+                # Nested List of Pydantic Models
+                if inner_type and isinstance(value, list):
+                    if (
+                        inner_type not in TypesHandler.PRIMITIVE_TYPES
+                        and Generator._is_pydantic(inner_type)
+                    ):
+                        init_kwargs[key] = [
+                            Generator.generate(inner_type, item)
+                            for item in value
+                            if isinstance(item, dict)
+                        ]
+                    else:
+                        init_kwargs[key] = value
+
+                # Single Nested Pydantic Model
+                elif (
+                    isinstance(annotation, type)
+                    and Generator._is_pydantic(annotation)
+                    and isinstance(value, dict)
                 ):
-                    init_kwargs[key] = [
-                        Generator.generate(inner_type, item)
-                        for item in value
-                        if isinstance(item, dict)
-                    ]
+                    init_kwargs[key] = Generator.generate(annotation, value)
+
                 else:
                     init_kwargs[key] = value
-            else:
-                init_kwargs[key] = value
 
-        return cls.model_validate(init_kwargs)
+            # Passes set fields into __fields_set__ to retain unset awareness
+            return cls.model_construct(
+                _fields_set=set(init_kwargs.keys()), **init_kwargs
+            )
+
+        # ---------------------------------------------------------------------
+        # PATH B: SQLAlchemy ORM Model
+        # ---------------------------------------------------------------------
+        elif Generator._is_sqlalchemy(cls):
+            mapper: Mapper = inspect(cls)
+            valid_columns = set(mapper.columns.keys())
+            valid_relationships = set(mapper.relationships.keys())
+
+            for key, value in data.items():
+                if key in valid_columns:
+                    init_kwargs[key] = value
+
+                elif key in valid_relationships:
+                    rel_property = mapper.relationships[key]
+                    target_cls = rel_property.mapper.class_
+
+                    if rel_property.uselist and isinstance(value, list):
+                        init_kwargs[key] = [
+                            Generator.generate(target_cls, item)
+                            for item in value
+                            if isinstance(item, dict)
+                        ]
+                    elif isinstance(value, dict):
+                        init_kwargs[key] = Generator.generate(target_cls, value)
+
+            return cls(**init_kwargs)
+
+        # ---------------------------------------------------------------------
+        # PATH C: Fallback for Plain Python Classes / Dataclasses
+        # ---------------------------------------------------------------------
+        return cls(**data)
 
     @staticmethod
     def generate_from_query(cls: Type[T], query: QueryModel) -> T:
         if not query or not hasattr(query, "data") or query.data is None:
-            return cls.model_construct()
+            if Generator._is_pydantic(cls):
+                return cls.model_construct()
+            return cls()
 
-        # Extract only the fields explicitly provided in the search criteria DTO
         search_criteria = query.data
-        dict_payload = search_criteria.model_dump(exclude_unset=True)
+
+        if isinstance(search_criteria, BaseModel):
+            # Exclude fields that were not explicitly passed by the client
+            dict_payload = search_criteria.model_dump(
+                exclude_unset=True,
+                exclude_none=False,  # Retains explicit null values if user passed {"field": null}
+            )
+        elif isinstance(search_criteria, dict):
+            dict_payload = search_criteria
+        else:
+            dict_payload = getattr(search_criteria, "__dict__", {})
 
         return Generator.generate(cls, dict_payload)

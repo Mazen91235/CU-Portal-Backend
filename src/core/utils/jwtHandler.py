@@ -22,7 +22,7 @@ class JWTHandler:
                 success=False,
                 data=None,
                 message="An Error Occurred, please try again later",
-                error=str(ex),
+                error=repr(ex),
             )
 
     @staticmethod
@@ -62,5 +62,5 @@ class JWTHandler:
                 success=False,
                 data=None,
                 message="An Error Occurred, please try again later",
-                error=str(ex),
+                error=repr(ex),
             )

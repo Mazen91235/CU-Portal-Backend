@@ -34,8 +34,7 @@ class Material(Base):
     # Columns
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    type: Mapped[str] = mapped_column(String(30), nullable=False)
-    url: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    material_type: Mapped[str] = mapped_column(String(30), nullable=False)
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
     )
@@ -74,10 +73,13 @@ class Material(Base):
         nullable=True,
     )
     parent: Mapped[Optional["Material"]] = relationship(
-        "Material", remote_side=[id], back_populates="children"
+        "Material", remote_side="Material.id", back_populates="children"
     )
-    children: Mapped[list["Material"]] = relationship(
-        "Material", back_populates="parent", cascade="all, delete-orphan"
+    children: Mapped[set["Material"]] = relationship(
+        "Material",
+        back_populates="parent",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     week_id: Mapped[Optional[int]] = mapped_column(
         Integer,
@@ -88,7 +90,10 @@ class Material(Base):
         "Week", back_populates="materials", cascade="save-update, merge"
     )
     attachment: Mapped[Optional["Attachment"]] = relationship(
-        "Attachment", back_populates="material", cascade="all, delete-orphan"
+        "Attachment",
+        back_populates="material",
+        cascade="save-update, merge",
+        uselist=False,
     )
 
     # Indexes

@@ -11,7 +11,9 @@ if TYPE_CHECKING:
     from core.dtos.subjectDtos import SubjectResponseDto
     from core.dtos.taskDtos import TaskResponseDto
     from core.dtos.announcementDtos import AnnouncementResponseDto
-    from .baseDtos import BaseSearchDto
+    from core.dtos.weekDtos import WeekResponseDto
+
+from core.dtos.baseDtos import BaseSearchDto
 
 
 class DepartmentCreateDto(BaseModel):
@@ -30,31 +32,36 @@ class DepartmentCreateDto(BaseModel):
 
 
 class DepartmentResponseDto(BaseModel):
-    id: int = Field(..., description="ID of the department")
-    name: str = Field(..., description="Name of the department")
-    code: str | None = Field(None, description="Code of the department")
+    id: int | None = Field(default=None, description="ID of the department")
+    name: str | None = Field(default=None, description="Name of the department")
+    code: str | None = Field(default=None, description="Code of the department")
     details: dict | None = Field(default=None, description="Additional details")
     study_type: Department.StudyType | None = Field(
-        None, description="Study type of the department"
+        default=None, description="Study type of the department"
     )
-    created_at: datetime | None = Field(None, description="Creation timestamp")
-    updated_at: datetime | None = Field(None, description="Last update timestamp")
+    created_at: datetime | None = Field(default=None, description="Creation timestamp")
+    updated_at: datetime | None = Field(
+        default=None, description="Last update timestamp"
+    )
 
     # Relationships
     faculty: FacultyResponseDto | None = Field(
-        None, description="Faculty associated with the department"
+        default=None, description="Faculty associated with the department"
     )
     users: list[UserResponseDto] | None = Field(
-        None, description="Users in this department"
+        default=None, description="Users in this department"
     )
     subjects: list[SubjectResponseDto] | None = Field(
-        None, description="Subjects in this department"
+        default=None, description="Subjects in this department"
     )
     tasks: list[TaskResponseDto] | None = Field(
-        None, description="Tasks in this department"
+        default=None, description="Tasks in this department"
     )
     announcements: list[AnnouncementResponseDto] | None = Field(
-        None, description="Announcements in this department"
+        default=None, description="Announcements in this department"
+    )
+    weeks: list[WeekResponseDto] | None = Field(
+        default=None, description="Weeks in this department"
     )
 
     model_config = {
@@ -63,7 +70,6 @@ class DepartmentResponseDto(BaseModel):
 
 
 class DepartmentUpdateDto(BaseModel):
-    id: int = Field(..., description="ID of the department to update")
     name: str = Field(
         ..., min_length=1, max_length=40, description="Name of the department"
     )
@@ -78,7 +84,7 @@ class DepartmentUpdateDto(BaseModel):
     )
 
 
-class DepartmentSearchDto(BaseSearchDto, BaseModel):
+class DepartmentSearchDto(BaseSearchDto):
     id: int | None = Field(
         default=None, description="ID of the department to filter by"
     )

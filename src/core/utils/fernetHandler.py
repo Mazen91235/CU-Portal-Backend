@@ -3,12 +3,17 @@ from cryptography.fernet import Fernet
 
 
 class FernetHandler:
-    fernet = Fernet((os.environ.get("FERNET_KEY", "")).encode())
+    @classmethod
+    def get_fernet(cls) -> Fernet:
+        fernet_key = os.environ.get("FERNET_KEY", "")
+        if not fernet_key:
+            raise ValueError("FERNET_KEY environment variable is not set.")
+        return Fernet(fernet_key.encode())
 
-    @staticmethod
-    def encrypt(data: str) -> str:
-        return FernetHandler.fernet.encrypt(data.encode()).decode() if data else ""
+    @classmethod
+    def encrypt(cls, data: str) -> str:
+        return cls.get_fernet().encrypt(data.encode()).decode() if data else ""
 
-    @staticmethod
-    def decrypt(token: str) -> str:
-        return FernetHandler.fernet.decrypt(token.encode()).decode() if token else ""
+    @classmethod
+    def decrypt(cls, token: str) -> str:
+        return cls.get_fernet().decrypt(token.encode()).decode() if token else ""

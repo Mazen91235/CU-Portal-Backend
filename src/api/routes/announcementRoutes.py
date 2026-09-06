@@ -1,15 +1,26 @@
 from fastapi import APIRouter, Request, Depends
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iAnnouncementController import IAnnouncementController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.announcementDtos import AnnouncementResponseDto
+from core.dtos.announcementDtos import (
+    AnnouncementCreateDto,
+    AnnouncementResponseDto,
+    AnnouncementUpdateDto,
+    AnnouncementSearchDto,
+)
+from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_announcement_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/announcements", tags=["User Announcements"])
+    router = APIRouter(
+        prefix="/announcements", tags=["User Announcements"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IAnnouncementController:
         return controller_provider()
@@ -23,8 +34,9 @@ def create_announcement_user_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     async def _is_ready(
         request: Request,
@@ -50,10 +62,12 @@ def create_announcement_user_router(
         summary="Find Announcement",
         description="Find a specific announcement by its ID if enrolled in the subject",
     )
-    async def find_one(
-        request: Request, controller: IAnnouncementController = Depends(_get_controller)
+    async def find_one_announcement(
+        announcement_id: int,
+        request: Request,
+        controller: IAnnouncementController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=announcement_id)
 
     @router.get(
         "/",
@@ -67,10 +81,14 @@ def create_announcement_user_router(
         summary="Find Announcements",
         description="Find all announcements for the currently logged in user based on enrolled subjects",
     )
-    async def find(
-        request: Request, controller: IAnnouncementController = Depends(_get_controller)
+    async def find_announcements(
+        request: Request,
+        query: QueryModel[AnnouncementSearchDto] = Depends(
+            Parser.parse_query(QueryModel[AnnouncementSearchDto])
+        ),
+        controller: IAnnouncementController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     return router
 
@@ -78,7 +96,9 @@ def create_announcement_user_router(
 def create_announcement_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/announcements", tags=["Admin Announcements"])
+    router = APIRouter(
+        prefix="/announcements", tags=["Admin Announcements"], route_class=CustomRoute
+    )
 
     def _get_controller() -> IAnnouncementController:
         return controller_provider()
@@ -92,8 +112,9 @@ def create_announcement_admin_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     async def _is_ready(
         request: Request,
@@ -140,10 +161,12 @@ def create_announcement_admin_router(
         summary="Find Announcement",
         description="Find an announcement by its ID (Admin View)",
     )
-    async def find_one(
-        request: Request, controller: IAnnouncementController = Depends(_get_controller)
+    async def find_one_announcement(
+        announcement_id: int,
+        request: Request,
+        controller: IAnnouncementController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=announcement_id)
 
     @router.get(
         "/",
@@ -158,10 +181,14 @@ def create_announcement_admin_router(
         summary="Find Announcements",
         description="Find announcements based on query parameters (Admin View)",
     )
-    async def find(
-        request: Request, controller: IAnnouncementController = Depends(_get_controller)
+    async def find_announcements(
+        request: Request,
+        query: QueryModel[AnnouncementSearchDto] = Depends(
+            Parser.parse_query(QueryModel[AnnouncementSearchDto])
+        ),
+        controller: IAnnouncementController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     @router.post(
         "/",
@@ -177,10 +204,12 @@ def create_announcement_admin_router(
         summary="Create Announcement",
         description="Create a new announcement for a specific subject",
     )
-    async def create(
-        request: Request, controller: IAnnouncementController = Depends(_get_controller)
+    async def create_announcement(
+        data: AnnouncementCreateDto,
+        request: Request,
+        controller: IAnnouncementController = Depends(_get_controller),
     ):
-        return await controller.create(request)
+        return await controller.create(request, data=data)
 
     @router.patch(
         "/{announcement_id}",
@@ -196,10 +225,13 @@ def create_announcement_admin_router(
         summary="Update Announcement",
         description="Update an existing announcement by its ID",
     )
-    async def update(
-        request: Request, controller: IAnnouncementController = Depends(_get_controller)
+    async def update_announcement(
+        announcement_id: int,
+        data: AnnouncementUpdateDto,
+        request: Request,
+        controller: IAnnouncementController = Depends(_get_controller),
     ):
-        return await controller.update(request)
+        return await controller.update(request, id=announcement_id, data=data)
 
     @router.delete(
         "/{announcement_id}",
@@ -214,9 +246,11 @@ def create_announcement_admin_router(
         summary="Delete Announcement",
         description="Delete an announcement by its ID",
     )
-    async def delete(
-        request: Request, controller: IAnnouncementController = Depends(_get_controller)
+    async def delete_announcement(
+        announcement_id: int,
+        request: Request,
+        controller: IAnnouncementController = Depends(_get_controller),
     ):
-        return await controller.delete(request)
+        return await controller.delete(request, id=announcement_id)
 
     return router

@@ -8,6 +8,7 @@ from .base import (
     datetime,
     JSON,
     MutableDict,
+    MutableList,
     ForeignKey,
     Index,
     Mapped,
@@ -33,10 +34,10 @@ class EventOrganizer(Base):
     name: Mapped[str] = mapped_column(String(50), nullable=False)
     url: Mapped[str] = mapped_column(String(255), nullable=False)
     urls: Mapped[list] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True, default=list
+        MutableList.as_mutable(JSON), nullable=True, default=list
     )
-    links: Mapped[dict[str, str]] = mapped_column(
-        MutableDict.as_mutable(JSON), nullable=True, default=dict
+    links: Mapped[list[dict[str, str]]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=True, default=list
     )
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
@@ -56,16 +57,28 @@ class EventOrganizer(Base):
     )
 
     # Relationships
-    events: Mapped[list["Event"]] = relationship(
-        "Event", back_populates="event_organizer", cascade="all, delete-orphan"
+    events: Mapped[set["Event"]] = relationship(
+        "Event",
+        back_populates="event_organizer",
+        cascade="all, delete-orphan",
+        collection_class=set,
+    )
+    logo_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey(
+            "attachments.id", ondelete="SET NULL", name="fk_attachment_event_organizer"
+        ),
+        nullable=False,
     )
     logo: Mapped[Optional["Attachment"]] = relationship(
-        "Attachment",
-        back_populates="event_organizer_logo",
-        cascade="all, delete-orphan",
+        "Attachment", back_populates="event_organizer_logo", foreign_keys=[logo_id]
     )
-    attachments: Mapped[list["Attachment"]] = relationship(
-        "Attachment", back_populates="event_organizer", cascade="all, delete-orphan"
+    attachments: Mapped[set["Attachment"]] = relationship(
+        "Attachment",
+        back_populates="event_organizer",
+        cascade="save-update, merge",
+        foreign_keys="Attachment.event_organizer_id",
+        collection_class=set,
     )
 
     # Indexes

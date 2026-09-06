@@ -3,27 +3,42 @@ from fastapi import Request, Response
 from core.iControllers.bases.iQueryableController import IQueryableController
 from core.iControllers.bases.iCreatableController import ICreatableController
 from core.iControllers.bases.iUpdatableController import IUpdatableController
+from core.dtos.materialDtos import (
+    MaterialCreateDto,
+    MaterialUpdateDto,
+    MaterialSearchDto,
+    MaterialsCopyOrMoveDto,
+    MaterialsFetchFromDriveDto,
+)
 
 
 class IMaterialController(
-    IQueryableController, ICreatableController, IUpdatableController
+    IQueryableController[MaterialSearchDto],
+    ICreatableController[MaterialCreateDto],
+    IUpdatableController[MaterialUpdateDto],
 ):
     @abstractmethod
-    async def delete_many(self, request: Request) -> Response:
+    async def delete_many(self, request: Request, ids: list[int]) -> Response:
         pass
 
     @abstractmethod
-    async def get_parents(self, request: Request) -> Response:
+    async def get_parents(self, request: Request, id: int) -> Response:
         pass
 
     @abstractmethod
-    async def copy_many(self, request: Request) -> Response:
+    async def copy_many(
+        self, request: Request, data: MaterialsCopyOrMoveDto
+    ) -> Response:
         pass
 
     @abstractmethod
-    async def move_many(self, request: Request) -> Response:
+    async def move_many(
+        self, request: Request, data: MaterialsCopyOrMoveDto
+    ) -> Response:
         pass
 
     @abstractmethod
-    async def fetch_materials_from_drive(self, request: Request) -> Response:
+    async def fetch_materials_from_drive(
+        self, request: Request, data: MaterialsFetchFromDriveDto
+    ) -> Response:
         pass

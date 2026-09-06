@@ -51,11 +51,9 @@ class Release(Base):
     version_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("versions.id"), nullable=False
     )
-    version: Mapped["Version"] = relationship(
-        "Version", back_populates="releases", cascade="all, delete-orphan"
-    )
-    release_items: Mapped[list["ReleaseItem"]] = relationship(
-        "ReleaseItem", back_populates="release", cascade="all, delete-orphan"
+    version: Mapped["Version"] = relationship("Version", back_populates="releases")
+    release_items: Mapped[set["ReleaseItem"]] = relationship(
+        "ReleaseItem", back_populates="release", cascade="all, delete-orphan", collection_class=set
     )
 
     # Indexes

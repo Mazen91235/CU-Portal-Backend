@@ -22,7 +22,16 @@ class NotificationService(INotificationService):
         self.logger = logger
         self.helper_service = helper_service
 
-    # Generic Methods
+    async def begin_transaction(self):
+        await self.notification_repository.begin_transaction()
+
+    async def commit_transaction(self):
+        await self.notification_repository.commit_transaction()
+
+    async def rollback_transaction(self):
+        await self.notification_repository.rollback_transaction()
+
+    # CRUD Functions
     async def find_one(
         self,
         data=None,
@@ -51,7 +60,8 @@ class NotificationService(INotificationService):
     ):
         try:
             includes = includes or []
-            includes.append("notification")
+            if "notification" not in includes:
+                includes.append("notification")
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -137,25 +147,18 @@ class NotificationService(INotificationService):
                     message=result.message,
                 )
             user_notifications = result.data
-            if not user_notifications:
-                await self.logger.log(
-                    action="Find",
-                    entity="Notification",
-                    level="info",
-                    code=404,
-                    message="No notifications found for the user",
-                    source="NotificationService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="No notifications found for the user",
-                )
             notifications = [
-                un.notification for un in user_notifications if un.notification
+                un.notification for un in (user_notifications or []) if un.notification
             ]
-            return BaseResponseDto(success=True, data=notifications)
+            if not user_notifications or not notifications:
+                return BaseResponseDto(
+                    success=True, data=[], next_page=result.next_page
+                )
+            for i in range(len(notifications)):
+                notifications[i].seen = user_notifications[i].seen
+            return BaseResponseDto(
+                success=True, data=notifications, next_page=result.next_page
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -163,7 +166,7 @@ class NotificationService(INotificationService):
                 level="error",
                 code=500,
                 message=f"An error occurred while finding notifications",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NotificationService",
             )
             return BaseResponseDto(
@@ -275,7 +278,7 @@ class NotificationService(INotificationService):
                 level="error",
                 code=500,
                 message=f"An error occurred while marking notification as seen",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NotificationService",
             )
             return BaseResponseDto(
