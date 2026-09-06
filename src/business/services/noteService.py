@@ -1,23 +1,10 @@
-import os
-import math
-from datetime import datetime
-from typing import cast
-from fastapi import Request
+from sqlalchemy import and_
 from core.iServices.iNoteService import INoteService
-from core.iServices.bases.iQueryableService import IQueryableService
-from core.iServices.bases.iUpdatableService import IUpdatableService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
-
 from core.entities.note import Note
-from core.entities.user import User
-from core.entities.subject import Subject
-from core.entities.role import Role
 from core.dtos.baseDtos import BaseResponseDto
-from core.utils.timezoneHandler import TimezoneHandler
-from core.utils.validator import Validator
-from core.utils.mapper import Mapper
 
 
 class NoteService(INoteService):
@@ -32,7 +19,6 @@ class NoteService(INoteService):
         self.helper_service = helper_service
 
     # Transaction Functions
-
     async def begin_transaction(self):
         await self.note_repository.begin_transaction()
 
@@ -56,7 +42,7 @@ class NoteService(INoteService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Note, data, ["content"], is_and, starts_with, is_exact
+                Note, data, ["title", "content"], is_and, starts_with, is_exact
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Note, includes
@@ -80,8 +66,8 @@ class NoteService(INoteService):
                 return BaseResponseDto(
                     success=False, code=result.code, data=None, message=result.message
                 )
-            return BaseResponseDto(success=True, code=200, data=result.data)
-
+            note = result.data
+            return BaseResponseDto(success=True, code=200, data=note)
         except Exception as ex:
             await self.logger.log(
                 action="FindOne",
@@ -114,7 +100,7 @@ class NoteService(INoteService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Note, data, ["content"], is_and, starts_with, is_exact
+                Note, data, ["title", "content"], is_and, starts_with, is_exact
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Note, includes
@@ -140,9 +126,8 @@ class NoteService(INoteService):
                 return BaseResponseDto(
                     success=False, code=result.code, data=None, message=result.message
                 )
-
-            return BaseResponseDto(success=True, code=200, data=result.data)
-
+            notes = result.data
+            return BaseResponseDto(success=True, code=200, data=notes)
         except Exception as ex:
             await self.logger.log(
                 action="Find",
@@ -194,11 +179,48 @@ class NoteService(INoteService):
                     code=401,
                     message="User not logged in",
                 )
-
-            create_res = await self.note_repository.create(data)
-
-            created_note = create_res.data
-
+            data.author_id = logged_in_user.id
+            existing_note_response = await self.note_repository.find_one(
+                and_(
+                    Note.title == data.title,
+                    Note.author_id == logged_in_user.id,
+                    Note.content.is_not_distinct_from(data.content),
+                    Note.date.is_not_distinct_from(data.date),
+                )
+            )
+            if not existing_note_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_note_response.code,
+                    data=None,
+                    message=existing_note_response.message,
+                )
+            existing_note = existing_note_response.data
+            if existing_note:
+                await self.logger.log(
+                    action="Create",
+                    entity="Note",
+                    level="info",
+                    code=409,
+                    message="Note already exists for the user",
+                    details={},
+                    source="NoteService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=409,
+                    data=None,
+                    message="Note already exists for the user",
+                )
+            create_response = await self.note_repository.create(data)
+            if not create_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=create_response.code,
+                    data=None,
+                    message=create_response.message,
+                )
+            created_note = create_response.data
             if not created_note:
                 await self.logger.log(
                     action="Create",
@@ -214,7 +236,6 @@ class NoteService(INoteService):
                     data=None,
                     message="An error occurred while creating note",
                 )
-
             await self.logger.log(
                 action="Create",
                 entity="Note",
@@ -223,13 +244,12 @@ class NoteService(INoteService):
                 message="Note created successfully",
                 source="NoteService",
             )
-
             return BaseResponseDto(
                 success=True,
                 code=201,
                 data=created_note,
+                message="Note created successfully",
             )
-
         except Exception as ex:
             await self.logger.log(
                 action="Create",
@@ -249,50 +269,122 @@ class NoteService(INoteService):
 
     async def update(self, data):
         try:
-            target_res = await self.note_repository.find_one(Note.id == data.id)
-
-            if not target_res.success:
+            target_note_response = await self.note_repository.find_one(
+                Note.id == data.id
+            )
+            if not target_note_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=target_res.code,
+                    code=target_note_response.code,
                     data=None,
-                    message=target_res.message,
+                    message=target_note_response.message,
                 )
-
-            target_note = target_res.data
+            target_note = target_note_response.data
             if not target_note:
                 await self.logger.log(
                     action="Update",
                     entity="Note",
                     level="info",
                     code=404,
-                    message="Note not found",
+                    message="Note not found for update",
                     source="NoteService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=404,
                     data=None,
-                    message="Note not found",
+                    message="Note not found for update",
                 )
-
-            if data.content is not None:
-                target_note.content = data.content
-            if data.date is not None:
-                target_note.date = data.date
-
-            update_res = await self.note_repository.update(target_note)
-
-            if not update_res.success:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="Update",
+                    entity="Note",
+                    level="info",
+                    code=404,
+                    message="Logged-in user not found",
+                    source="NoteService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=update_res.code,
+                    code=404,
                     data=None,
-                    message=update_res.message,
+                    message="Logged-in user not found",
                 )
-
-            updated_note = update_res.data
-
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="Update",
+                    entity="Note",
+                    level="info",
+                    code=404,
+                    message="Logged-in user not found",
+                    source="NoteService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Logged-in user not found",
+                )
+            if target_note.author_id != logged_in_user.id:
+                await self.logger.log(
+                    action="Update",
+                    entity="Note",
+                    level="warning",
+                    code=403,
+                    message="User not authorized to update this note",
+                    source="NoteService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message="User not authorized to update this note",
+                )
+            existing_note_response = await self.note_repository.find_one(
+                and_(
+                    Note.title == data.title,
+                    Note.author_id == logged_in_user.id,
+                    Note.content.is_not_distinct_from(data.content),
+                    Note.date.is_not_distinct_from(data.date),
+                )
+            )
+            if not existing_note_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_note_response.code,
+                    data=None,
+                    message=existing_note_response.message,
+                )
+            existing_note = existing_note_response.data
+            if existing_note and existing_note.id != target_note.id:
+                await self.logger.log(
+                    action="Update",
+                    entity="Note",
+                    level="info",
+                    code=409,
+                    message="Another note with the same title and content already exists for the user",
+                    source="NoteService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=409,
+                    data=None,
+                    message="Another note with the same details already exists for the user",
+                )
+            target_note.title = data.title
+            target_note.content = data.content
+            target_note.date = data.date
+            update_response = await self.note_repository.update(target_note)
+            if not update_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_response.code,
+                    data=None,
+                    message=update_response.message,
+                )
+            updated_note = update_response.data
             if not updated_note:
                 await self.logger.log(
                     action="Update",
@@ -308,7 +400,6 @@ class NoteService(INoteService):
                     data=None,
                     message="An error occurred while updating note",
                 )
-
             await self.logger.log(
                 action="Update",
                 entity="Note",
@@ -317,13 +408,12 @@ class NoteService(INoteService):
                 message="Note updated successfully",
                 source="NoteService",
             )
-
             return BaseResponseDto(
                 success=True,
                 code=200,
                 data=updated_note,
+                message="Note updated successfully",
             )
-
         except Exception as ex:
             await self.logger.log(
                 action="Update",
@@ -343,58 +433,87 @@ class NoteService(INoteService):
 
     async def delete(self, data):
         try:
-            if not data:
-                await self.logger.log(
-                    action="Delete",
-                    entity="Note",
-                    level="warning",
-                    code=400,
-                    message="No data provided for note deletion.",
-                    details={},
-                    source="NoteService",
-                )
+            target_note_response = await self.note_repository.find_one(
+                Note.id == data.id
+            )
+            if not target_note_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=400,
-                    message="No data provided for deletion",
-                )
-            result = await self.note_repository.find_one(predicate=(Note.id == data.id))
-
-            if not result.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=result.code,
+                    code=target_note_response.code,
                     data=None,
-                    message=result.message,
+                    message=target_note_response.message,
                 )
-
-            note = result.data
-            if not note:
+            target_note = target_note_response.data
+            if not target_note:
                 await self.logger.log(
                     action="Delete",
                     entity="Note",
                     level="info",
                     code=404,
-                    message="Note not found",
+                    message="Note not found for deletion",
                     source="NoteService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=404,
                     data=None,
-                    message="Note not found",
+                    message="Note not found for deletion",
                 )
-
-            delete_res = await self.Note_repository.delete(note)
-
-            if not delete_res.success:
+            logged_in_user_response = await self.helper_service.get_logged_in_user()
+            if not logged_in_user_response.success:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Note",
+                    level="info",
+                    code=404,
+                    message="Logged-in user not found",
+                    source="NoteService",
+                )
                 return BaseResponseDto(
                     success=False,
-                    code=delete_res.code,
+                    code=404,
                     data=None,
-                    message=delete_res.message,
+                    message="Logged-in user not found",
                 )
-
+            logged_in_user = logged_in_user_response.data
+            if not logged_in_user:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Note",
+                    level="info",
+                    code=404,
+                    message="Logged-in user not found",
+                    source="NoteService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Logged-in user not found",
+                )
+            if target_note.author_id != logged_in_user.id:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Note",
+                    level="warning",
+                    code=403,
+                    message="User not authorized to delete this note",
+                    source="NoteService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message="User not authorized to delete this note",
+                )
+            delete_response = await self.note_repository.delete(target_note)
+            if not delete_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=delete_response.code,
+                    data=None,
+                    message=delete_response.message,
+                )
             await self.logger.log(
                 action="Delete",
                 entity="Note",
@@ -403,8 +522,12 @@ class NoteService(INoteService):
                 message="Note deleted successfully",
                 source="NoteService",
             )
-            return BaseResponseDto(success=True, code=200, data=True)
-
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=None,
+                message="Note deleted successfully",
+            )
         except Exception as ex:
             await self.logger.log(
                 action="Delete",

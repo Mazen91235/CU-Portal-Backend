@@ -3,7 +3,15 @@ from core.iControllers.iNoteController import INoteController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.dtos.baseDtos import BaseResponseDto
-from core.dtos.noteDtos import NoteResponseDto
+from core.dtos.noteDtos import (
+    NoteCreateDto,
+    NoteResponseDto,
+    NoteUpdateDto,
+    NoteSearchDto,
+)
+from core.models.queryModel import QueryModel
+from core.utils.parser import Parser
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_note_user_router(
@@ -23,98 +31,9 @@ def create_note_user_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
-
-    async def _is_ready(
-        request: Request,
-        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
-    ):
-        return await auth_middleware.is_ready(request)
-
-    async def _has_registered_subjects(
-        request: Request,
-        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
-    ):
-        return await auth_middleware.has_registered_subjects(request)
-
-    @router.get(
-        "/{note_id}",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
-        ],
-        response_model=BaseResponseDto[NoteResponseDto],
-        status_code=200,
-        summary="Find Note",
-        description="Find a specific note by its ID",
-    )
-    async def find_one(  # type: ignore
-        request: Request, controller: INoteController = Depends(_get_controller)
-    ):
-        return await controller.find_one(request)
-
-    @router.get(
-        "/",
-        dependencies=[
-            Depends(_is_logged_in),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
-        ],
-        response_model=BaseResponseDto[list[NoteResponseDto]],
-        status_code=200,
-        summary="Find Notes",
-        description="Find all notes for the currently logged-in user",
-    )
-    async def find(  # type: ignore
-        request: Request, controller: INoteController = Depends(_get_controller)
-    ):
-        return await controller.find(request)
-
-    return router
-
-
-def create_note_admin_router(
-    controller_provider, auth_middleware_provider, validation_middleware_provider
-):
-    router = APIRouter(prefix="/notes", tags=["Admin Notes"])
-
-    def _get_controller() -> INoteController:
-        return controller_provider()
-
-    def _get_auth_middleware() -> IAuthMiddleware:
-        return auth_middleware_provider()
-
-    def _get_validation_middleware() -> IValidationMiddleware:
-        return validation_middleware_provider()
-
-    async def _is_logged_in(
-        request: Request,
-        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
-    ):
-        return await auth_middleware.is_logged_in(request)
-
-    async def _is_ready(
-        request: Request,
-        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
-    ):
-        return await auth_middleware.is_ready(request)
-
-    async def _has_registered_subjects(
-        request: Request,
-        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
-    ):
-        return await auth_middleware.has_registered_subjects(request)
-
-    def _is_authorized(*permissions):
-        async def authorize(
-            request: Request,
-            auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
-        ):
-            return await auth_middleware.is_authorized(request, *permissions)
-
-        return authorize
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     def _validate(*keys):
         async def validate_request(
@@ -131,49 +50,45 @@ def create_note_admin_router(
         "/{note_id}",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("View Notes")),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
         ],
         response_model=BaseResponseDto[NoteResponseDto],
         status_code=200,
         summary="Find Note",
-        description="Find a note by its ID (Admin View)",
+        description="Find a specific note by its ID",
     )
-    async def find_one(  # type: ignore
-        request: Request, controller: INoteController = Depends(_get_controller)
+    async def find_one_note(
+        note_id: int,
+        request: Request,
+        controller: INoteController = Depends(_get_controller),
     ):
-        return await controller.find_one(request)
+        return await controller.find_one(request, id=note_id)
 
     @router.get(
         "/",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("View Notes")),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
         ],
         response_model=BaseResponseDto[list[NoteResponseDto]],
         status_code=200,
         summary="Find Notes",
-        description="Find notes based on query parameters (Admin View)",
+        description="Find all notes for the currently logged-in user",
     )
-    async def find(  # type: ignore
-        request: Request, controller: INoteController = Depends(_get_controller)
+    async def find_notes(
+        request: Request,
+        query: QueryModel[NoteSearchDto] = Depends(
+            Parser.parse_query(QueryModel[NoteSearchDto])
+        ),
+        controller: INoteController = Depends(_get_controller),
     ):
-        return await controller.find(request)
+        return await controller.find(request, query=query)
 
     @router.post(
         "/",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("Manage Notes")),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
             Depends(
                 _validate(
-                    "content",
-                    "date",
+                    "title",
                 )
             ),
         ],
@@ -182,22 +97,21 @@ def create_note_admin_router(
         summary="Create Note",
         description="Create a new note",
     )
-    async def create(  # type: ignore
-        request: Request, controller: INoteController = Depends(_get_controller)
+    async def create_note(
+        data: NoteCreateDto,
+        request: Request,
+        controller: INoteController = Depends(_get_controller),
     ):
-        return await controller.create(request)
+        return await controller.create(request, data=data)
 
     @router.patch(
         "/{note_id}",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("Manage Notes")),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
             Depends(
                 _validate(
+                    "title",
                     "content",
-                    "date",
                 )
             ),
         ],
@@ -206,27 +120,29 @@ def create_note_admin_router(
         summary="Update Note",
         description="Update an existing note by its ID",
     )
-    async def update(  # type: ignore
-        request: Request, controller: INoteController = Depends(_get_controller)
+    async def update_note(
+        note_id: int,
+        data: NoteUpdateDto,
+        request: Request,
+        controller: INoteController = Depends(_get_controller),
     ):
-        return await controller.update(request)
+        return await controller.update(request, id=note_id, data=data)
 
     @router.delete(
         "/{note_id}",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(_is_authorized("Manage Notes")),
-            Depends(_is_ready),
-            Depends(_has_registered_subjects),
         ],
-        response_model=BaseResponseDto[bool],
+        response_model=BaseResponseDto,
         status_code=200,
         summary="Delete Note",
         description="Delete a note by its ID",
     )
-    async def delete(  # type: ignore
-        request: Request, controller: INoteController = Depends(_get_controller)
+    async def delete_note(
+        note_id: int,
+        request: Request,
+        controller: INoteController = Depends(_get_controller),
     ):
-        return await controller.delete(request)
+        return await controller.delete(request, id=note_id)
 
     return router

@@ -1,30 +1,20 @@
-# FastAPI & Python Built-ins
-from fastapi import Request
-from pydantic import ValidationError
-from datetime import datetime
-import json
-
-# Interfaces
+from typing import cast
 from core.iControllers.iNoteController import INoteController
 from core.iServices.iNoteService import INoteService
 from core.iLoggers.iBaseLogger import IBaseLogger
-
-# Utilities & Handlers
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
-from core.utils.parser import Parser
 
-# Entities, DTOs & Models
+# Entities & DTOs
 from core.entities.note import Note
 from core.dtos.noteDtos import (
-    NoteSearchDto,
     NoteCreateDto,
     NoteResponseDto,
     NoteUpdateDto,
+    NoteSearchDto,
     NoteDeleteDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class NoteController(INoteController):
@@ -33,26 +23,15 @@ class NoteController(INoteController):
         self.logger = logger
 
     # CRUD Functions
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         try:
-            note_id = request.path_params.get("note_id")
-            if not note_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Note ID is required",
-                )
-
             entity_search_dto = Generator[NoteSearchDto].generate(
-                NoteSearchDto, {"id": note_id}
+                NoteSearchDto, {"id": id}
             )
 
             response = await self.note_service.find_one(
                 entity_search_dto,
-                [
-                    "content",
-                    "author_id",
-                ],
+                ["author"],
             )
 
             if not response.success:
@@ -103,12 +82,8 @@ class NoteController(INoteController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def find(self, request: Request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[NoteSearchDto],
-            )
             entity_search_dto = Generator[NoteSearchDto].generate_from_query(
                 NoteSearchDto, query
             )
@@ -145,23 +120,8 @@ class NoteController(INoteController):
 
             notes = response.data
 
-            if not notes:
-                await self.logger.log(
-                    action="Find",
-                    entity="Note",
-                    level="info",
-                    code=404,
-                    message="Notes not found",
-                    source="NoteController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="notes not found",
-                )
-
             notes_mapped = Mapper[Note, NoteResponseDto].map_list(
-                notes, NoteResponseDto, True
+                notes or [], NoteResponseDto, True
             )
 
             return ResponseHandler.generate_response(
@@ -186,11 +146,9 @@ class NoteController(INoteController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def create(self, request: Request):
+    async def create(self, request, data):
         try:
             await self.note_service.begin_transaction()
-            payload = await request.json()
-            data = Generator[NoteCreateDto].generate(NoteCreateDto, payload)
             note = Mapper[NoteCreateDto, Note].map(data, Note)
 
             response = await self.note_service.create(note)
@@ -204,6 +162,21 @@ class NoteController(INoteController):
                 )
 
             created_note = response.data
+            if not created_note:
+                await self.note_service.rollback_transaction()
+                await self.logger.log(
+                    action="Create",
+                    entity="Note",
+                    level="error",
+                    code=500,
+                    message="Failed to create note",
+                    source="NoteController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="Failed to create note",
+                )
             note_mapped = Mapper[Note, NoteResponseDto].map(
                 created_note, NoteResponseDto, True
             )
@@ -233,24 +206,11 @@ class NoteController(INoteController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update(self, request: Request):
+    async def update(self, request, id, data):
         try:
             await self.note_service.begin_transaction()
-
-            note_id = request.path_params.get("note_id")
-
-            if not note_id:
-                await self.note_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Note ID is required",
-                )
-
-            payload = await request.json()
-            data = Generator[NoteUpdateDto].generate(NoteUpdateDto, payload)
-            note = Mapper[NoteUpdateDto, Note].map(data, Note)
-            note.id = int(note_id)
+            note = cast(Note, Mapper[NoteUpdateDto, Note].map(data, Note))
+            note.id = id
 
             response = await self.note_service.update(note)
 
@@ -263,6 +223,21 @@ class NoteController(INoteController):
                 )
 
             updated_note = response.data
+            if not updated_note:
+                await self.note_service.rollback_transaction()
+                await self.logger.log(
+                    action="Update",
+                    entity="Note",
+                    level="error",
+                    code=500,
+                    message="Failed to update note",
+                    source="NoteController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="Failed to update note, please try again later",
+                )
             note_mapped = Mapper[Note, NoteResponseDto].map(
                 updated_note, NoteResponseDto, True
             )
@@ -292,23 +267,10 @@ class NoteController(INoteController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def delete(self, request: Request):
+    async def delete(self, request, id):
         try:
             await self.note_service.begin_transaction()
-
-            note_id = request.path_params.get("note_id")
-
-            if not note_id:
-                await self.note_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Note ID is required",
-                )
-
-            data = Generator[NoteDeleteDto].generate(
-                NoteDeleteDto, {"id": int(note_id)}
-            )
+            data = Generator[NoteDeleteDto].generate(NoteDeleteDto, {"id": id})
             entity = Mapper[NoteDeleteDto, Note].map(data, Note)
 
             response = await self.note_service.delete(entity)
