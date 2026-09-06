@@ -276,6 +276,7 @@ class EventService(IEventService):
                     Event.faculty_id.is_not_distinct_from(data.faculty_id),
                     Event.department_id.is_not_distinct_from(data.department_id),
                     Event.year_id.is_not_distinct_from(data.year_id),
+                    Event.event_organizer_id == data.event_organizer_id,
                     func.lower(Event.title) == func.lower(data.title),
                 )
             )
@@ -306,7 +307,7 @@ class EventService(IEventService):
                     success=False,
                     code=400,
                     data=None,
-                    message="An event with the same title already exists for the specified faculty, department, and year.",
+                    message="An event with the same title already exists for the specified details.",
                 )
             data.details = data.details or {}
             url = data.details.get("url")
@@ -774,6 +775,45 @@ class EventService(IEventService):
                     code=400,
                     data=None,
                     message="Invalid online event location URL provided for update.",
+                )
+            existing_event_response = await self.event_repository.find_one(
+                and_(
+                    Event.faculty_id.is_not_distinct_from(data.faculty_id),
+                    Event.department_id.is_not_distinct_from(data.department_id),
+                    Event.year_id.is_not_distinct_from(data.year_id),
+                    Event.event_organizer_id == data.event_organizer_id,
+                    func.lower(Event.title) == func.lower(data.title),
+                )
+            )
+            if not existing_event_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_event_response.code,
+                    data=None,
+                    message=existing_event_response.message,
+                )
+            existing_event = existing_event_response.data
+            if existing_event and existing_event.id != target_event.id:
+                await self.logger.log(
+                    action="Update",
+                    entity="Event",
+                    level="warning",
+                    code=400,
+                    message="An event with the same title already exists for the specified faculty, department, and year.",
+                    details={
+                        "title": data.title,
+                        "faculty_id": data.faculty_id,
+                        "department_id": data.department_id,
+                        "year_id": data.year_id,
+                        "event_organizer_id": data.event_organizer_id,
+                    },
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="An event with the same title already exists for the specified details.",
                 )
             old_logo = target_event.logo
             old_attachments = target_event.attachments or []

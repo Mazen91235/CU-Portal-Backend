@@ -32,16 +32,9 @@ class EventOrganizer(Base):
     # Columns
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(50), nullable=False)
-    url: Mapped[str] = mapped_column(String(255), nullable=False)
-    urls: Mapped[list] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
-    links: Mapped[list[dict[str, str]]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
     details: Mapped[dict] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
-    )
+    )  # eg. (url, urls, links)
 
     # Timestamps
     created_at: Mapped[Optional[datetime]] = mapped_column(

@@ -37,7 +37,10 @@ from api.routes.messageRoutes import (
     create_message_public_router,
     create_message_admin_router,
 )
-from api.routes.eventOrganizerRoutes import create_event_organizer_user_router, create_event_organizer_admin_router
+from api.routes.eventOrganizerRoutes import (
+    create_event_organizer_user_router,
+    create_event_organizer_admin_router,
+)
 from api.routes.weekRoutes import (
     create_week_user_router,
     create_week_admin_router,
@@ -348,6 +351,10 @@ class Container(containers.DeclarativeContainer):
     event_organizer_service = providers.Factory(
         EventOrganizerService,
         event_organizer_repository=event_organizer_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+
     year_service = providers.Factory(
         YearService,
         year_repository=year_repository,
@@ -508,8 +515,11 @@ class Container(containers.DeclarativeContainer):
     )
 
     event_organizer_controller = providers.Factory(
-        EventOrganizerController, event_organizer_service=event_organizer_service, logger=logger
+        EventOrganizerController,
+        event_organizer_service=event_organizer_service,
+        logger=logger,
     )
+
     year_controller = providers.Factory(
         YearController, year_service=year_service, logger=logger
     )
@@ -722,25 +732,24 @@ class Container(containers.DeclarativeContainer):
 
     event_organizer_user_routes = providers.Factory(
         create_event_organizer_user_router,
-        controller_provider=event_organizer_controller.provider, 
+        controller_provider=event_organizer_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
-        validation_middleware_provider=validation_middleware.provider,
     )
-      
+
     event_organizer_admin_routes = providers.Factory(
         create_event_organizer_admin_router,
-        controller_provider=event_organizer_controller.provider, 
+        controller_provider=event_organizer_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
-      
+
     subject_user_routes = providers.Factory(
         create_subject_user_router,
         controller_provider=subject_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
-      
+
     subject_admin_routes = providers.Factory(
         create_subject_admin_router,
         controller_provider=subject_controller.provider,

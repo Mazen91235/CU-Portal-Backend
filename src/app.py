@@ -25,6 +25,7 @@ from core.dtos.departmentDtos import *
 from core.dtos.exactRoleDtos import *
 from core.dtos.examDtos import *
 from core.dtos.noteDtos import *
+from core.dtos.eventOrganizerDtos import *
 from core.dtos.eventDtos import *
 from core.dtos.facultyDtos import *
 from core.dtos.logDtos import *

@@ -1,44 +1,36 @@
+from typing import cast
 from core.iControllers.iEventOrganizerController import IEventOrganizerController
 from core.iServices.iEventOrganizerService import IEventOrganizerService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
-from core.utils.parser import Parser
-import json
 
 # Entities & DTOs
 from core.entities.eventOrganizer import EventOrganizer
 from core.dtos.eventOrganizerDtos import (
     EventOrganizerCreateDto,
-    EventOrganizerUpdateDto,
     EventOrganizerResponseDto,
+    EventOrganizerUpdateDto,
     EventOrganizerSearchDto,
     EventOrganizerDeleteDto,
 )
-from core.models.queryModel import QueryModel
 
 
 class EventOrganizerController(IEventOrganizerController):
-    def __init__(self, event_organizer_service: IEventOrganizerService, logger: IBaseLogger):
+    def __init__(
+        self, event_organizer_service: IEventOrganizerService, logger: IBaseLogger
+    ):
         self.event_organizer_service = event_organizer_service
         self.logger = logger
 
     # CRUD Functions
-    async def find_one(self, request):
+    async def find_one(self, request, id):
         try:
-            event_organizer_id = request.path_params.get("event_organizer_id")
-            if not event_organizer_id:
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Event Organizer ID is required",
-                )
-                
             entity_search_dto = Generator[EventOrganizerSearchDto].generate(
-                EventOrganizerSearchDto, {"id": int(event_organizer_id)}
+                EventOrganizerSearchDto, {"id": id}
             )
-                
+
             response = await self.event_organizer_service.find_one(
                 entity_search_dto,
                 [
@@ -47,14 +39,14 @@ class EventOrganizerController(IEventOrganizerController):
                     "attachments",
                 ],
             )
-                
+
             if not response.success:
                 return ResponseHandler.generate_response(
                     success=False,
                     code=response.code,
                     message=response.message,
                 )
-                
+
             event_organizer = response.data
             if not event_organizer:
                 await self.logger.log(
@@ -70,10 +62,10 @@ class EventOrganizerController(IEventOrganizerController):
                     code=404,
                     message="Event Organizer not found",
                 )
-            event_organizer_mapped = Mapper[EventOrganizer, EventOrganizerResponseDto].map(
-                event_organizer, EventOrganizerResponseDto, True
-            )
-                
+            event_organizer_mapped = Mapper[
+                EventOrganizer, EventOrganizerResponseDto
+            ].map(event_organizer, EventOrganizerResponseDto, True)
+
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
@@ -95,12 +87,8 @@ class EventOrganizerController(IEventOrganizerController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def find(self, request):
+    async def find(self, request, query):
         try:
-            query = Parser.parse_query(
-                request.query_params.get("query", "{}"),
-                QueryModel[EventOrganizerSearchDto],
-            )
             entity_search_dto = Generator[EventOrganizerSearchDto].generate_from_query(
                 EventOrganizerSearchDto, query
             )
@@ -136,24 +124,9 @@ class EventOrganizerController(IEventOrganizerController):
                 )
 
             event_organizers = response.data
-            if not event_organizers:
-                await self.logger.log(
-                    action="Find",
-                    entity="EventOrganizer",
-                    level="info",
-                    code=404,
-                    message="Event Organizers not found",
-                    source="EventOrganizerController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=404,
-                    message="Event Organizers not found",
-                )
-
-            event_organizers_mapped = Mapper[EventOrganizer, EventOrganizerResponseDto].map_list(
-                event_organizers, EventOrganizerResponseDto, True
-            )
+            event_organizers_mapped = Mapper[
+                EventOrganizer, EventOrganizerResponseDto
+            ].map_list(event_organizers or [], EventOrganizerResponseDto, True)
 
             return ResponseHandler.generate_response(
                 success=True,
@@ -176,16 +149,15 @@ class EventOrganizerController(IEventOrganizerController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def create(self, request):
+    async def create(self, request, data):
         try:
             await self.event_organizer_service.begin_transaction()
-            payload = await request.json()
-                
-            data = Generator[EventOrganizerCreateDto].generate(EventOrganizerCreateDto, payload)
-            event_organizer = Mapper[EventOrganizerCreateDto, EventOrganizer].map(data, EventOrganizer)
-                
+            event_organizer = Mapper[EventOrganizerCreateDto, EventOrganizer].map(
+                data, EventOrganizer
+            )
+
             response = await self.event_organizer_service.create(event_organizer)
-                
+
             if not response.success:
                 await self.event_organizer_service.rollback_transaction()
                 return ResponseHandler.generate_response(
@@ -195,10 +167,25 @@ class EventOrganizerController(IEventOrganizerController):
                 )
 
             created_event_organizer = response.data
-            event_organizer_mapped = Mapper[EventOrganizer, EventOrganizerResponseDto].map(
-                created_event_organizer, EventOrganizerResponseDto, True
-            )
-                
+            if not created_event_organizer:
+                await self.event_organizer_service.rollback_transaction()
+                await self.logger.log(
+                    action="Create",
+                    entity="EventOrganizer",
+                    level="error",
+                    code=500,
+                    message="Failed to create event organizer",
+                    source="EventOrganizerController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="Failed to create event organizer",
+                )
+            event_organizer_mapped = Mapper[
+                EventOrganizer, EventOrganizerResponseDto
+            ].map(created_event_organizer, EventOrganizerResponseDto, True)
+
             await self.event_organizer_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
@@ -223,26 +210,19 @@ class EventOrganizerController(IEventOrganizerController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def update(self, request):
+    async def update(self, request, id, data):
         try:
             await self.event_organizer_service.begin_transaction()
-            event_organizer_id = request.path_params.get("event_organizer_id")
-                
-            if not event_organizer_id:
-                await self.event_organizer_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Event Organizer ID is required",
-                )
-
-            payload = await request.json()
-            payload["id"] = int(event_organizer_id)
-            data = Generator[EventOrganizerUpdateDto].generate(EventOrganizerUpdateDto, payload)
-            event_organizer = Mapper[EventOrganizerUpdateDto, EventOrganizer].map(data, EventOrganizer)
+            event_organizer = cast(
+                EventOrganizer,
+                Mapper[EventOrganizerUpdateDto, EventOrganizer].map(
+                    data, EventOrganizer
+                ),
+            )
+            event_organizer.id = id
 
             response = await self.event_organizer_service.update(event_organizer)
-                
+
             if not response.success:
                 await self.event_organizer_service.rollback_transaction()
                 return ResponseHandler.generate_response(
@@ -252,10 +232,25 @@ class EventOrganizerController(IEventOrganizerController):
                 )
 
             updated_event_organizer = response.data
-            event_organizer_mapped = Mapper[EventOrganizer, EventOrganizerResponseDto].map(
-                updated_event_organizer, EventOrganizerResponseDto, True
-            )
-                
+            if not updated_event_organizer:
+                await self.event_organizer_service.rollback_transaction()
+                await self.logger.log(
+                    action="Update",
+                    entity="EventOrganizer",
+                    level="error",
+                    code=500,
+                    message="Failed to update event organizer",
+                    source="EventOrganizerController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="Failed to update event organizer",
+                )
+            event_organizer_mapped = Mapper[
+                EventOrganizer, EventOrganizerResponseDto
+            ].map(updated_event_organizer, EventOrganizerResponseDto, True)
+
             await self.event_organizer_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
@@ -280,26 +275,18 @@ class EventOrganizerController(IEventOrganizerController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def delete(self, request):
+    async def delete(self, request, id):
         try:
             await self.event_organizer_service.begin_transaction()
-            event_organizer_id = request.path_params.get("event_organizer_id")
-                
-            if not event_organizer_id:
-                await self.event_organizer_service.rollback_transaction()
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="Event Organizer ID is required",
-                )
-
             data = Generator[EventOrganizerDeleteDto].generate(
-                EventOrganizerDeleteDto, {"id": int(event_organizer_id)}
+                EventOrganizerDeleteDto, {"id": id}
             )
-            entity = Mapper[EventOrganizerDeleteDto, EventOrganizer].map(data, EventOrganizer)
-                
+            entity = Mapper[EventOrganizerDeleteDto, EventOrganizer].map(
+                data, EventOrganizer
+            )
+
             response = await self.event_organizer_service.delete(entity)
-                
+
             if not response.success:
                 await self.event_organizer_service.rollback_transaction()
                 return ResponseHandler.generate_response(
