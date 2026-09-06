@@ -37,6 +37,7 @@ from api.routes.messageRoutes import (
     create_message_public_router,
     create_message_admin_router,
 )
+from api.routes.eventOrganizerRoutes import create_event_organizer_user_router, create_event_organizer_admin_router
 from api.routes.weekRoutes import (
     create_week_user_router,
     create_week_admin_router,
@@ -64,6 +65,7 @@ from api.controllers.examController import ExamController
 from api.controllers.facultyController import FacultyController
 from api.controllers.fileController import FileController
 from api.controllers.messageController import MessageController
+from api.controllers.eventOrganizerController import EventOrganizerController
 from api.controllers.logController import LogController
 from api.controllers.materialController import MaterialController
 from api.controllers.subjectController import SubjectController
@@ -89,6 +91,7 @@ from business.services.logService import LogService
 from business.services.materialService import MaterialService
 from business.services.messageService import MessageService
 from business.services.facultyService import FacultyService
+from business.services.eventOrganizerService import EventOrganizerService
 from business.services.yearService import YearService
 from business.services.departmentService import DepartmentService
 from business.services.weekService import WeekService
@@ -120,6 +123,7 @@ from core.entities.userNotification import UserNotification
 from core.entities.notification import Notification
 from core.entities.message import Message
 from core.entities.faculty import Faculty
+from core.entities.eventOrganizer import EventOrganizer
 from core.entities.week import Week
 from core.entities.event import Event
 from core.entities.userEvent import UserEvent
@@ -341,6 +345,9 @@ class Container(containers.DeclarativeContainer):
         helper_service=helper_service,
     )
 
+    event_organizer_service = providers.Factory(
+        EventOrganizerService,
+        event_organizer_repository=event_organizer_repository,
     year_service = providers.Factory(
         YearService,
         year_repository=year_repository,
@@ -500,6 +507,9 @@ class Container(containers.DeclarativeContainer):
         FacultyController, faculty_service=faculty_service, logger=logger
     )
 
+    event_organizer_controller = providers.Factory(
+        EventOrganizerController, event_organizer_service=event_organizer_service, logger=logger
+    )
     year_controller = providers.Factory(
         YearController, year_service=year_service, logger=logger
     )
@@ -710,13 +720,27 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    event_organizer_user_routes = providers.Factory(
+        create_event_organizer_user_router,
+        controller_provider=event_organizer_controller.provider, 
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+      
+    event_organizer_admin_routes = providers.Factory(
+        create_event_organizer_admin_router,
+        controller_provider=event_organizer_controller.provider, 
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+      
     subject_user_routes = providers.Factory(
         create_subject_user_router,
         controller_provider=subject_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
-
+      
     subject_admin_routes = providers.Factory(
         create_subject_admin_router,
         controller_provider=subject_controller.provider,
