@@ -126,3 +126,11 @@ class IUserService(
         self, data: UserHasPermissionsDto
     ) -> BaseResponseDto[bool]:
         pass
+
+    @abstractmethod
+    async def register_device(self, device_token: str) -> BaseResponseDto[bool]:
+        pass
+
+    @abstractmethod
+    async def unregister_device(self, device_token: str) -> BaseResponseDto[bool]:
+        pass

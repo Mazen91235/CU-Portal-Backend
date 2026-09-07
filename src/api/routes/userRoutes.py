@@ -12,6 +12,7 @@ from core.dtos.userDtos import (
     UserHasPermissionsDto,
     UserUpdateAcademicDataDto,
     UserStatisticsResponseDto,
+    UserDeviceActionDto,
 )
 from core.models.queryModel import QueryModel
 from core.utils.parser import Parser
@@ -148,6 +149,44 @@ def create_user_user_router(
         controller: IUserController = Depends(_get_controller),
     ):
         return await controller.update_academic_data(request, data=data)
+
+    @router.post(
+        "/devices/register",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(allow_inactive),
+            Depends(_validate("device_token")),
+        ],
+        response_model=BaseResponseDto,
+        status_code=200,
+        summary="Register Device",
+        description="Register a new device for the currently logged in user",
+    )
+    async def register_device(
+        data: UserDeviceActionDto,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
+    ):
+        return await controller.register_device(request, data=data)
+
+    @router.post(
+        "/devices/unregister",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(allow_inactive),
+            Depends(_validate("device_token")),
+        ],
+        response_model=BaseResponseDto,
+        status_code=200,
+        summary="Unregister Device",
+        description="Unregister a device for the currently logged in user",
+    )
+    async def unregister_device(
+        data: UserDeviceActionDto,
+        request: Request,
+        controller: IUserController = Depends(_get_controller),
+    ):
+        return await controller.unregister_device(request, data=data)
 
     return router
 

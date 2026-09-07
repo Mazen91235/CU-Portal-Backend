@@ -10,6 +10,7 @@ from .base import (
     Mapped,
     Optional,
     TimezoneHandler,
+    TypedDict,
     AssociationProxy,
     association_proxy,
     TYPE_CHECKING,

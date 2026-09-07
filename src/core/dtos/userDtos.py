@@ -341,3 +341,7 @@ class UserStatisticsResponseDto(BaseModel):
     last_five_users_active: list[str] = Field(
         ..., description="List of Avatar URLs of the last five users who were active"
     )
+
+
+class UserDeviceActionDto(BaseModel):
+    device_token: str = Field(..., description="Unique key of the device")

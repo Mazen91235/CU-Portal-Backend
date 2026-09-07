@@ -1144,3 +1144,69 @@ class UserController(IUserController):
                 code=500,
                 message="An error occurred while processing the request, please try again later",
             )
+
+    async def register_device(self, request, data):
+        try:
+            await self.user_service.begin_transaction()
+            response = await self.user_service.register_device(data.device_token)
+            if not response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            await self.user_service.commit_transaction()
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+            )
+        except Exception as e:
+            await self.user_service.rollback_transaction()
+            await self.logger.log(
+                action="RegisterDevice",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def unregister_device(self, request, data):
+        try:
+            await self.user_service.begin_transaction()
+            response = await self.user_service.unregister_device(data.device_token)
+            if not response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            await self.user_service.commit_transaction()
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+            )
+        except Exception as e:
+            await self.user_service.rollback_transaction()
+            await self.logger.log(
+                action="UnregisterDevice",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="UserController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )

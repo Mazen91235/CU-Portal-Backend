@@ -2,6 +2,7 @@ import os
 import sys
 import uvicorn
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -50,6 +51,7 @@ from core.entities.task import Task
 from core.entities.announcement import Announcement
 from core.entities.user import User
 from core.entities.event import Event
+from core.utils.firebaseHandler import FirebaseHandler
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -73,11 +75,20 @@ def rebuild_response_dtos() -> None:
         dto.model_rebuild(_types_namespace=dto_namespace)
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup code here
+    FirebaseHandler.init_firebase()
+    yield
+    # Shutdown code here
+
+
 def create_app() -> FastAPI:
     rebuild_response_dtos()
     app = FastAPI(
         title="CU - Portal",
         version="1.0.0",
+        lifespan=lifespan,
     )
     container = Container()
     app.state.container = container

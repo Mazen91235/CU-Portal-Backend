@@ -39,6 +39,7 @@ from core.utils.entitiesHandler import EntitiesHandler
 from core.utils.fernetHandler import FernetHandler
 from core.utils.timezoneHandler import TimezoneHandler
 from core.utils.validator import Validator
+from core.utils.firebaseHandler import FirebaseHandler
 
 U = TypeVar("U")  # EntitySearchDto Type
 
@@ -984,6 +985,9 @@ class HelperService(IHelperService[U]):
                         data=False,
                         message="Failed to create notification",
                     )
+                await self._send_push_notifications(
+                    session, user_ids, notification_type, content, url=url
+                )
                 await session.commit()  # Commit the transaction
                 return BaseResponseDto(
                     success=True,
@@ -999,6 +1003,69 @@ class HelperService(IHelperService[U]):
                     message="An error occurred while sending the notification",
                     error=repr(ex),
                 )
+
+    async def _send_push_notifications(
+        self, session, user_ids, notification_type, body, url=None
+    ):
+        try:
+            title = "New Notification"
+            if "new" in body.lower():
+                if notification_type.lower() == "announcement":
+                    title = "New Announcement has been posted"
+                elif notification_type.lower() == "task":
+                    title = "New Task has been assigned"
+                elif notification_type.lower() == "exam":
+                    title = "New Exam has been scheduled"
+                elif notification_type.lower() == "event":
+                    title = "New Event has been created"
+            elif "updated" in body.lower():
+                if notification_type.lower() == "announcement":
+                    title = "Announcement has been updated"
+                elif notification_type.lower() == "task":
+                    title = "Task has been updated"
+                elif notification_type.lower() == "exam":
+                    title = "Exam has been updated"
+                elif notification_type.lower() == "event":
+                    title = "Event has been updated"
+            for user_id in user_ids:
+                user_response = await self.user_repository.find_one(User.id == user_id)
+                if not user_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=user_response.code,
+                        data=False,
+                        message=user_response.message,
+                    )
+                user = user_response.data
+                if not user:
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=False,
+                        message=f"User with ID {user_id} not found",
+                    )
+                should_update_devices = False
+                for device_token in user.devices or []:
+                    if not device_token or not device_token.strip():
+                        continue
+                    send_response = FirebaseHandler.send_notification(
+                        device_token=device_token, title=title, body=body, url=url
+                    )
+                    if not send_response.success and send_response.code == 404:
+                        user.devices.remove(device_token)
+                        should_update_devices = True
+                if should_update_devices:
+                    await self.user_repository.update(
+                        user, ["devices"], session=session
+                    )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="An error occurred while sending push notifications",
+                error=repr(ex),
+            )
 
     async def send_notification(
         self,

@@ -11,6 +11,7 @@ from core.dtos.userDtos import (
     UserUpdateUsersDto,
     UserUpdateAcademicDataDto,
     UserHasPermissionsDto,
+    UserDeviceActionDto,
 )
 from core.models.queryModel import QueryModel
 
@@ -105,5 +106,17 @@ class IUserController(
     @abstractmethod
     async def has_permissions(
         self, request: Request, data: UserHasPermissionsDto
+    ) -> Response:
+        pass
+
+    @abstractmethod
+    async def register_device(
+        self, request: Request, data: UserDeviceActionDto
+    ) -> Response:
+        pass
+
+    @abstractmethod
+    async def unregister_device(
+        self, request: Request, data: UserDeviceActionDto
     ) -> Response:
         pass
