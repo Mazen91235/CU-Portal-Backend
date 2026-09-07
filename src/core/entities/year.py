@@ -54,19 +54,34 @@ class Year(Base):
 
     # Relationships
     users: Mapped[set["User"]] = relationship(
-        "User", back_populates="year", cascade="all, delete-orphan", collection_class=set
+        "User",
+        back_populates="year",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     subjects: Mapped[set["Subject"]] = relationship(
-        "Subject", back_populates="year", cascade="all, delete-orphan", collection_class=set
+        "Subject",
+        back_populates="year",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     announcements: Mapped[set["Announcement"]] = relationship(
-        "Announcement", back_populates="year", cascade="all, delete-orphan", collection_class=set
+        "Announcement",
+        back_populates="year",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     weeks: Mapped[set["Week"]] = relationship(
-        "Week", back_populates="year", cascade="all, delete-orphan", collection_class=set
+        "Week",
+        back_populates="year",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     events: Mapped[set["Event"]] = relationship(
-        "Event", back_populates="year", cascade="all, delete-orphan", collection_class=set
+        "Event",
+        back_populates="year",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
 
     # Indexes

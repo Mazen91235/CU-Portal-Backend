@@ -1,4 +1,5 @@
 import os
+import hashlib
 import asyncio
 import json
 from dotenv import load_dotenv
@@ -126,7 +127,7 @@ async def _update_cache(request: Request, response: Response):
             request.method.upper() in ["POST", "PATCH", "PUT", "DELETE"]
             and str(response.status_code)[0] == "2"
         ):
-            module = extract_module_from_path(request.url.path)
+            module = _extract_module_from_path(request.url.path)
             if module:
                 asyncio.create_task(caching_handler.invalidate_module_cache(module))
         return None
@@ -134,7 +135,7 @@ async def _update_cache(request: Request, response: Response):
         return None
 
 
-def extract_module_from_path(path: str) -> str:
+def _extract_module_from_path(path: str) -> str:
     if "/user/" in path:
         if not "/" in path.split("/user/")[1]:
             return "user/"
@@ -145,6 +146,21 @@ def extract_module_from_path(path: str) -> str:
         return path.split("/auth/")[1].split("/")[0]
     else:
         return ""
+
+
+async def _generate_inflight_key(request: Request) -> str:
+    if request.method.upper() not in ["POST", "PATCH", "PUT", "DELETE"]:
+        return ""
+    body_bytes = await request.body()
+    try:
+        body_json = json.loads(body_bytes) if body_bytes else {}
+        canonical_body = json.dumps(body_json, sort_keys=True, separators=(",", ":"))
+    except Exception:
+        canonical_body = body_bytes.decode("utf-8", errors="ignore")
+
+    raw_key = f"inflight:{request.method}:{request.url.path}:{canonical_body}"
+    lock_key = hashlib.sha256(raw_key.encode()).hexdigest()
+    return lock_key
 
 
 class CustomRoute(APIRoute):
@@ -183,8 +199,17 @@ class CustomRoute(APIRoute):
             ):
                 return await _get_rate_limit_middleware().throttle(request)
 
+            lock_key = await _generate_inflight_key(request)
+            acquired = False
             try:
                 await _rate_limit(request)
+                if lock_key:
+                    acquired = await caching_handler.acquire_lock(lock_key)
+                    if not acquired:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="A similar request is already being processed. Please wait for it to complete.",
+                        )
                 response = await asyncio.wait_for(
                     original_route_handler(request), timeout=timeout_seconds
                 )
@@ -216,5 +241,8 @@ class CustomRoute(APIRoute):
                     status_code=504,
                     detail="The request took too long to process. Please try again.",
                 )
+            finally:
+                if lock_key and acquired:
+                    await caching_handler.release_lock(lock_key)
 
         return custom_route_handler

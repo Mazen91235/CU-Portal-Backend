@@ -10,12 +10,12 @@ from .base import (
     Mapped,
     Optional,
     TimezoneHandler,
-    TypedDict,
     AssociationProxy,
     association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
+    func,
 )
 
 if TYPE_CHECKING:
@@ -68,7 +68,7 @@ class Role(Base):
     )
 
     # Indexes
-    __table_args__ = (Index("idx_role_name", "name", unique=True),)
+    __table_args__ = (Index("idx_role_name", func.lower(name), unique=True),)
 
     # Attributes
     class RoleConfig:

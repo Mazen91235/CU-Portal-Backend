@@ -10,13 +10,12 @@ from .base import (
     Mapped,
     Optional,
     TimezoneHandler,
-    TypedDict,
-    Literal,
     AssociationProxy,
     association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
+    func,
 )
 
 if TYPE_CHECKING:
@@ -72,6 +71,18 @@ class Notification(Base):
         back_populates="notification",
         cascade="all, delete-orphan",
         collection_class=set,
+    )
+
+    # Indexes
+    __table_args__ = (
+        Index(
+            "idx_notification_content_notification_type_parent_id",
+            func.lower(content),
+            "notification_type",
+            "parent_id",
+            unique=True,
+            postgresql_nulls_not_distinct=True,
+        ),
     )
 
     # Attributes

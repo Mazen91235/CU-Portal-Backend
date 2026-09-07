@@ -9,18 +9,17 @@ from .base import (
     datetime,
     JSON,
     MutableDict,
-    MutableList,
     ForeignKey,
     Index,
     Mapped,
     Optional,
     TimezoneHandler,
-    TypedDict,
     AssociationProxy,
     association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
+    func,
 )
 
 if TYPE_CHECKING:
@@ -125,7 +124,18 @@ class Event(Base):
     )
 
     # Indexes
-    __table_args__ = (Index("idx_event_title", "title", unique=False),)
+    __table_args__ = (
+        Index(
+            "idx_event_fac_id_dep_id_year_id_event_org_id_title",
+            "faculty_id",
+            "department_id",
+            "year_id",
+            "event_organizer_id",
+            func.lower(title),
+            unique=True,
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
 
     # Attributes
     class LocationType(str, Enum):

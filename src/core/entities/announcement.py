@@ -108,10 +108,10 @@ class Announcement(Base):
     # Indexes
     __table_args__ = (
         Index(
-            "idx_announcement_faculty_department_year_subject",
-            "faculty_id",
-            "department_id",
-            "year_id",
+            "idx_announcement_title_subject_id_date",
+            "title",
             "subject_id",
+            "date",
+            unique=True,
         ),
     )

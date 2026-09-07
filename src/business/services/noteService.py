@@ -1,4 +1,4 @@
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from core.iServices.iNoteService import INoteService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -182,9 +182,9 @@ class NoteService(INoteService):
             data.author_id = logged_in_user.id
             existing_note_response = await self.note_repository.find_one(
                 and_(
-                    Note.title == data.title,
+                    func.lower(Note.title) == func.lower(data.title),
                     Note.author_id == logged_in_user.id,
-                    Note.content.is_not_distinct_from(data.content),
+                    func.lower(Note.content) == func.lower(data.content),
                     Note.date.is_not_distinct_from(data.date),
                 )
             )
@@ -344,9 +344,9 @@ class NoteService(INoteService):
                 )
             existing_note_response = await self.note_repository.find_one(
                 and_(
-                    Note.title == data.title,
+                    func.lower(Note.title) == func.lower(data.title),
                     Note.author_id == logged_in_user.id,
-                    Note.content.is_not_distinct_from(data.content),
+                    func.lower(Note.content) == func.lower(data.content),
                     Note.date.is_not_distinct_from(data.date),
                 )
             )

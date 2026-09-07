@@ -8,15 +8,14 @@ from .base import (
     datetime,
     JSON,
     MutableDict,
-    ForeignKey,
     Index,
     Mapped,
     Optional,
     TimezoneHandler,
-    TypedDict,
     TYPE_CHECKING,
     mapped_column,
     relationship,
+    func
 )
 
 if TYPE_CHECKING:
@@ -74,4 +73,4 @@ class Faculty(Base):
     )
 
     # Indexes
-    __table_args__ = (Index("idx_faculty_name", "name", unique=True),)
+    __table_args__ = (Index("idx_faculty_name", func.lower(name), unique=True),)

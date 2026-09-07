@@ -245,16 +245,6 @@ class User(Base):
         Index("idx_user_email", "email", unique=True),
         Index("idx_user_phone", "phone", unique=True),
         Index("idx_user_google_id", "google_id", unique=True),
-        Index("idx_user_google_email", "google_email", unique=True),
-        # Composite Indexes
-        Index("idx_user_faculty_name", "faculty_id", "name"),
-        Index("idx_faculty_department_name", "faculty_id", "department_id", "name"),
-        Index("idx_status_faculty_name", "status", "faculty_id", "name"),
-        Index(
-            "idx_user_refresh_token_refresh_expire_at",
-            "refresh_token",
-            "refresh_expire_at",
-        ),
     )
 
     # Validation

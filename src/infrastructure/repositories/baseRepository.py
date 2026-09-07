@@ -5,8 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 from sqlalchemy import text, desc, func, inspect
 from sqlalchemy.orm import load_only
+from sqlalchemy.exc import IntegrityError
 from business.contextVars.sessionContext import session_context
-from core.iRepositories.iBaseRepository import IBaseRepository, T
+from core.iRepositories.iBaseRepository import IBaseRepository
 from core.dtos.baseDtos import BaseResponseDto
 from core.utils.entitiesHandler import EntitiesHandler
 from core.utils.timezoneHandler import TimezoneHandler
@@ -305,6 +306,22 @@ class BaseRepository(IBaseRepository):
                 message="Entity Added Successfully",
                 code=201,
             )
+        except IntegrityError as ie:
+            await self._log_error(
+                action="Create",
+                level="error",
+                code=400,
+                message=f"Integrity error while creating {self._model.__name__}",
+                details={"error": repr(ie)},
+                source="BaseRepository",
+            )
+            return BaseResponseDto(
+                success=False,
+                data=None,
+                message=f"User Tried to create a duplicated {self._model.__name__} Violating Unique Constraints",
+                error=repr(ie),
+                code=400,
+            )
         except Exception as ex:
             await self._log_error(
                 action="Create",
@@ -348,6 +365,22 @@ class BaseRepository(IBaseRepository):
                 data=updated_entity,
                 message="Updated Successfully",
                 code=200,
+            )
+        except IntegrityError as ie:
+            await self._log_error(
+                action="Update",
+                level="error",
+                code=400,
+                message=f"Integrity error while updating {self._model.__name__}",
+                details={"error": repr(ie)},
+                source="BaseRepository",
+            )
+            return BaseResponseDto(
+                success=False,
+                data=None,
+                message=f"User Tried to update a duplicated {self._model.__name__} Violating Unique Constraints",
+                error=repr(ie),
+                code=400,
             )
         except Exception as ex:
             await self._log_error(

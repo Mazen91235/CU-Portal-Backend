@@ -1,4 +1,4 @@
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from core.iServices.iExamService import IExamService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -168,7 +168,7 @@ class ExamService(IExamService):
         try:
             existing_exam_response = await self.task_repository.find_one(
                 and_(
-                    Task.name == data.name,
+                    func.lower(Task.name) == func.lower(data.name),
                     Task.task_type == "exam",
                     Task.subject_id == data.subject_id,
                 )
@@ -380,7 +380,7 @@ class ExamService(IExamService):
                 )
             existing_exam_response = await self.task_repository.find_one(
                 and_(
-                    Task.name == data.name,
+                    func.lower(Task.name) == func.lower(data.name),
                     Task.task_type == "exam",
                     Task.subject_id == data.subject_id,
                 )

@@ -6,17 +6,15 @@ from .base import (
     String,
     TIMESTAMP,
     datetime,
-    JSON,
-    MutableDict,
     ForeignKey,
     Index,
     Mapped,
     Optional,
     TimezoneHandler,
-    TypedDict,
     TYPE_CHECKING,
     mapped_column,
     relationship,
+    func,
 )
 
 if TYPE_CHECKING:
@@ -59,7 +57,12 @@ class Note(Base):
     # Indexes
     __table_args__ = (
         Index(
-            "idx_note_author_id",
+            "idx_note_title_author_id_content_date",
+            func.lower(title),
             "author_id",
+            func.lower(content),
+            "date",
+            unique=True,
+            postgresql_nulls_not_distinct=True,
         ),
     )

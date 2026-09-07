@@ -145,8 +145,45 @@ class Attachment(Base):
     # Indexes
     __table_args__ = (
         Index(
-            "idx_attachment_author_id_url",
+            "idx_attachment_author_id_pending_user_id_url",
             "author_id",
+            "pending_user_id",
             "url",
+            unique=True,
+        ),
+        Index(
+            "idx_attachment_author_id_material_id_url",
+            "author_id",
+            "material_id",
+            "url",
+            unique=True,
+        ),
+        Index(
+            "idx_attachment_author_id_task_id_url",
+            "author_id",
+            "task_id",
+            "url",
+            unique=True,
+        ),
+        Index(
+            "idx_attachment_author_id_announcement_id_url",
+            "author_id",
+            "announcement_id",
+            "url",
+            unique=True,
+        ),
+        Index(
+            "idx_attachment_author_id_event_id_url",
+            "author_id",
+            "event_id",
+            "url",
+            unique=True,
+        ),
+        Index(
+            "idx_attachment_author_id_event_organizer_id_url",
+            "author_id",
+            "event_organizer_id",
+            "url",
+            unique=True,
         ),
     )

@@ -8,16 +8,15 @@ from .base import (
     datetime,
     JSON,
     MutableDict,
-    MutableList,
     ForeignKey,
     Index,
     Mapped,
     Optional,
     TimezoneHandler,
-    TypedDict,
     TYPE_CHECKING,
     mapped_column,
     relationship,
+    func,
 )
 
 if TYPE_CHECKING:
@@ -87,9 +86,10 @@ class Task(Base):
     __table_args__ = (
         # Composite Indexes
         Index(
-            "idx_task_task_type_subject_id_name",
+            "idx_task_name_task_type_subject_id",
+            func.lower(name),
             "task_type",
             "subject_id",
-            "name",
+            unique=True,
         ),
     )

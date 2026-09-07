@@ -97,4 +97,12 @@ class Material(Base):
     )
 
     # Indexes
-    __table_args__ = (Index("idx_material_subject_parent", "subject_id", "parent_id"),)
+    __table_args__ = (
+        Index(
+            "idx_material_name_subject_id_parent_id",
+            "name",
+            "subject_id",
+            "parent_id",
+            unique=True,
+        ),
+    )

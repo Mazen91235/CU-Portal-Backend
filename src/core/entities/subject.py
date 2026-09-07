@@ -14,12 +14,12 @@ from .base import (
     Mapped,
     Optional,
     TimezoneHandler,
-    TypedDict,
     AssociationProxy,
     association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
+    func,
 )
 
 if TYPE_CHECKING:
@@ -95,23 +95,23 @@ class Subject(Base):
         "Faculty", back_populates="subjects", cascade="save-update, merge"
     )
     tasks: Mapped[set["Task"]] = relationship(
-        "Task", back_populates="subject", cascade="all, delete-orphan", collection_class=set
+        "Task",
+        back_populates="subject",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     announcements: Mapped[set["Announcement"]] = relationship(
-        "Announcement", back_populates="subject", cascade="all, delete-orphan", collection_class=set
+        "Announcement",
+        back_populates="subject",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     materials: Mapped[set["Material"]] = relationship(
-        "Material", back_populates="subject", cascade="all, delete-orphan", collection_class=set
+        "Material",
+        back_populates="subject",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
-    # grades: Mapped[set["Grade"]] = relationship(
-    #     "Grade", back_populates="subject", cascade="all, delete-orphan", collection_class=set
-    # )
-    # marks: Mapped[set["Mark"]] = relationship(
-    #     "Mark", back_populates="subject", cascade="all, delete-orphan", collection_class=set
-    # )
-    # questions: Mapped[set["Question"]] = relationship(
-    #     "Question", back_populates="subject", cascade="all, delete-orphan", collection_class=set
-    # )
     users: AssociationProxy[set["User"]] = association_proxy(
         "user_subject_links",
         "user",
@@ -123,32 +123,26 @@ class Subject(Base):
         "UserSubjectLink",
         back_populates="subject",
         cascade="all, delete-orphan",
-        collection_class=set
+        collection_class=set,
     )
 
     # Indexes
     __table_args__ = (
         # Composite Indexes
         Index(
-            "idx_subject_faculty_department_year_code",
+            "idx_subject_faculty_id_department_id_year_id_name",
             "faculty_id",
             "department_id",
             "year_id",
-            "code",
+            func.lower(name),
             unique=True,
         ),
         Index(
-            "idx_subject_faculty_department_year_name",
+            "idx_subject_faculty_id_department_id_year_id_code",
             "faculty_id",
             "department_id",
             "year_id",
-            "code",
-        ),
-        Index(
-            "idx_subject_year_department_is_old_name",
-            "year_id",
-            "department_id",
-            "is_old",
-            "name",
+            func.lower(code),
+            unique=True,
         ),
     )

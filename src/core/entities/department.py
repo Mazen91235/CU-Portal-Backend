@@ -13,10 +13,10 @@ from .base import (
     Mapped,
     Optional,
     TimezoneHandler,
-    TypedDict,
     TYPE_CHECKING,
     mapped_column,
     relationship,
+    func,
 )
 
 if TYPE_CHECKING:
@@ -69,38 +69,62 @@ class Department(Base):
         "Faculty", back_populates="departments", cascade="save-update, merge"
     )
     users: Mapped[set["User"]] = relationship(
-        "User", back_populates="department", cascade="all, delete-orphan", collection_class=set
+        "User",
+        back_populates="department",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     subjects: Mapped[set["Subject"]] = relationship(
-        "Subject", back_populates="department", cascade="all, delete-orphan", collection_class=set
+        "Subject",
+        back_populates="department",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     announcements: Mapped[set["Announcement"]] = relationship(
-        "Announcement", back_populates="department", cascade="all, delete-orphan", collection_class=set
+        "Announcement",
+        back_populates="department",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     weeks: Mapped[set["Week"]] = relationship(
-        "Week", back_populates="department", cascade="all, delete-orphan", collection_class=set
+        "Week",
+        back_populates="department",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     events: Mapped[set["Event"]] = relationship(
-        "Event", back_populates="department", cascade="all, delete-orphan", collection_class=set
+        "Event",
+        back_populates="department",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
 
     # Indexes
     __table_args__ = (
-        # Composite Indexes
-        Index("idx_department_faculty_name", "faculty_id", "name"),
-        Index("idx_department_study_type_name", "study_type", "name"),
         Index(
-            "idx_department_faculty_study_type_name",
+            "idx_department_faculty_id_study_type_name",
             "faculty_id",
             "study_type",
-            "name",
+            func.lower(name),
             unique=True,
         ),
         Index(
-            "idx_department_faculty_study_type_code",
+            "idx_department_faculty_id_study_type_code",
             "faculty_id",
             "study_type",
-            "code",
+            func.lower(code),
+            unique=True,
+        ),
+        Index(
+            "idx_department_faculty_id_name",
+            "faculty_id",
+            func.lower(name),
+            unique=True,
+        ),
+        Index(
+            "idx_department_faculty_id_code",
+            "faculty_id",
+            func.lower(code),
             unique=True,
         ),
     )

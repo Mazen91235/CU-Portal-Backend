@@ -157,7 +157,7 @@ class RoleService(IRoleService):
     async def create(self, data):
         try:
             existing_role_response = await self.role_repository.find_one(
-                Role.name == data.name
+                func.lower(Role.name) == func.lower(data.name)
             )
             if not existing_role_response.success:
                 return BaseResponseDto(
@@ -274,7 +274,7 @@ class RoleService(IRoleService):
                     message="Role not found",
                 )
             existing_role_response = await self.role_repository.find_one(
-                Role.name == data.name
+                func.lower(Role.name) == func.lower(data.name)
             )
             if not existing_role_response.success:
                 return BaseResponseDto(

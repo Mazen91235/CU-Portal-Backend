@@ -3,20 +3,19 @@ from __future__ import annotations
 from .base import (
     Base,
     Integer,
-    String,
     TIMESTAMP,
     datetime,
-    JSON,
-    MutableDict,
     ForeignKey,
     Index,
     Mapped,
     Optional,
     TimezoneHandler,
-    TypedDict,
     TYPE_CHECKING,
     mapped_column,
     relationship,
+    func,
+    text,
+    ExcludeConstraint,
 )
 
 if TYPE_CHECKING:
@@ -87,5 +86,18 @@ class Week(Base):
             "year_id",
             "week_number",
             unique=True,
+        ),
+        ExcludeConstraint(
+            ("faculty_id", "="),
+            ("department_id", "="),
+            ("year_id", "="),
+            (
+                func.daterange(
+                    start_date, start_date + text("INTERVAL '7 days'"), "[)"
+                ),
+                "&&",
+            ),
+            name="exclude_overlapping_weeks_within_7_days",
+            using="gist",
         ),
     )
