@@ -3536,7 +3536,9 @@ class UserService(IUserService):
                     data=None,
                     message="Logged in user not found, please log in again.",
                 )
-            logged_in_user.devices.add(device_token)
+            logged_in_user.devices = logged_in_user.devices or []
+            if device_token not in logged_in_user.devices:
+                logged_in_user.devices.append(device_token)
             update_user_response = await self.user_repository.update(
                 logged_in_user, ["devices"]
             )
@@ -3613,6 +3615,7 @@ class UserService(IUserService):
                     data=None,
                     message="Logged in user not found, please log in again.",
                 )
+            logged_in_user.devices = logged_in_user.devices or []
             if device_token in logged_in_user.devices:
                 logged_in_user.devices.remove(device_token)
                 update_user_response = await self.user_repository.update(

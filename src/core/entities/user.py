@@ -10,7 +10,7 @@ from .base import (
     datetime,
     JSON,
     MutableDict,
-    MutableSet,
+    MutableList,
     ForeignKey,
     Index,
     Mapped,
@@ -75,11 +75,11 @@ class User(Base):
     google_refresh_token: Mapped[Optional[str]] = mapped_column(
         String(500), nullable=True
     )
-    ips: Mapped[set[str]] = mapped_column(
-        MutableSet.as_mutable(JSON), nullable=True, default=set
+    ips: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=True, default=list
     )
-    devices: Mapped[set[str]] = mapped_column(
-        MutableSet.as_mutable(JSON), nullable=True, default=set
+    devices: Mapped[list[str]] = mapped_column(
+        MutableList.as_mutable(JSON), nullable=True, default=list
     )
     refresh_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     refresh_expire_at: Mapped[Optional[datetime]] = mapped_column(

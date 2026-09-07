@@ -10,7 +10,7 @@ from sqlalchemy import (
     Index,
     JSON,
 )
-from sqlalchemy.ext.mutable import MutableDict, MutableList, MutableSet
+from sqlalchemy.ext.mutable import MutableDict, MutableList
 from sqlalchemy.ext.associationproxy import AssociationProxy, association_proxy
 from sqlalchemy.orm import (
     declarative_base,
