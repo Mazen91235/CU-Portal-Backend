@@ -249,7 +249,7 @@ BEGIN
     SELECT COALESCE(JSON_AGG(m_reg), '[]'::json) INTO v_materials
     FROM (
         SELECT 
-            m.id, m.name, m.url, m.details, m.created_at, m.updated_at,
+            m.id, m.name, m.details, m.created_at, m.updated_at,
             JSON_BUILD_OBJECT('id', s.id, 'name', s.name, 'code', s.code) AS subject
         FROM materials m
         JOIN subjects s ON s.id = m.subject_id
