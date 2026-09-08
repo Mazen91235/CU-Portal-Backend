@@ -23,9 +23,7 @@ from core.entities.userSubjectLink import UserSubjectLink
 from core.entities.notification import Notification
 from core.entities.userNotification import UserNotification
 from core.entities.attachment import Attachment
-from core.entities.announcement import Announcement
-from core.entities.material import Material
-from core.entities.task import Task
+from core.entities.log import Log
 from core.entities.event import Event
 from core.entities.eventOrganizer import EventOrganizer
 from core.dtos.baseDtos import BaseResponseDto
@@ -56,6 +54,7 @@ class HelperService(IHelperService[U]):
         year_repository: IBaseRepository[Year],
         subject_repository: IBaseRepository[Subject],
         attachment_repository: IBaseRepository[Attachment],
+        log_repository: IBaseRepository[Log],
         session_factory: async_sessionmaker[AsyncSession] | None = None,
     ):
         self.notification_repository = notification_repository
@@ -67,11 +66,61 @@ class HelperService(IHelperService[U]):
         self.year_repository = year_repository
         self.subject_repository = subject_repository
         self.attachment_repository = attachment_repository
+        self.log_repository = log_repository
         self.smtp_name = os.environ.get("SMTP_FROM_NAME", "")
         self.smtp_email = os.environ.get("SMTP_FROM_EMAIL", "")
         self.brevo_api_url = os.environ.get("BREVO_API_URL", "")
         self.brevo_api_key = os.environ.get("BREVO_API_KEY", "")
         self.session_factory = session_factory
+
+    async def _log(
+        self,
+        action: str,
+        entity: str,
+        level: str,
+        code: int,
+        message: str,
+        details: dict | None = None,
+    ):
+        try:
+            ip_address_response = await self.get_ip_address()
+            ip_address = (
+                ip_address_response.data if ip_address_response.success else None
+            )
+            logged_in_user_response = await self.get_logged_in_user()
+            logged_in_user_id = (
+                logged_in_user_response.data.id
+                if logged_in_user_response.success and logged_in_user_response.data
+                else None
+            )
+
+            request = request_context.get(None)
+            route = request.url.path if request else None
+
+            formatted_details = (
+                json.dumps(details, default=str) if details is not None else None
+            )
+
+            await self.log_repository.execute_sql(
+                f"INSERT INTO {EntitiesHandler.TABLES.get('Log')} (action, entity, level, response_code, message, details, source, route, ip, user_id, created_at, updated_at) VALUES (:action, :entity, :level, :response_code, :message, :details, :source, :route, :ip, :user_id, :created_at, :updated_at)",
+                {
+                    "action": action,
+                    "entity": entity,
+                    "level": level,
+                    "response_code": code,
+                    "message": message,
+                    "details": formatted_details,
+                    "source": "HelperService",
+                    "route": route,
+                    "ip": ip_address,
+                    "user_id": logged_in_user_id,
+                    "created_at": TimezoneHandler.now("UTC"),
+                    "updated_at": TimezoneHandler.now("UTC"),
+                },
+            )
+        except Exception as ex:
+            print(f"Failed to log message: {repr(ex)}")
+            return
 
     def _get_column_type(self, column):
         column_property = getattr(column, "property", None)
@@ -105,6 +154,7 @@ class HelperService(IHelperService[U]):
             ip_address = request.client.host if request and request.client else None
             return BaseResponseDto(success=True, data=ip_address)
         except Exception as ex:
+
             return BaseResponseDto(
                 success=False,
                 code=500,
@@ -996,6 +1046,15 @@ class HelperService(IHelperService[U]):
                     message="Notification sent successfully",
                 )
             except Exception as ex:
+                await session.rollback()  # Rollback the transaction on error
+                await self._log(
+                    action="SendNotification",
+                    entity="Notification",
+                    level="error",
+                    code=500,
+                    message="An error occurred while sending the notification",
+                    details={"error": repr(ex)},
+                )
                 return BaseResponseDto(
                     success=False,
                     code=500,
@@ -1003,6 +1062,8 @@ class HelperService(IHelperService[U]):
                     message="An error occurred while sending the notification",
                     error=repr(ex),
                 )
+            finally:
+                await session.close()  # Ensure the session is closed
 
     async def _send_push_notifications(
         self, session, user_ids, notification_type, body, url=None
@@ -1038,6 +1099,13 @@ class HelperService(IHelperService[U]):
                     )
                 user = user_response.data
                 if not user:
+                    await self._log(
+                        action="SendPushNotifications",
+                        entity="Notification",
+                        level="error",
+                        code=404,
+                        message=f"User with ID {user_id} not found while sending push notifications",
+                    )
                     return BaseResponseDto(
                         success=False,
                         code=404,
@@ -1054,11 +1122,35 @@ class HelperService(IHelperService[U]):
                     if not send_response.success and send_response.code == 404:
                         user.devices.remove(device_token)
                         should_update_devices = True
+                    if not send_response.success:
+                        await self._log(
+                            action="SendPushNotifications",
+                            entity="Notification",
+                            level="error",
+                            code=send_response.code or 500,
+                            message=f"Failed to send push notification to user {user_id} for device token {device_token}",
+                            details={"error": send_response.error},
+                        )
                 if should_update_devices:
                     await self.user_repository.update(
                         user, ["devices"], session=session
                     )
+            await self._log(
+                action="SendPushNotifications",
+                entity="Notification",
+                level="info",
+                code=200,
+                message=f"Push notifications sent successfully to {len(user_ids)} users",
+            )
         except Exception as ex:
+            await self._log(
+                action="SendPushNotifications",
+                entity="Notification",
+                level="error",
+                code=500,
+                message="An error occurred while sending push notifications",
+                details={"error": repr(ex)},
+            )
             return BaseResponseDto(
                 success=False,
                 code=500,
@@ -2307,6 +2399,16 @@ class HelperService(IHelperService[U]):
     ):
         try:
             if not attachment_id and not attachment:
+                await self._log(
+                    action="DeleteAttachment",
+                    entity="Attachment",
+                    level="warning",
+                    code=400,
+                    message="Attachment ID or Attachment object is required for deletion",
+                    details={
+                        "attachment_id": attachment_id,
+                    },
+                )
                 return BaseResponseDto(
                     success=False,
                     code=400,
@@ -2328,6 +2430,16 @@ class HelperService(IHelperService[U]):
                     )
                 attachment = attachment_response.data
                 if not attachment:
+                    await self._log(
+                        action="DeleteAttachment",
+                        entity="Attachment",
+                        level="warning",
+                        code=404,
+                        message="Attachment not found for deletion",
+                        details={
+                            "attachment_id": attachment_id,
+                        },
+                    )
                     return BaseResponseDto(
                         success=False,
                         code=404,
@@ -2368,6 +2480,18 @@ class HelperService(IHelperService[U]):
                     access_token, file_id
                 )
                 if not delete_file_response.success:
+                    await self._log(
+                        action="DeleteAttachment",
+                        entity="Attachment",
+                        level="warning",
+                        code=delete_file_response.code or 500,
+                        message="Failed to delete file from Google Drive after attachment deletion",
+                        details={
+                            "attachment_id": attachment.id,
+                            "file_id": file_id,
+                            "error": delete_file_response.error,
+                        },
+                    )
                     return BaseResponseDto(
                         success=True,
                         code=200,
@@ -2378,6 +2502,17 @@ class HelperService(IHelperService[U]):
                 message="Attachment deleted successfully",
             )
         except Exception as ex:
+            await self._log(
+                action="DeleteAttachment",
+                entity="Attachment",
+                level="error",
+                code=500,
+                message="An error occurred while deleting the attachment",
+                details={
+                    "attachment_id": attachment_id,
+                    "error": repr(ex),
+                },
+            )
             return BaseResponseDto(
                 success=False,
                 code=500,

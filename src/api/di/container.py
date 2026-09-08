@@ -296,6 +296,7 @@ class Container(containers.DeclarativeContainer):
         year_repository=year_repository,
         subject_repository=subject_repository,
         attachment_repository=attachment_repository,
+        log_repository=log_repository,
         session_factory=session_factory,
     )
     logger = providers.Factory(
