@@ -826,12 +826,21 @@ class HelperService(IHelperService[U]):
         subject_id=None,
     ):
         if not self.session_factory:
+            await self._log(
+                action="SendNotification",
+                entity="Notification",
+                level="error",
+                code=500,
+                message="Session factory is not initialized",
+                details={},
+            )
             return BaseResponseDto(
                 success=False,
                 code=500,
                 data=False,
                 message="Session factory is not initialized",
             )
+        return_response = None
         user_ids = set()
         async with self.session_factory() as session:
             try:
@@ -846,12 +855,13 @@ class HelperService(IHelperService[U]):
                         limit=int(1e6), session=session
                     )
                     if not users_response.success:
-                        return BaseResponseDto(
+                        return_response = BaseResponseDto(
                             success=False,
                             code=users_response.code,
                             data=False,
                             message=users_response.message,
                         )
+                        return return_response
                     users = users_response.data
                     user_ids.update([user.id for user in (users or [])])
                 else:
@@ -863,20 +873,22 @@ class HelperService(IHelperService[U]):
                             Faculty.id == faculty_id, dynamic_includes, session=session
                         )
                         if not faculty_response.success:
-                            return BaseResponseDto(
+                            return_response = BaseResponseDto(
                                 success=False,
                                 code=faculty_response.code,
                                 data=False,
                                 message=faculty_response.message,
                             )
+                            return return_response
                         faculty = faculty_response.data
                         if not faculty:
-                            return BaseResponseDto(
+                            return_response = BaseResponseDto(
                                 success=False,
                                 code=404,
                                 data=False,
                                 message=f"Faculty with ID {faculty_id} not found",
                             )
+                            return return_response
                         if len(user_ids) < 1:
                             user_ids.update([user.id for user in (faculty.users or [])])
                         else:
@@ -893,20 +905,22 @@ class HelperService(IHelperService[U]):
                             session=session,
                         )
                         if not department_response.success:
-                            return BaseResponseDto(
+                            return_response = BaseResponseDto(
                                 success=False,
                                 code=department_response.code,
                                 data=False,
                                 message=department_response.message,
                             )
+                            return return_response
                         department = department_response.data
                         if not department:
-                            return BaseResponseDto(
+                            return_response = BaseResponseDto(
                                 success=False,
                                 code=404,
                                 data=False,
                                 message=f"Department with ID {department_id} not found",
                             )
+                            return return_response
                         if len(user_ids) < 1:
                             user_ids.update(
                                 [user.id for user in (department.users or [])]
@@ -923,20 +937,22 @@ class HelperService(IHelperService[U]):
                             Year.id == year_id, dynamic_includes, session=session
                         )
                         if not year_response.success:
-                            return BaseResponseDto(
+                            return_response = BaseResponseDto(
                                 success=False,
                                 code=year_response.code,
                                 data=False,
                                 message=year_response.message,
                             )
+                            return return_response
                         year = year_response.data
                         if not year:
-                            return BaseResponseDto(
+                            return_response = BaseResponseDto(
                                 success=False,
                                 code=404,
                                 data=False,
                                 message=f"Year with ID {year_id} not found",
                             )
+                            return return_response
                         if len(user_ids) < 1:
                             user_ids.update([user.id for user in (year.users or [])])
                         else:
@@ -951,20 +967,22 @@ class HelperService(IHelperService[U]):
                             Subject.id == subject_id, dynamic_includes, session=session
                         )
                         if not subject_response.success:
-                            return BaseResponseDto(
+                            return_response = BaseResponseDto(
                                 success=False,
                                 code=subject_response.code,
                                 data=False,
                                 message=subject_response.message,
                             )
+                            return return_response
                         subject = subject_response.data
                         if not subject:
-                            return BaseResponseDto(
+                            return_response = BaseResponseDto(
                                 success=False,
                                 code=404,
                                 data=False,
                                 message=f"Subject with ID {subject_id} not found",
                             )
+                            return return_response
                         if len(user_ids) < 1:
                             user_ids.update([user.id for user in (subject.users or [])])
                         else:
@@ -972,12 +990,13 @@ class HelperService(IHelperService[U]):
                                 [user.id for user in (subject.users or [])]
                             )
                 if len(user_ids) < 1:
-                    return BaseResponseDto(
+                    return_response = BaseResponseDto(
                         success=False,
                         code=404,
                         data=False,
                         message="No users found for the specified criteria",
                     )
+                    return return_response
                 notification = Notification(
                     content=content,
                     notification_type=notification_type,
@@ -994,30 +1013,33 @@ class HelperService(IHelperService[U]):
                     )
                 )
                 if not create_notification_response.success:
-                    return BaseResponseDto(
+                    return_response = BaseResponseDto(
                         success=False,
                         code=create_notification_response.code,
                         data=False,
                         message=create_notification_response.message,
                     )
+                    return return_response
                 created_notification = create_notification_response.data
                 if not created_notification:
-                    return BaseResponseDto(
+                    return_response = BaseResponseDto(
                         success=False,
                         code=500,
                         data=False,
                         message="Failed to create notification",
                     )
+                    return return_response
                 await self._send_push_notifications(
                     session, user_ids, created_notification.id, notification_type, content, url=url
                 )
                 await session.commit()  # Commit the transaction
-                return BaseResponseDto(
+                return_response = BaseResponseDto(
                     success=True,
                     code=200,
                     data=True,
                     message="Notification sent successfully",
                 )
+                return return_response
             except Exception as ex:
                 await session.rollback()  # Rollback the transaction on error
                 await self._log(
@@ -1036,6 +1058,15 @@ class HelperService(IHelperService[U]):
                     error=repr(ex),
                 )
             finally:
+                if return_response is not None:
+                    await self._log(
+                        action="SendNotification",
+                        entity="Notification",
+                        level="info" if return_response.success else "warning" if return_response.code or 500 < 500 else "error",
+                        code=return_response.code or 500,
+                        message=return_response.message or "Notification processing completed",
+                        details={"error": return_response.error} if return_response.error else {},
+                    )
                 await session.close()  # Ensure the session is closed
 
     async def _send_push_notifications(
