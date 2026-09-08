@@ -62,7 +62,7 @@ class FirebaseHandler:
                 token=device_token,
                 # Web push specific overrides
                 webpush=messaging.WebpushConfig(
-                    notification=messaging.WebpushNotification(icon=icon),
+                    notification=messaging.WebpushNotification(icon=icon, badge=icon),
                     fcm_options=messaging.WebpushFCMOptions(
                         link=url,
                     ),
