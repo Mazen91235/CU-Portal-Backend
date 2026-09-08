@@ -239,9 +239,10 @@ class CustomRoute(APIRoute):
                             message="A similar request is already being processed.",
                             details={},
                         )
-                        raise HTTPException(
-                            status_code=409,
-                            detail="A similar request is already being processed. Please wait for it to complete.",
+                        return ResponseHandler.generate_response(
+                            success=False,
+                            code=409,
+                            message="A similar request is already being processed. Please wait for it to complete.",
                         )
                 response = await asyncio.wait_for(
                     original_route_handler(request), timeout=timeout_seconds
