@@ -61,6 +61,7 @@ from api.routes.facultyRoutes import (
     create_faculty_user_router,
     create_faculty_admin_router,
 )
+from api.routes.systemRoutes import create_system_public_router
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
 from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
@@ -85,6 +86,7 @@ from api.controllers.departmentController import DepartmentController
 from api.controllers.weekController import WeekController
 from api.controllers.eventController import EventController
 from api.controllers.attachmentController import AttachmentController
+from api.controllers.systemController import SystemController
 from business.services.userService import UserService
 from business.services.roleService import RoleService
 from business.services.taskService import TaskService
@@ -559,6 +561,8 @@ class Container(containers.DeclarativeContainer):
         AttachmentController, attachment_service=attachment_service, logger=logger
     )
 
+    system_controller = providers.Factory(SystemController, logger=logger)
+
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
     main_admin_routes = providers.Factory(create_main_admin_router)
@@ -792,4 +796,9 @@ class Container(containers.DeclarativeContainer):
         controller_provider=event_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
+    )
+
+    system_public_routes = providers.Factory(
+        create_system_public_router,
+        controller_provider=system_controller.provider,
     )
