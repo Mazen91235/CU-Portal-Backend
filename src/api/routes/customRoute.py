@@ -235,6 +235,8 @@ class CustomRoute(APIRoute):
                     status_code=504,
                     detail="The request took too long to process. Please try again.",
                 )
+            except Exception:
+                raise
             finally:
                 if lock_key and acquired:
                     await caching_handler.release_lock(lock_key)
