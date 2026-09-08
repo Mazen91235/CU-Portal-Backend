@@ -56,7 +56,7 @@ class FirebaseHandler:
                     "url": url,
                     "icon": icon,
                     "notification_id": (
-                        str(notification_id) if notification_id is not None else None
+                        str(notification_id) if notification_id is not None else "0"
                     ),
                 },
                 token=device_token,
@@ -76,18 +76,23 @@ class FirebaseHandler:
                 data=response,
                 message="Notification sent successfully",
             )
-        except messaging.UnregisteredError:  # Token is invalid or user unsubscribed
+        except (
+            messaging.UnregisteredError
+        ) as e:  # Token is invalid or user unsubscribed
+            error_detail = str(e) or repr(e) or e.__class__.__name__
             return BaseResponseDto(
                 success=False,
                 code=404,
                 data=None,
                 message="Device token is unregistered or invalid",
+                error=error_detail,
             )
         except Exception as e:
+            error_detail = str(e) or repr(e) or e.__class__.__name__
             return BaseResponseDto(
                 success=False,
                 code=500,
                 data=None,
                 message=f"Failed to send notification",
-                error=repr(e),
+                error=error_detail,
             )
