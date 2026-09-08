@@ -231,12 +231,6 @@ class CustomRoute(APIRoute):
                     )
                 except Exception:
                     pass
-                session = session_context.get(None)
-                if session is not None and session.in_transaction():
-                    try:
-                        await asyncio.wait_for(session.rollback(), timeout=1.0)
-                    except Exception:
-                        pass
                 raise HTTPException(
                     status_code=504,
                     detail="The request took too long to process. Please try again.",

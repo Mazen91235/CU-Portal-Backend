@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
+from sqlalchemy.exc import IllegalStateChangeError
 
 # Ensure `src` is importable as the top-level package root in serverless runtimes.
 SRC_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -97,25 +98,32 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
         # Create one DB session per request and store it in ContextVar.
-        async with container.session_factory()() as session:
-            session_token = session_context.set(session)
-            request_token = request_context.set(request)
-            try:
-                response = await call_next(request)
-                return response
-            except Exception:
+        session = container.session_factory()()
+
+        session_token = session_context.set(session)
+        request_token = request_context.set(request)
+        try:
+            response = await call_next(request)
+            return response
+        except Exception:
+            if session.in_transaction():
                 try:
                     await session.rollback()
                 except Exception:
                     pass
-                raise
-            finally:
+            raise
+        finally:
+            session_context.reset(session_token)
+            request_context.reset(request_token)
+            try:
+                await session.close()
+            except IllegalStateChangeError:
                 try:
-                    await session.close()
+                    await session.invalidate()
                 except Exception:
                     pass
-                session_context.reset(session_token)
-                request_context.reset(request_token)
+            except Exception:
+                pass
 
     # We resolve the router here at startup.
     # Because we are now using `Depends()` inside `create_user_router`,
