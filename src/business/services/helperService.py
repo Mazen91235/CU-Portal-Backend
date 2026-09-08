@@ -1207,8 +1207,9 @@ class HelperService(IHelperService[U]):
                     code=500,
                     message="Background worker URL or API key is not configured",
                     details={
-                        "background_worker_url": (os.environ.get("BACKGROUND_WORKER_URL")
-                        is not None),
+                        "background_worker_url": (
+                            os.environ.get("BACKGROUND_WORKER_URL") is not None
+                        ),
                         "api_key": (os.environ.get("API_KEY") is not None),
                     },
                 )
@@ -1268,14 +1269,37 @@ class HelperService(IHelperService[U]):
     ):
         request = request_context.get(None)
         if not request:
+            await self._log(
+                action="SendNotification",
+                entity="Notification",
+                level="error",
+                code=500,
+                message="Request context is not available",
+                details={},
+            )
             return BaseResponseDto(
                 success=False,
                 code=500,
                 data=False,
                 message="Request context is not available",
             )
-        path = request.url.path
-        if "onrender.com" in path.lower():
+        hostname = request.url.hostname
+        if not hostname:
+            await self._log(
+                action="SendNotification",
+                entity="Notification",
+                level="error",
+                code=500,
+                message="Hostname is not available in the request context",
+                details={},
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="Hostname is not available in the request context",
+            )
+        if "onrender.com" in hostname.lower():
             asyncio.create_task(
                 self._send_notification(
                     notification_type,
@@ -1366,7 +1390,7 @@ class HelperService(IHelperService[U]):
                                 )
                                 await asyncio.sleep(retry_after)
                                 continue
-                        if response.status != 200:
+                        if str(response.status)[0] != "2":  # Not a 2xx response
                             return BaseResponseDto(
                                 success=False,
                                 code=response.status,
