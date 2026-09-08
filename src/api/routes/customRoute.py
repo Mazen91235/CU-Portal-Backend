@@ -68,6 +68,30 @@ async def _enforce_active_user(request: Request):
     return None
 
 
+async def _log(
+    request: Request,
+    action: str,
+    entity: str,
+    level: str,
+    code: int,
+    message: str,
+    details: dict,
+):
+    try:
+        logger: IBaseLogger = request.app.state.container.logger()
+        await logger.log(
+            action=action,
+            entity=entity,
+            level=level,
+            code=code,
+            message=message,
+            details=details,
+            source="CustomRoute",
+        )
+    except Exception:
+        pass
+
+
 class CacheHitException(Exception):
     def __init__(self, response: JSONResponse):
         self.response = response
@@ -206,6 +230,15 @@ class CustomRoute(APIRoute):
                 if lock_key:
                     acquired = await caching_handler.acquire_lock(lock_key)
                     if not acquired:
+                        await _log(
+                            request,
+                            action="InflightCheck",
+                            entity="Request",
+                            level="warning",
+                            code=409,
+                            message="A similar request is already being processed.",
+                            details={},
+                        )
                         raise HTTPException(
                             status_code=409,
                             detail="A similar request is already being processed. Please wait for it to complete.",
@@ -218,19 +251,15 @@ class CustomRoute(APIRoute):
             except CacheHitException as ex:
                 return ex.response
             except asyncio.TimeoutError:
-                try:
-                    logger: IBaseLogger = request.app.state.container.logger()
-                    await logger.log(
-                        action="Timeout",
-                        entity="Request",
-                        level="warning",
-                        code=504,
-                        message=f"Request timed out after {timeout_seconds}s",
-                        details={"path": str(request.url.path)},
-                        source="CustomRoute",
-                    )
-                except Exception:
-                    pass
+                await _log(
+                    request,
+                    action="Timeout",
+                    entity="Request",
+                    level="error",
+                    code=504,
+                    message="The request took too long to process.",
+                    details={},
+                )
                 raise HTTPException(
                     status_code=504,
                     detail="The request took too long to process. Please try again.",
