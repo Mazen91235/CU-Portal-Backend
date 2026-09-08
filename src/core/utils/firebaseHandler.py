@@ -40,33 +40,35 @@ class FirebaseHandler:
         notification_id: int | None = None,
         icon: str | None = None,
     ) -> BaseResponseDto[str]:
-        if not url or url.strip().startswith("/"):
-            url = f"{os.getenv('FRONTEND_URL', 'http://localhost:5173')}{url or '/'}"
-        if not icon or icon.strip().startswith("/"):
-            icon = f"{os.getenv('FRONTEND_URL', 'http://localhost:5173')}{icon or '/logo.png'}"
-        message = messaging.Message(
-            notification=messaging.Notification(
-                title=title,
-                body=body,
-            ),
-            data={
-                "url": url,
-                "icon": icon,
-                "notification_id": (
-                    str(notification_id) if notification_id is not None else None
-                ),
-            },
-            token=device_token,
-            # Web push specific overrides
-            webpush=messaging.WebpushConfig(
-                notification=messaging.WebpushNotification(icon=icon),
-                fcm_options=messaging.WebpushFCMOptions(
-                    link=url,
-                ),
-            ),
-        )
-
         try:
+            if not url or url.strip().startswith("/"):
+                url = (
+                    f"{os.getenv('FRONTEND_URL', 'http://localhost:5173')}{url or '/'}"
+                )
+            if not icon or icon.strip().startswith("/"):
+                icon = f"{os.getenv('FRONTEND_URL', 'http://localhost:5173')}{icon or '/logo.png'}"
+            message = messaging.Message(
+                notification=messaging.Notification(
+                    title=title,
+                    body=body,
+                ),
+                data={
+                    "url": url,
+                    "icon": icon,
+                    "notification_id": (
+                        str(notification_id) if notification_id is not None else None
+                    ),
+                },
+                token=device_token,
+                # Web push specific overrides
+                webpush=messaging.WebpushConfig(
+                    notification=messaging.WebpushNotification(icon=icon),
+                    fcm_options=messaging.WebpushFCMOptions(
+                        link=url,
+                    ),
+                ),
+            )
+
             response = messaging.send(message)
             return BaseResponseDto(
                 success=True,
