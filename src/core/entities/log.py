@@ -29,8 +29,8 @@ class Log(Base):
 
     # Columns
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    action: Mapped[str] = mapped_column(String(30), nullable=True)
-    entity: Mapped[str] = mapped_column(String(30), nullable=True)
+    action: Mapped[str] = mapped_column(String(40), nullable=True)
+    entity: Mapped[str] = mapped_column(String(40), nullable=True)
     level: Mapped[str] = mapped_column(String(10), nullable=False)
     response_code: Mapped[int] = mapped_column(Integer, nullable=False)
     message: Mapped[str] = mapped_column(String(250), nullable=True)
@@ -57,7 +57,9 @@ class Log(Base):
     )
 
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Relationships
     user_id: Mapped[Optional[int]] = mapped_column(
