@@ -265,6 +265,15 @@ class NotificationService(INotificationService):
                     data=None,
                     message=update_response.message,
                 )
+            await self.logger.log(
+                action="MarkNotificationAsSeen",
+                entity="Notification",
+                level="info",
+                code=200,
+                message=f"Notification marked as seen for user_id {logged_in_user.id} and notification_id {notification_id}",
+                details={},
+                source="NotificationService",
+            )
             return BaseResponseDto(
                 success=True,
                 code=200,
