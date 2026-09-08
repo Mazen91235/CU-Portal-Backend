@@ -11,6 +11,7 @@ from core.dtos.userNotificationDtos import (
     UserNotificationSearchDto,
 )
 from core.dtos.notificationDtos import (
+    NotificationCreateDto,
     NotificationResponseDto,
 )
 
@@ -73,6 +74,44 @@ class NotificationController(INotificationController):
         except Exception as e:
             await self.logger.log(
                 action="Find",
+                entity="Notification",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="NotificationController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def create(self, request, data):
+        try:
+            await self.notification_service.begin_transaction()
+            notification = Mapper[NotificationCreateDto, Notification].map(
+                data, Notification
+            )
+            response = await self.notification_service.create(notification)
+
+            if not response.success:
+                await self.notification_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            await self.notification_service.commit_transaction()
+            return ResponseHandler.generate_response(
+                success=True,
+                code=201,
+                message="Notification created successfully",
+            )
+        except Exception as e:
+            await self.notification_service.rollback_transaction()
+            await self.logger.log(
+                action="Create",
                 entity="Notification",
                 level="error",
                 code=500,

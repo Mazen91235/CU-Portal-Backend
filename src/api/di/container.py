@@ -25,7 +25,10 @@ from api.routes.subjectRoutes import (
     create_subject_admin_router,
     create_subject_user_router,
 )
-from api.routes.notificationRoutes import create_notification_user_router
+from api.routes.notificationRoutes import (
+    create_notification_public_router,
+    create_notification_user_router,
+)
 from api.routes.logRoutes import create_log_admin_router
 from api.routes.materialRoutes import (
     create_material_user_router,
@@ -628,11 +631,16 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    notification_public_routes = providers.Factory(
+        create_notification_public_router,
+        controller_provider=notification_controller.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
     notification_user_routes = providers.Factory(
         create_notification_user_router,
         controller_provider=notification_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
-        validation_middleware_provider=validation_middleware.provider,
     )
 
     log_admin_routes = providers.Factory(

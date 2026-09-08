@@ -160,6 +160,7 @@ def create_app() -> FastAPI:
     faculty_admin_routes = container.faculty_admin_routes()
     event_organizer_user_routes = container.event_organizer_user_routes()
     event_organizer_admin_routes = container.event_organizer_admin_routes()
+    notification_public_routes = container.notification_public_routes()
     notification_user_routes = container.notification_user_routes()
     subject_user_routes = container.subject_user_routes()
     subject_admin_routes = container.subject_admin_routes()
@@ -201,6 +202,7 @@ def create_app() -> FastAPI:
     app.include_router(attachment_public_routes)
     app.include_router(file_public_routes)
     app.include_router(message_public_routes)
+    app.include_router(notification_public_routes)
 
     app.add_middleware(
         CORSMiddleware,

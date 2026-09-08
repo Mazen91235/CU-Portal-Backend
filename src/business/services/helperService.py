@@ -1185,6 +1185,55 @@ class HelperService(IHelperService[U]):
                 error=repr(ex),
             )
 
+    async def _send_notification_to_background_worker(
+        self,
+        notification_type,
+        parent_id,
+        content,
+        url=None,
+        faculty_id=None,
+        department_id=None,
+        year_id=None,
+        subject_id=None,
+    ):
+        try:
+            response = await self._request_with_retries(
+                method="POST",
+                url=f"{os.environ.get('BACKGROUND_WORKER_URL', 'http://localhost:3000')}/notifications",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-API-Key": os.environ.get("API_KEY", ""),
+                },
+                json_data={
+                    "notification_type": notification_type,
+                    "parent_id": parent_id,
+                    "content": content,
+                    "url": url,
+                    "faculty_id": faculty_id,
+                    "department_id": department_id,
+                    "year_id": year_id,
+                    "subject_id": subject_id,
+                },
+            )
+            if not response.success:
+                await self._log(
+                    action="SendNotificationToBackgroundWorker",
+                    entity="Notification",
+                    level="error",
+                    code=response.code or 500,
+                    message=f"Failed to send notification to background worker: {response.message}",
+                    details={"error": response.error},
+                )
+        except Exception as ex:
+            await self._log(
+                action="SendNotificationToBackgroundWorker",
+                entity="Notification",
+                level="error",
+                code=500,
+                message="An error occurred while sending notification to background worker",
+                details={"error": repr(ex)},
+            )
+
     async def send_notification(
         self,
         notification_type,
@@ -1196,18 +1245,41 @@ class HelperService(IHelperService[U]):
         year_id=None,
         subject_id=None,
     ):
-        asyncio.create_task(
-            self._send_notification(
-                notification_type,
-                parent_id,
-                content,
-                url,
-                faculty_id,
-                department_id,
-                year_id,
-                subject_id,
+        request = request_context.get(None)
+        if not request:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="Request context is not available",
             )
-        )
+        path = request.url.path
+        if "onrender.com" in path.lower():
+            asyncio.create_task(
+                self._send_notification(
+                    notification_type,
+                    parent_id,
+                    content,
+                    url,
+                    faculty_id,
+                    department_id,
+                    year_id,
+                    subject_id,
+                )
+            )
+        else:
+            asyncio.create_task(
+                self._send_notification_to_background_worker(
+                    notification_type=notification_type,
+                    parent_id=parent_id,
+                    content=content,
+                    url=url,
+                    faculty_id=faculty_id,
+                    department_id=department_id,
+                    year_id=year_id,
+                    subject_id=subject_id,
+                )
+            )
         return BaseResponseDto(
             success=True,
             code=200,
