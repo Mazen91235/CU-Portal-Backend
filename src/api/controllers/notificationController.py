@@ -90,10 +90,7 @@ class NotificationController(INotificationController):
     async def create(self, request, data):
         try:
             await self.notification_service.begin_transaction()
-            notification = Mapper[NotificationCreateDto, Notification].map(
-                data, Notification
-            )
-            response = await self.notification_service.create(notification)
+            response = await self.notification_service.create(data)
 
             if not response.success:
                 await self.notification_service.rollback_transaction()
