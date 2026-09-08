@@ -84,5 +84,13 @@ class Year(Base):
         collection_class=set,
     )
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
+
+    # Arguments
     __table_args__ = (Index("idx_year", "year", unique=True),)
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

@@ -74,10 +74,16 @@ class Notification(Base):
         collection_class=set,
     )
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (
         #
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }
 
     # Attributes
     class NotificationType(str, Enum):

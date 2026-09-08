@@ -59,8 +59,14 @@ class RequestLimit(Base):
         "User", back_populates="request_limits"
     )
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (
         # Composite Indexes
         Index("idx_request_limit_ip_created_at", "ip", "created_at"),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

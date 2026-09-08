@@ -40,5 +40,11 @@ class Message(Base):
         nullable=True,
     )
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (Index("idx_message_created_at", "created_at"),)
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

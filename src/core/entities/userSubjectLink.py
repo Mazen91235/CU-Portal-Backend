@@ -41,6 +41,9 @@ class UserSubjectLink(Base):
         nullable=True,
     )
 
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
     # Relationships
     user_id: Mapped[int] = mapped_column(
         Integer,
@@ -58,3 +61,16 @@ class UserSubjectLink(Base):
     subject: Mapped["Subject"] = relationship(
         "Subject", back_populates="user_subject_links"
     )
+
+    # Arguments
+    __table_args__ = (
+        Index(
+            "idx_user_subject_link_user_id_subject_id",
+            "user_id",
+            "subject_id",
+            unique=True,
+        ),
+    )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

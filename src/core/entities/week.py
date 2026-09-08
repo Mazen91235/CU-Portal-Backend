@@ -77,7 +77,10 @@ class Week(Base):
         collection_class=set,
     )
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (
         Index(
             "idx_week_faculty_id_department_id_year_id_week_number",
@@ -101,3 +104,6 @@ class Week(Base):
             using="gist",
         ),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

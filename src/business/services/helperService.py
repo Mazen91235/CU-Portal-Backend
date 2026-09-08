@@ -1030,7 +1030,12 @@ class HelperService(IHelperService[U]):
                     )
                     return return_response
                 await self._send_push_notifications(
-                    session, user_ids, created_notification.id, notification_type, content, url=url
+                    session,
+                    user_ids,
+                    created_notification.id,
+                    notification_type,
+                    content,
+                    url=url,
                 )
                 await session.commit()  # Commit the transaction
                 return_response = BaseResponseDto(
@@ -1062,10 +1067,23 @@ class HelperService(IHelperService[U]):
                     await self._log(
                         action="SendNotification",
                         entity="Notification",
-                        level="info" if return_response.success else "warning" if return_response.code or 500 < 500 else "error",
+                        level=(
+                            "info"
+                            if return_response.success
+                            else (
+                                "warning"
+                                if (return_response.code or 500) < 500
+                                else "error"
+                            )
+                        ),
                         code=return_response.code or 500,
-                        message=return_response.message or "Notification processing completed",
-                        details={"error": return_response.error} if return_response.error else {},
+                        message=return_response.message
+                        or "Notification processing completed",
+                        details=(
+                            {"error": return_response.error}
+                            if return_response.error
+                            else {}
+                        ),
                     )
                 await session.close()  # Ensure the session is closed
 
@@ -1121,7 +1139,11 @@ class HelperService(IHelperService[U]):
                     if not device_token or not device_token.strip():
                         continue
                     send_response = FirebaseHandler.send_notification(
-                        device_token=device_token, title=title, body=body, url=url, notification_id=notification_id
+                        device_token=device_token,
+                        title=title,
+                        body=body,
+                        url=url,
+                        notification_id=notification_id,
                     )
                     if not send_response.success and send_response.code == 404:
                         user.devices.remove(device_token)

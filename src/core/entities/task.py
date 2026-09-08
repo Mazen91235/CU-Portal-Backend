@@ -82,7 +82,10 @@ class Task(Base):
         collection_class=set,
     )
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (
         # Composite Indexes
         Index(
@@ -93,3 +96,6 @@ class Task(Base):
             unique=True,
         ),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

@@ -52,6 +52,9 @@ class Faculty(Base):
         nullable=True,
     )
 
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
     # Relationships
     users: Mapped[set["User"]] = relationship(
         "User", back_populates="faculty", cascade="all, delete-orphan", collection_class=set
@@ -72,5 +75,8 @@ class Faculty(Base):
         "Week", back_populates="faculty", cascade="all, delete-orphan", collection_class=set
     )
 
-    # Indexes
+    # Arguments
     __table_args__ = (Index("idx_faculty_name", func.lower(name), unique=True),)
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

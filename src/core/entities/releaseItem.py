@@ -53,8 +53,14 @@ class ReleaseItem(Base):
     )
     release: Mapped["Release"] = relationship("Release", back_populates="release_items")
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (Index("idx_release_item_release_id", "release_id", unique=False),)
+    __mapper_args__ = {
+        "version_id_col": version,
+    }
 
     # Attributes
     class ItemType(str, Enum):

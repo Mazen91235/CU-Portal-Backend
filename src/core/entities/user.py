@@ -243,12 +243,18 @@ class User(Base):
         collection_class=set,
     )
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (
         Index("idx_user_email", "email", unique=True),
         Index("idx_user_phone", "phone", unique=True),
         Index("idx_user_google_id", "google_id", unique=True),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }
 
     # Validation
     @validates("study_type")

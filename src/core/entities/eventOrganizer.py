@@ -49,6 +49,9 @@ class EventOrganizer(Base):
         nullable=True,
     )
 
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
     # Relationships
     events: Mapped[set["Event"]] = relationship(
         "Event",
@@ -74,5 +77,8 @@ class EventOrganizer(Base):
         collection_class=set,
     )
 
-    # Indexes
+    # Arguments
     __table_args__ = (Index("idx_event_organizer_name", "name", unique=True),)
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

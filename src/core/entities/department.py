@@ -59,6 +59,9 @@ class Department(Base):
         nullable=True,
     )
 
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
     # Relationships
     faculty_id: Mapped[int] = mapped_column(
         Integer,
@@ -99,7 +102,7 @@ class Department(Base):
         collection_class=set,
     )
 
-    # Indexes
+    # Arguments
     __table_args__ = (
         Index(
             "idx_department_faculty_id_study_type_name",
@@ -128,6 +131,9 @@ class Department(Base):
             unique=True,
         ),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }
 
     # Attributes
     class StudyType(str, Enum):

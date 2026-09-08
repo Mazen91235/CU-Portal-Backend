@@ -67,6 +67,9 @@ class Event(Base):
         nullable=True,
     )
 
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
     # Relationships
     author_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=False
@@ -123,7 +126,7 @@ class Event(Base):
         collection_class=set,
     )
 
-    # Indexes
+    # Arguments
     __table_args__ = (
         Index(
             "idx_event_fac_id_dep_id_year_id_event_org_id_title",
@@ -136,6 +139,9 @@ class Event(Base):
             postgresql_nulls_not_distinct=True,
         ),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }
 
     # Attributes
     class LocationType(str, Enum):

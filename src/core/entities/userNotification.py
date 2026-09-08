@@ -63,8 +63,14 @@ class UserNotification(Base):
         "Notification", back_populates="user_notifications"
     )
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (
         Index("idx_user_notification_user_seen", "user_id", "seen"),
         Index("idx_user_notification_notification_seen", "notification_id", "seen"),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

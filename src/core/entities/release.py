@@ -46,17 +46,25 @@ class Release(Base):
         onupdate=lambda: TimezoneHandler.now("UTC"),
         nullable=True,
     )
+    
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
 
     # Relationships
-    version_id: Mapped[int] = mapped_column(
+    release_version_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("versions.id"), nullable=False
     )
-    version: Mapped["Version"] = relationship("Version", back_populates="releases")
+    release_version: Mapped["Version"] = relationship(
+        "Version", back_populates="releases"
+    )
     release_items: Mapped[set["ReleaseItem"]] = relationship(
         "ReleaseItem", back_populates="release", cascade="all, delete-orphan", collection_class=set
     )
 
-    # Indexes
+    # Arguments
     __table_args__ = (
         Index("idx_release_release_number", "release_number", unique=True),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

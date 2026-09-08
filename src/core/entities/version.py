@@ -46,10 +46,19 @@ class Version(Base):
 
     # Relationships
     releases: Mapped[set["Release"]] = relationship(
-        "Release", back_populates="version", cascade="all, delete-orphan", collection_class=set
+        "Release",
+        back_populates="release_version",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (
         Index("idx_version_version_number", "version_number", unique=True),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

@@ -56,6 +56,9 @@ class Log(Base):
         nullable=True,
     )
 
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
     # Relationships
     user_id: Mapped[Optional[int]] = mapped_column(
         Integer,
@@ -66,7 +69,7 @@ class Log(Base):
     )
     user: Mapped[Optional["User"]] = relationship("User", back_populates="logs")
 
-    # Indexes
+    # Arguments
     __table_args__ = (
         Index("idx_log_level", "level"),
         # Composite Indexes
@@ -83,3 +86,6 @@ class Log(Base):
             "route",
         ),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

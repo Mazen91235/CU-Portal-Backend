@@ -59,9 +59,15 @@ class RoleLink(Base):
         "ExactRole", back_populates="role_links"
     )
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (
         # Composite Indexes
-        Index("idx_role_exact_role", "role_id", "exact_role_id", unique=True),
-        Index("idx_exact_role_role", "exact_role_id", "role_id"),
+        Index("idx_role_id_exact_role_id", "role_id", "exact_role_id", unique=True),
+        Index("idx_exact_role_id_role_id", "exact_role_id", "role_id"),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

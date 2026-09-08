@@ -60,7 +60,13 @@ class UserEvent(Base):
     )
     event: Mapped["Event"] = relationship("Event", back_populates="user_events")
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (
         Index("idx_user_event_user_id_event_id", "user_id", "event_id", unique=True),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

@@ -44,6 +44,9 @@ class ExactRole(Base):
         nullable=True,
     )
 
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
     # Relationships
     roles: AssociationProxy[list["Role"]] = association_proxy(
         "role_links",
@@ -56,5 +59,8 @@ class ExactRole(Base):
         "RoleLink", back_populates="exact_role", cascade="all, delete-orphan", collection_class=set
     )
 
-    # Indexes
+    # Arguments
     __table_args__ = (Index("idx_exact_role_name", "name", unique=True),)
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

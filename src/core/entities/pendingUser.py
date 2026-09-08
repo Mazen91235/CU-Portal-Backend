@@ -58,5 +58,11 @@ class PendingUser(Base):
         uselist=False,
     )
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (Index("idx_pending_user_user_id", "user_id", unique=True),)
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

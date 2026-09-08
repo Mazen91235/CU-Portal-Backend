@@ -54,7 +54,10 @@ class Note(Base):
     )
     author: Mapped["User"] = relationship("User", back_populates="notes")
 
-    # Indexes
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
+    # Arguments
     __table_args__ = (
         Index(
             "idx_note_title_author_id_content_date",
@@ -66,3 +69,6 @@ class Note(Base):
             postgresql_nulls_not_distinct=True,
         ),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

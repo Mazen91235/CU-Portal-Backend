@@ -57,6 +57,9 @@ class Announcement(Base):
         nullable=True,
     )
 
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
     # Relationships
     year_id: Mapped[Optional[int]] = mapped_column(
         Integer,
@@ -105,7 +108,7 @@ class Announcement(Base):
         collection_class=set,
     )
 
-    # Indexes
+    # Arguments
     __table_args__ = (
         Index(
             "idx_announcement_title_subject_id_date",
@@ -115,3 +118,6 @@ class Announcement(Base):
             unique=True,
         ),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }

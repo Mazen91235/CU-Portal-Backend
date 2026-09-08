@@ -58,6 +58,9 @@ class Attachment(Base):
         nullable=True,
     )
 
+    # Versioning
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+
     # Relationships
     author_id: Mapped[int] = mapped_column(
         Integer,
@@ -142,7 +145,7 @@ class Attachment(Base):
         foreign_keys=[event_organizer_id],
     )
 
-    # Indexes
+    # Arguments
     __table_args__ = (
         Index(
             "idx_attachment_author_id_pending_user_id_url",
@@ -187,3 +190,6 @@ class Attachment(Base):
             unique=True,
         ),
     )
+    __mapper_args__ = {
+        "version_id_col": version,
+    }
