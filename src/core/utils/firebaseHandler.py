@@ -89,6 +89,14 @@ class FirebaseHandler:
             )
         except Exception as e:
             error_detail = str(e) or repr(e) or e.__class__.__name__
+            if "unregistered" in error_detail.lower():
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="Device token is unregistered or invalid",
+                    error=error_detail,
+                )
             return BaseResponseDto(
                 success=False,
                 code=500,
