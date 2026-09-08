@@ -1197,6 +1197,27 @@ class HelperService(IHelperService[U]):
         subject_id=None,
     ):
         try:
+            if not os.environ.get("BACKGROUND_WORKER_URL") or not os.environ.get(
+                "API_KEY"
+            ):
+                await self._log(
+                    action="SendNotificationToBackgroundWorker",
+                    entity="Notification",
+                    level="error",
+                    code=500,
+                    message="Background worker URL or API key is not configured",
+                    details={
+                        "background_worker_url": (os.environ.get("BACKGROUND_WORKER_URL")
+                        is not None),
+                        "api_key": (os.environ.get("API_KEY") is not None),
+                    },
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="Background worker URL or API key is not configured",
+                )
             response = await self._request_with_retries(
                 method="POST",
                 url=f"{os.environ.get('BACKGROUND_WORKER_URL', 'http://localhost:3000')}/notifications",
