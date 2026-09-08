@@ -76,14 +76,7 @@ class Notification(Base):
 
     # Indexes
     __table_args__ = (
-        Index(
-            "idx_notification_content_notification_type_parent_id",
-            func.lower(content),
-            "notification_type",
-            "parent_id",
-            unique=True,
-            postgresql_nulls_not_distinct=True,
-        ),
+        #
     )
 
     # Attributes

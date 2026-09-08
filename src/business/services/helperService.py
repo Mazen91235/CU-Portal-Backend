@@ -836,33 +836,6 @@ class HelperService(IHelperService[U]):
         async with self.session_factory() as session:
             try:
                 await session.begin()  # Start a transaction
-                existing_notification_response = (
-                    await self.notification_repository.find_one(
-                        and_(
-                            func.lower(Notification.content) == func.lower(content),
-                            Notification.notification_type.is_not_distinct_from(
-                                notification_type
-                            ),
-                            Notification.parent_id.is_not_distinct_from(parent_id),
-                        ),
-                        session=session,
-                    )
-                )
-                if not existing_notification_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=existing_notification_response.code,
-                        data=False,
-                        message=existing_notification_response.message,
-                    )
-                existing_notification = existing_notification_response.data
-                if existing_notification:
-                    return BaseResponseDto(
-                        success=False,
-                        code=409,
-                        data=False,
-                        message="Notification with the same content, type, parent ID, and URL already exists",
-                    )
                 if (
                     not faculty_id
                     and not department_id
