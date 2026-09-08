@@ -880,7 +880,7 @@ class HelperService(IHelperService[U]):
                             message=users_response.message,
                         )
                     users = users_response.data
-                    user_ids = [user.id for user in (users or [])]
+                    user_ids.update([user.id for user in (users or [])])
                 else:
                     if faculty_id:
                         dynamic_includes = self.generate_dynamic_includes(
@@ -1010,10 +1010,10 @@ class HelperService(IHelperService[U]):
                     notification_type=notification_type,
                     parent_id=parent_id,
                     url=url,
-                    user_notifications=[
+                    user_notifications=set(
                         UserNotification(user_id=user_id)
                         for user_id in (user_ids or [])
-                    ],
+                    ),
                 )
                 create_notification_response = (
                     await self.notification_repository.create(
