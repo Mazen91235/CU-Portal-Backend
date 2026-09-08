@@ -514,7 +514,7 @@ class TaskService(ITaskService):
                     message="Another task with the same name already exists for this subject.",
                 )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id, dynamic_includes
+                Subject.id == data.subject_id
             )
             if not subject_response.success:
                 return BaseResponseDto(
