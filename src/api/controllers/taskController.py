@@ -33,10 +33,9 @@ class TaskController(ITaskController):
                 entity_search_dto,
                 [
                     "author",
-                    "subject",
-                    "faculty",
-                    "department",
-                    "year",
+                    "subject.faculty",
+                    "subject.department",
+                    "subject.year",
                     "attachments",
                 ],
             )
