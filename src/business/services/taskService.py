@@ -279,9 +279,6 @@ class TaskService(ITaskService):
             )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(
-                    faculty_id=data.faculty_id,
-                    department_id=data.department_id,
-                    year_id=data.year_id,
                     subject_id=data.subject_id,
                 )
             )
@@ -300,9 +297,6 @@ class TaskService(ITaskService):
                     code=403,
                     message="User does not have access to create task for the specified criteria.",
                 )
-            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
-            data.department_id = data.department_id or logged_in_user.department_id
-            data.year_id = data.year_id or logged_in_user.year_id
             data.details = {} if not data.details else data.details
             urls = data.details.get("urls", [])
             links = data.details.get("links", [])
@@ -580,9 +574,6 @@ class TaskService(ITaskService):
                 )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(
-                    faculty_id=data.faculty_id,
-                    department_id=data.department_id,
-                    year_id=data.year_id,
                     subject_id=data.subject_id,
                 )
             )
@@ -601,9 +592,6 @@ class TaskService(ITaskService):
                     code=403,
                     message="User does not have access to update task for the specified criteria.",
                 )
-            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
-            data.department_id = data.department_id or logged_in_user.department_id
-            data.year_id = data.year_id or logged_in_user.year_id
             logged_in_user_permissions_response = (
                 await self.helper_service.get_logged_in_user_permissions()
             )
@@ -690,9 +678,6 @@ class TaskService(ITaskService):
             target_task.deadline = data.deadline
             target_task.due_date = data.due_date
             target_task.subject_id = data.subject_id
-            target_task.faculty_id = data.faculty_id
-            target_task.department_id = data.department_id
-            target_task.year_id = data.year_id
             target_task.url = data.url
             target_task.details = data.details
             target_task.author_id = data.author_id
@@ -930,9 +915,6 @@ class TaskService(ITaskService):
                 )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(
-                    faculty_id=data.faculty_id,
-                    department_id=data.department_id,
-                    year_id=data.year_id,
                     subject_id=data.subject_id,
                 )
             )
