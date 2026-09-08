@@ -507,7 +507,7 @@ class EventService(IEventService):
                         data=None,
                         message="An error occurred while creating event",
                     )
-            share_link = f"/users/events/{updated_event.id}"
+            share_link = f"/user/events/{updated_event.id}"
             await self.helper_service.send_notification(
                 Notification.NotificationType.EVENT,
                 updated_event.id,
@@ -1050,7 +1050,7 @@ class EventService(IEventService):
                         data=None,
                         message="An error occurred while updating event",
                     )
-            share_link = f"/users/events/{updated_event.id}"
+            share_link = f"/user/events/{updated_event.id}"
             await self.helper_service.send_notification(
                 Notification.NotificationType.EVENT,
                 updated_event.id,

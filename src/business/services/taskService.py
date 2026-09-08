@@ -412,7 +412,7 @@ class TaskService(ITaskService):
                         data=None,
                         message="An error occurred while creating task",
                     )
-            share_link = f"/users/tasks/{created_task.id}"
+            share_link = f"/user/tasks/{created_task.id}"
             await self.helper_service.send_notification(
                 Notification.NotificationType.TASK,
                 created_task.id,
@@ -811,7 +811,7 @@ class TaskService(ITaskService):
                         data=None,
                         message="An error occurred while updating task",
                     )
-            share_link = f"/users/tasks/{updated_task.id}"
+            share_link = f"/user/tasks/{updated_task.id}"
             await self.helper_service.send_notification(
                 Notification.NotificationType.TASK,
                 updated_task.id,

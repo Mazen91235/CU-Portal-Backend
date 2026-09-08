@@ -398,7 +398,7 @@ class AnnouncementService(IAnnouncementService):
                         data=None,
                         message="An error occurred while creating attachment for announcement",
                     )
-            share_link = f"/users/announcements/{created_announcement.id}"
+            share_link = f"/user/announcements/{created_announcement.id}"
             await self.helper_service.send_notification(
                 Notification.NotificationType.ANNOUNCEMENT,
                 created_announcement.id,
@@ -789,7 +789,7 @@ class AnnouncementService(IAnnouncementService):
                         data=None,
                         message="An error occurred while creating attachment for announcement",
                     )
-            share_link = f"/users/announcements/{updated_announcement.id}"
+            share_link = f"/user/announcements/{updated_announcement.id}"
             await self.helper_service.send_notification(
                 Notification.NotificationType.ANNOUNCEMENT,
                 updated_announcement.id,

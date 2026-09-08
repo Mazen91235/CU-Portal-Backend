@@ -311,7 +311,7 @@ class ExamService(IExamService):
                     data=None,
                     message="An error occurred while creating exam",
                 )
-            share_link = f"/users/exams/{created_exam.id}"
+            share_link = f"/user/exams/{created_exam.id}"
             await self.helper_service.send_notification(
                 Notification.NotificationType.EXAM,
                 created_exam.id,
@@ -587,7 +587,7 @@ class ExamService(IExamService):
                     data=None,
                     message="An error occurred while updating exam",
                 )
-            share_link = f"/users/exams/{updated_exam.id}"
+            share_link = f"/user/exams/{updated_exam.id}"
             await self.helper_service.send_notification(
                 Notification.NotificationType.EXAM,
                 updated_exam.id,
