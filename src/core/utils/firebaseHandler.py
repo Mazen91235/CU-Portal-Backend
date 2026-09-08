@@ -89,7 +89,10 @@ class FirebaseHandler:
             )
         except Exception as e:
             error_detail = str(e) or repr(e) or e.__class__.__name__
-            if "unregistered" in error_detail.lower():
+            if any(
+                x in error_detail.lower()
+                for x in ["unregistered", "notregistered", "invalid"]
+            ):
                 return BaseResponseDto(
                     success=False,
                     code=404,
