@@ -37,6 +37,7 @@ class FirebaseHandler:
         title: str,
         body: str,
         url: str | None = None,
+        notification_id: int | None = None,
         icon: str | None = None,
     ) -> BaseResponseDto[str]:
         if not url or url.strip().startswith("/"):
@@ -51,6 +52,9 @@ class FirebaseHandler:
             data={
                 "url": url,
                 "icon": icon,
+                "notification_id": (
+                    str(notification_id) if notification_id is not None else None
+                ),
             },
             token=device_token,
             # Web push specific overrides

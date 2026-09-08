@@ -1009,7 +1009,7 @@ class HelperService(IHelperService[U]):
                         message="Failed to create notification",
                     )
                 await self._send_push_notifications(
-                    session, user_ids, notification_type, content, url=url
+                    session, user_ids, created_notification.id, notification_type, content, url=url
                 )
                 await session.commit()  # Commit the transaction
                 return BaseResponseDto(
@@ -1039,7 +1039,7 @@ class HelperService(IHelperService[U]):
                 await session.close()  # Ensure the session is closed
 
     async def _send_push_notifications(
-        self, session, user_ids, notification_type, body, url=None
+        self, session, user_ids, notification_id, notification_type, body, url=None
     ):
         try:
             title = "New Notification"
@@ -1090,7 +1090,7 @@ class HelperService(IHelperService[U]):
                     if not device_token or not device_token.strip():
                         continue
                     send_response = FirebaseHandler.send_notification(
-                        device_token=device_token, title=title, body=body, url=url
+                        device_token=device_token, title=title, body=body, url=url, notification_id=notification_id
                     )
                     if not send_response.success and send_response.code == 404:
                         user.devices.remove(device_token)
