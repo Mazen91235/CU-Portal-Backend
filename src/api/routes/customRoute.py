@@ -117,7 +117,16 @@ async def _check_cache(request: Request):
         return None
     except CacheHitException as ex:
         raise ex
-    except Exception:
+    except Exception as e:
+        await _log(
+            request,
+            action="Check",
+            entity="Cache",
+            level="error",
+            code=500,
+            message="Failed to check cache",
+            details={"error": str(e)},
+        )
         return None
 
 
@@ -134,18 +143,16 @@ async def _update_cache(request: Request, response: Response):
             cache_key = f"{token}:{request.url.path}?{request.url.query}"
             body_bytes = getattr(response, "body", b"{}")
             body = json.loads(body_bytes.decode("utf-8"))
-            asyncio.create_task(
-                caching_handler.set(
-                    cache_key,
-                    {
-                        "success": body.get("success", True),
-                        "code": response.status_code,
-                        "message": body.get("message", ""),
-                        "data": body.get("data", None),
-                        "next_page": body.get("next_page", False),
-                    },
-                    expire=CACHE_TTL,
-                )
+            await caching_handler.set(
+                cache_key,
+                {
+                    "success": body.get("success", True),
+                    "code": response.status_code,
+                    "message": body.get("message", ""),
+                    "data": body.get("data", None),
+                    "next_page": body.get("next_page", False),
+                },
+                expire=CACHE_TTL,
             )
         elif (
             request.method.upper() in ["POST", "PATCH", "PUT", "DELETE"]
@@ -153,9 +160,18 @@ async def _update_cache(request: Request, response: Response):
         ):
             module = _extract_module_from_path(request.url.path)
             if module:
-                asyncio.create_task(caching_handler.invalidate_module_cache(module))
+                await caching_handler.invalidate_module_cache(module)
         return None
-    except Exception:
+    except Exception as e:
+        await _log(
+            request,
+            action="Update",
+            entity="Cache",
+            level="error",
+            code=500,
+            message="Failed to update cache",
+            details={"error": str(e)},
+        )
         return None
 
 
@@ -247,7 +263,7 @@ class CustomRoute(APIRoute):
                 response = await asyncio.wait_for(
                     original_route_handler(request), timeout=timeout_seconds
                 )
-                await _update_cache(request, response)
+                asyncio.create_task(_update_cache(request, response))
                 return response
             except CacheHitException as ex:
                 return ex.response
@@ -269,6 +285,6 @@ class CustomRoute(APIRoute):
                 raise
             finally:
                 if lock_key and acquired:
-                    await caching_handler.release_lock(lock_key)
+                    asyncio.create_task(caching_handler.release_lock(lock_key))
 
         return custom_route_handler
