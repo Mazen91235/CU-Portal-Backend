@@ -75,7 +75,7 @@ class NoteService(INoteService):
                 level="error",
                 code=500,
                 message="Error finding note",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NoteService",
             )
             return BaseResponseDto(
@@ -135,7 +135,7 @@ class NoteService(INoteService):
                 level="error",
                 code=500,
                 message="An error occurred while finding notes",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NoteService",
             )
             return BaseResponseDto(
@@ -257,7 +257,7 @@ class NoteService(INoteService):
                 level="error",
                 code=500,
                 message="An error occurred while creating note",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NoteService",
             )
             return BaseResponseDto(
@@ -421,7 +421,7 @@ class NoteService(INoteService):
                 level="error",
                 code=500,
                 message="An error occurred while updating note",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NoteService",
             )
             return BaseResponseDto(
@@ -535,7 +535,7 @@ class NoteService(INoteService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting note",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NoteService",
             )
             return BaseResponseDto(

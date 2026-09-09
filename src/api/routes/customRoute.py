@@ -125,7 +125,7 @@ async def _check_cache(request: Request):
             level="error",
             code=500,
             message="Failed to check cache",
-            details={"error": str(e)},
+            details={"error": repr(e)},
         )
         return None
 
@@ -170,7 +170,7 @@ async def _update_cache(request: Request, response: Response):
             level="error",
             code=500,
             message="Failed to update cache",
-            details={"error": str(e)},
+            details={"error": repr(e)},
         )
         return None
 

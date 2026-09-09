@@ -83,7 +83,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while finding event",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(
@@ -143,7 +143,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while finding events",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(
@@ -538,7 +538,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while creating event",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(
@@ -1081,7 +1081,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while updating event",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(
@@ -1266,7 +1266,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting event",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(
@@ -1413,7 +1413,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while registering for event",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(
@@ -1541,7 +1541,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while unregistering from event",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(

@@ -79,7 +79,7 @@ class FirebaseHandler:
         except (
             messaging.UnregisteredError
         ) as e:  # Token is invalid or user unsubscribed
-            error_detail = str(e) or repr(e) or e.__class__.__name__
+            error_detail = repr(e) or repr(e) or e.__class__.__name__
             return BaseResponseDto(
                 success=False,
                 code=404,
@@ -88,7 +88,7 @@ class FirebaseHandler:
                 error=error_detail,
             )
         except Exception as e:
-            error_detail = str(e) or repr(e) or e.__class__.__name__
+            error_detail = repr(e) or repr(e) or e.__class__.__name__
             if any(
                 x in error_detail.lower()
                 for x in ["unregistered", "notregistered", "invalid"]

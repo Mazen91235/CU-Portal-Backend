@@ -79,7 +79,7 @@ class EventOrganizerController(IEventOrganizerController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="EventOrganizerController",
             )
             return ResponseHandler.generate_response(
@@ -141,7 +141,7 @@ class EventOrganizerController(IEventOrganizerController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="EventOrganizerController",
             )
             return ResponseHandler.generate_response(
@@ -202,7 +202,7 @@ class EventOrganizerController(IEventOrganizerController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="EventOrganizerController",
             )
             return ResponseHandler.generate_response(
@@ -267,7 +267,7 @@ class EventOrganizerController(IEventOrganizerController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="EventOrganizerController",
             )
             return ResponseHandler.generate_response(
@@ -310,7 +310,7 @@ class EventOrganizerController(IEventOrganizerController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="EventOrganizerController",
             )
             return ResponseHandler.generate_response(
