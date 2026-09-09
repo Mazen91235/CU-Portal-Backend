@@ -263,7 +263,7 @@ class CustomRoute(APIRoute):
                 response = await asyncio.wait_for(
                     original_route_handler(request), timeout=timeout_seconds
                 )
-                await _update_cache(request, response)
+                asyncio.create_task(_update_cache(request, response))
                 return response
             except CacheHitException as ex:
                 return ex.response
@@ -285,6 +285,6 @@ class CustomRoute(APIRoute):
                 raise
             finally:
                 if lock_key and acquired:
-                    await caching_handler.release_lock(lock_key)
+                    asyncio.create_task(caching_handler.release_lock(lock_key))
 
         return custom_route_handler
