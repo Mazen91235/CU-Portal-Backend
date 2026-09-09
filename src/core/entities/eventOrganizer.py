@@ -50,7 +50,9 @@ class EventOrganizer(Base):
     )
 
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Relationships
     events: Mapped[set["Event"]] = relationship(
@@ -64,7 +66,7 @@ class EventOrganizer(Base):
         ForeignKey(
             "attachments.id", ondelete="SET NULL", name="fk_attachment_event_organizer"
         ),
-        nullable=False,
+        nullable=True,
     )
     logo: Mapped[Optional["Attachment"]] = relationship(
         "Attachment", back_populates="event_organizer_logo", foreign_keys=[logo_id]
