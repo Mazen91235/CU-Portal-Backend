@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iEventOrganizerController import IEventOrganizerController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -15,7 +16,7 @@ from core.utils.cookieHandler import cookie_scheme
 
 
 def create_event_organizer_user_router(controller_provider, auth_middleware_provider):
-    router = APIRouter(prefix="/event-organizers", tags=["User Event Organizers"])
+    router = APIRouter(prefix="/event-organizers", tags=["User Event Organizers"], route_class=CustomRoute)
 
     def _get_controller() -> IEventOrganizerController:
         return controller_provider()
@@ -72,7 +73,7 @@ def create_event_organizer_user_router(controller_provider, auth_middleware_prov
 def create_event_organizer_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/event-organizers", tags=["Admin Event Organizers"])
+    router = APIRouter(prefix="/event-organizers", tags=["Admin Event Organizers"], route_class=CustomRoute)
 
     def _get_controller() -> IEventOrganizerController:
         return controller_provider()
