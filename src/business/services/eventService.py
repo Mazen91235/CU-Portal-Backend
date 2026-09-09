@@ -511,7 +511,7 @@ class EventService(IEventService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.EVENT,
                 updated_event.id,
-                f"New Event '{updated_event.name}' has been posted.",
+                f"New Event '{updated_event.title}' has been posted.",
                 share_link,
                 faculty_id=updated_event.faculty_id,
                 department_id=updated_event.department_id,
@@ -1054,7 +1054,7 @@ class EventService(IEventService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.EVENT,
                 updated_event.id,
-                f"Event '{updated_event.name}' has been updated.",
+                f"Event '{updated_event.title}' has been updated.",
                 share_link,
                 faculty_id=updated_event.faculty_id,
                 department_id=updated_event.department_id,
