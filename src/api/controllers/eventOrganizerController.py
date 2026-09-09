@@ -35,6 +35,7 @@ class EventOrganizerController(IEventOrganizerController):
                 entity_search_dto,
                 [
                     "events.user_events.user",
+                    "events.logo",
                     "logo",
                     "attachments",
                 ],
