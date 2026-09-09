@@ -12,6 +12,7 @@ from core.dtos.userEventDtos import UserEventActionDto
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.queryModel import QueryModel
 from core.utils.parser import Parser
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_event_user_router(
@@ -31,8 +32,9 @@ def create_event_user_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     async def _is_ready(
         request: Request,
@@ -141,8 +143,9 @@ def create_event_admin_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     async def _is_ready(
         request: Request,
