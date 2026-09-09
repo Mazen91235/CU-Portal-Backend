@@ -99,7 +99,7 @@ class Event(Base):
     event_organizer: Mapped["EventOrganizer"] = relationship(
         "EventOrganizer", back_populates="events"
     )
-    attendees: AssociationProxy[list["User"]] = association_proxy(
+    attendees: AssociationProxy[set["User"]] = association_proxy(
         "user_events",
         "user",
         creator=lambda user: __import__(

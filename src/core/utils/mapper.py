@@ -51,7 +51,7 @@ class Mapper(Generic[T, U]):
 
     @classmethod
     def _map_nested_value(
-        cls, value: Any, visited: set[int], limit_nesting: int | None = None
+        cls, value: Any, visited: dict[int, Any], limit_nesting: int | None = None
     ) -> Any:
         if value is None:
             return None
@@ -59,11 +59,9 @@ class Mapper(Generic[T, U]):
         # Check for iterable/collection types
         if isinstance(value, (list, tuple, set, _AssociationList, _AssociationSet)):
             items = list(value)
-            # Apply limit if specified
             if limit_nesting is not None and limit_nesting >= 0:
                 items = items[:limit_nesting]
 
-            # Map items and filter out None results caused by cycle detection
             mapped_items = []
             for item in items:
                 mapped_item = cls._map_nested_value(
@@ -77,11 +75,11 @@ class Mapper(Generic[T, U]):
         if not cls._is_orm_instance(value):
             return value
 
-        # Track individual instance ID to break cycles without blocking sibling objects
-        if id(value) in visited:
-            return None
+        val_id = id(value)
 
-        visited.add(id(value))
+        # Return cached mapped object if already processed in this graph execution
+        if val_id in visited:
+            return visited[val_id]
 
         dto_cls = cls._resolve_response_dto(type(value))
         if not dto_cls:
@@ -100,14 +98,13 @@ class Mapper(Generic[T, U]):
         src: Any,
         cls: Type[U],
         to_dict: bool = False,
-        visited: set[int] | None = None,
+        visited: dict[int, Any] | None = None,
         limit_nesting: int | None = None,
     ) -> U | dict:
         mapped_values = {}
-        active_visited = set(visited) if visited is not None else set()
-        active_visited.add(id(src))
+        active_visited = dict(visited) if visited is not None else {}
+        src_id = id(src)
 
-        # Identify source attributes cleanly based on structure type
         if isinstance(src, BaseModel):
             source_attrs = list(type(src).model_fields.keys())
         elif isinstance(src, dict):
@@ -129,7 +126,6 @@ class Mapper(Generic[T, U]):
             except Exception:
                 source_attrs = dir(src)
 
-            # Keep explicit property visible to the mapper
             if (
                 hasattr(src, "google_details_token")
                 and "google_details_token" not in source_attrs
@@ -143,7 +139,6 @@ class Mapper(Generic[T, U]):
             cls.model_fields.keys() if issubclass(cls, BaseModel) else dir(cls)
         )
 
-        # Map matching field names directly across
         for attr in target_fields:
             if attr.startswith("_") or attr.startswith("Model"):
                 continue
@@ -158,6 +153,9 @@ class Mapper(Generic[T, U]):
                 mapped_values[attr] = mapped_value
 
         dest = cls(**mapped_values)
+
+        # Cache mapped result for this instance ID so shared nested references re-use it
+        active_visited[src_id] = dest
 
         if to_dict:
             return (
