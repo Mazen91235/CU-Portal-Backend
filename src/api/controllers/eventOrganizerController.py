@@ -34,7 +34,7 @@ class EventOrganizerController(IEventOrganizerController):
             response = await self.event_organizer_service.find_one(
                 entity_search_dto,
                 [
-                    "events",
+                    "events.user_events.user",
                     "logo",
                     "attachments",
                 ],

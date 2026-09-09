@@ -37,7 +37,7 @@ class EventController(IEventController):
                     "department",
                     "year",
                     "event_organizer",
-                    "attendees",
+                    "user_events.user",
                     "logo",
                     "attachments",
                 ],
