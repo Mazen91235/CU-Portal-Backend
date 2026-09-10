@@ -656,7 +656,7 @@ class HelperService(IHelperService[U]):
         return order_by_arr
 
     def generate_dynamic_predicate(
-        self, cls, data, query_fields, is_and, starts_with, is_exact
+        self, cls, data, query_fields, is_and, starts_with, is_exact, allow_nulls=False
     ):
         if not cls:
             return None
@@ -713,11 +713,21 @@ class HelperService(IHelperService[U]):
 
             if key.endswith("_from"):
                 # Column isn't null and >= value
-                conditions.append(
-                    column.isnot(None)
-                    & (column >= TimezoneHandler.from_isoformat(value))
-                )
+                if allow_nulls:
+                    conditions.append(
+                        or_((column.is_(None)), (column >= TimezoneHandler.from_isoformat(value)))
+                    )
+                else:
+                    conditions.append(
+                        column.isnot(None)
+                        & (column >= TimezoneHandler.from_isoformat(value))
+                    )
             elif key.endswith("_to"):
+                if allow_nulls:
+                    conditions.append(
+                        or_((column.is_(None)), (column <= TimezoneHandler.from_isoformat(value)))
+                    )
+                else:
                 conditions.append(
                     column.isnot(None)
                     & (column <= TimezoneHandler.from_isoformat(value))

@@ -82,6 +82,7 @@ class IHelperService(ABC, Generic[U]):
         is_and: bool,
         starts_with: bool,
         is_exact: bool,
+        allow_nulls: bool = False,
     ) -> Any:
         pass
 

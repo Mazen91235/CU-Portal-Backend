@@ -42,7 +42,7 @@ class NoteService(INoteService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Note, data, ["title", "content"], is_and, starts_with, is_exact
+                Note, data, ["title", "content"], is_and, starts_with, is_exact, True
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Note, includes
@@ -100,7 +100,7 @@ class NoteService(INoteService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Note, data, ["title", "content"], is_and, starts_with, is_exact
+                Note, data, ["title", "content"], is_and, starts_with, is_exact, True
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Note, includes
