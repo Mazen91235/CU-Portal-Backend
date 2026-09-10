@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from core.dtos.examDtos import ExamResponseDto
     from core.dtos.announcementDtos import AnnouncementResponseDto
     from core.dtos.notificationDtos import NotificationResponseDto
+    from core.dtos.noteDtos import NoteResponseDto
     from core.dtos.logDtos import LogResponseDto
     from core.dtos.subjectDtos import SubjectResponseDto
     from core.dtos.attachmentDtos import AttachmentResponseDto
@@ -111,6 +112,9 @@ class UserResponseDto(BaseModel):
     )
     notifications: list[NotificationResponseDto] | None = Field(
         default=None, description="Notifications associated with the user"
+    )
+    notes: list[NoteResponseDto] | None = Field(
+        default=None, description="Notes associated with the user"
     )
     logs: list[LogResponseDto] | None = Field(
         default=None, description="Logs associated with the user"
