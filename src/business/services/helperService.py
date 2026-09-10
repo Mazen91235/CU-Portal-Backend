@@ -712,10 +712,10 @@ class HelperService(IHelperService[U]):
                 continue
 
             if key.endswith("_from"):
-                # Column isn't null and >= value
                 if allow_nulls:
                     conditions.append(
-                        or_((column.is_(None)), (column >= TimezoneHandler.from_isoformat(value)))
+                        (column.is_(None))
+                        | (column >= TimezoneHandler.from_isoformat(value))
                     )
                 else:
                     conditions.append(
@@ -725,13 +725,14 @@ class HelperService(IHelperService[U]):
             elif key.endswith("_to"):
                 if allow_nulls:
                     conditions.append(
-                        or_((column.is_(None)), (column <= TimezoneHandler.from_isoformat(value)))
+                        (column.is_(None))
+                        | (column <= TimezoneHandler.from_isoformat(value)),
                     )
                 else:
-                conditions.append(
-                    column.isnot(None)
-                    & (column <= TimezoneHandler.from_isoformat(value))
-                )
+                    conditions.append(
+                        column.isnot(None)
+                        & (column <= TimezoneHandler.from_isoformat(value))
+                    )
             elif isinstance(value, str):
                 if not self._is_string_column(column):
                     conditions.append(column == value)
