@@ -176,16 +176,10 @@ async def _update_cache(request: Request, response: Response):
 
 
 def _extract_module_from_path(path: str) -> str:
-    if "/user/" in path:
-        if not "/" in path.split("/user/")[1]:
-            return "user/"
-        return path.split("/user/")[1].split("/")[0]
-    elif "/admin/" in path:
-        return path.split("/admin/")[1].split("/")[0]
-    elif "/auth/" in path:
-        return path.split("/auth/")[1].split("/")[0]
-    else:
-        return ""
+    module = path.strip("/user/").strip("/admin/").strip("/auth/")
+    if not module:
+        return "user"
+    return module.split("/")[0] if "/" in module else module
 
 
 async def _generate_inflight_key(request: Request) -> str:
