@@ -26,9 +26,7 @@ class MaterialCreateDto(BaseModel):
     parent_id: int | None = Field(
         default=None, description="ID of the parent material (for hierarchy)"
     )
-    week_id: int | None = Field(
-        default=None, description="ID of the associated week"
-    )
+    week_id: int | None = Field(default=None, description="ID of the associated week")
     details: dict | None = Field(
         default=None, description="Additional metadata about the material (like url)"
     )
@@ -89,7 +87,8 @@ class MaterialUpdateDto(BaseModel):
     )
     week_id: int | None = Field(default=None, description="ID of the associated week")
     details: dict | None = Field(
-        default=None, description="Updated additional metadata about the material (like url)"
+        default=None,
+        description="Updated additional metadata about the material (like url)",
     )
 
 
@@ -143,4 +142,10 @@ class MaterialsFetchFromDriveDto(BaseModel):
     )
     parent_id: int | None = Field(
         None, description="ID of the parent material for the fetched materials"
+    )
+
+
+class MaterialDownloadManyDto(BaseModel):
+    material_ids: list[int] = Field(
+        ..., min_length=1, description="List of material IDs to download"
     )

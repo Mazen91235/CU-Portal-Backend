@@ -256,9 +256,12 @@ class CustomRoute(APIRoute):
                             code=409,
                             message="A similar request is already being processed. Please wait for it to complete.",
                         )
-                response = await asyncio.wait_for(
-                    original_route_handler(request), timeout=timeout_seconds
-                )
+                if timeout_seconds == 0:
+                    response = await original_route_handler(request)
+                else:
+                    response = await asyncio.wait_for(
+                        original_route_handler(request), timeout=timeout_seconds
+                    )
                 asyncio.create_task(_update_cache(request, response))
                 return response
             except CacheHitException as ex:

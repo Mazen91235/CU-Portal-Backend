@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterable
+
 from pydantic import BaseModel, Field
 
 
@@ -5,9 +7,10 @@ class RequestResponseModel(BaseModel):
     json_response: dict = Field(
         default_factory=dict, description="The JSON response from the request"
     )
-    content: bytes | None = Field(
-        default=None, description="The raw content of the response in bytes"
+    content: AsyncIterable[bytes] | None = Field(
+        default=None, description="The async stream of the response content"
     )
+    model_config = {"arbitrary_types_allowed": True}
 
 
 class FileModel(BaseModel):
@@ -25,7 +28,10 @@ class FileModel(BaseModel):
 class DownloadedFileModel(BaseModel):
     name: str = Field(..., description="Name of the file")
     size: str = Field(..., description="Formatted size of the file (e.g., '2 MB')")
-    content: bytes = Field(..., description="Content of the file in bytes")
+    content: AsyncIterable[bytes] = Field(
+        ..., description="Async stream of the file content in bytes"
+    )
+    model_config = {"arbitrary_types_allowed": True}
 
 
 class FetchedModel(BaseModel):

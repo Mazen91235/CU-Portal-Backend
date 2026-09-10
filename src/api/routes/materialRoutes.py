@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, Query
 from api.routes.customRoute import CustomRoute, set_timeout
 from core.iControllers.iMaterialController import IMaterialController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
@@ -11,6 +11,7 @@ from core.dtos.materialDtos import (
     MaterialSearchDto,
     MaterialsCopyOrMoveDto,
     MaterialsFetchFromDriveDto,
+    MaterialDownloadManyDto,
 )
 from core.models.queryModel import QueryModel
 from core.utils.parser import Parser
@@ -48,6 +49,25 @@ def create_material_user_router(
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
     ):
         return await auth_middleware.has_registered_subjects(request)
+
+    @router.get(
+        "/download-many",
+        dependencies=[
+            Depends(set_timeout(0)),
+        ],
+        status_code=200,
+        summary="Download Materials",
+        description="Download one or more materials as a streamed ZIP archive",
+    )
+    async def download_many_materials(
+        request: Request,
+        material_ids: str = Query(..., min_length=1),
+        controller: IMaterialController = Depends(_get_controller),
+    ):
+        data = MaterialDownloadManyDto(
+            material_ids=[int(material_id) for material_id in material_ids.split(",")]
+        )
+        return await controller.download_many(request, data=data)
 
     @router.get(
         "/{material_id}",
@@ -229,6 +249,25 @@ def create_material_admin_router(
         controller: IMaterialController = Depends(_get_controller),
     ):
         return await controller.fetch_materials_from_drive(request, data=data)
+
+    @router.get(
+        "/download-many",
+        dependencies=[
+            Depends(set_timeout(0)),
+        ],
+        status_code=200,
+        summary="Download Materials",
+        description="Download one or more materials as a streamed ZIP archive",
+    )
+    async def download_many_materials(
+        request: Request,
+        material_ids: str = Query(..., min_length=1),
+        controller: IMaterialController = Depends(_get_controller),
+    ):
+        data = MaterialDownloadManyDto(
+            material_ids=[int(material_id) for material_id in material_ids.split(",")]
+        )
+        return await controller.download_many(request, data=data)
 
     @router.post(
         "/",

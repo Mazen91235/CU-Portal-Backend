@@ -9,6 +9,7 @@ from core.dtos.materialDtos import (
     MaterialSearchDto,
     MaterialsCopyOrMoveDto,
     MaterialsFetchFromDriveDto,
+    MaterialDownloadManyDto,
 )
 
 
@@ -37,4 +38,10 @@ class IMaterialService(
     async def fetch_materials_from_drive(
         self, data: MaterialsFetchFromDriveDto
     ) -> BaseResponseDto[bool]:
+        pass
+
+    @abstractmethod
+    async def download_many(
+        self, data: MaterialDownloadManyDto
+    ) -> BaseResponseDto:
         pass
