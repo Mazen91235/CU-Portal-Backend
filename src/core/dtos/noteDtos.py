@@ -13,7 +13,7 @@ class NoteCreateDto(BaseModel):
     title: str = Field(
         ..., min_length=1, max_length=100, description="Title of the note"
     )
-    content: str = Field(..., max_length=500, description="Content of the note")
+    content: str = Field(..., max_length=1000, description="Content of the note")
     date: datetime | None = Field(default=None, description="Date of the note")
 
 
@@ -50,7 +50,7 @@ class NoteUpdateDto(BaseModel):
     )
     content: str = Field(
         ...,
-        max_length=500,
+        max_length=1000,
         description="Content of the note",
     )
     date: datetime | None = Field(

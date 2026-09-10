@@ -5,8 +5,22 @@ CREATE OR REPLACE FUNCTION get_user_calendar(
 )
 RETURNS JSON AS $$
 DECLARE
+    v_faculty_id INT;
+    v_department_id INT;
+    v_year_id INT;
     v_result JSON;
 BEGIN
+    SELECT 
+        u.faculty_id,
+        u.department_id,
+        u.year_id
+    INTO 
+        v_faculty_id,
+        v_department_id,
+        v_year_id
+    FROM users u
+    WHERE u.id = p_user_id;
+
     WITH registered_subjects AS (
         -- 1. Fetch all subject IDs registered by the user
         SELECT subject_id 
@@ -60,7 +74,10 @@ BEGIN
     LEFT JOIN years y ON y.id = e.year_id
     LEFT JOIN attachments a ON a.id = e.logo_id
     LEFT JOIN user_events ue ON ue.event_id = e.id
-    WHERE e.start_date IS NOT NULL
+    WHERE e.faculty_id IS NULL OR e.faculty_id = v_faculty_id
+      AND e.department_id IS NULL OR e.department_id = v_department_id
+      AND e.year_id IS NULL OR e.year_id = v_year_id
+      AND e.start_date IS NOT NULL
       AND e.start_date >= p_date_from 
       AND e.start_date <= p_date_to
     GROUP BY e.id, f.id, d.id, y.id, a.id
