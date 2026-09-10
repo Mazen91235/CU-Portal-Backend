@@ -26,7 +26,9 @@ class CachingHandler:
         keys = await self.redis_client.keys(f"*/{module}*")
         if keys:
             await self.redis_client.delete(*keys)
-        if module in ["tasks", "exams", "announcements", "events", "notes"]:
+        if any(
+            [x in module for x in ["task", "exam", "announcement", "event", "note"]]
+        ):
             await self.invalidate_module_cache("calendar")
 
     async def acquire_lock(self, lock_key: str, expire: int = 60) -> bool:
