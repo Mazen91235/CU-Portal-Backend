@@ -30,6 +30,8 @@ class CachingHandler:
             [x in module for x in ["task", "exam", "announcement", "event", "note"]]
         ):
             await self.invalidate_module_cache("calendar")
+        if any([x in module for x in ["auth"]]):
+            await self.invalidate_module_cache("user")
 
     async def acquire_lock(self, lock_key: str, expire: int = 60) -> bool:
         acquired = await self.redis_client.set(lock_key, "1", nx=True, ex=expire)

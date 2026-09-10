@@ -176,9 +176,11 @@ async def _update_cache(request: Request, response: Response):
 
 
 def _extract_module_from_path(path: str) -> str:
-    module = path.removeprefix("/user/").removeprefix("/admin/").removeprefix("/auth/")
+    module = path.removeprefix("/user/").removeprefix("/admin/")
     if not module:
         return "user"
+    if "auth" in module:
+        return "auth"
     return module.split("/")[0] if "/" in module else module
 
 
