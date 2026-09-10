@@ -35,6 +35,8 @@ from core.dtos.materialDtos import *
 from core.dtos.messageDtos import *
 from core.dtos.notificationDtos import *
 from core.dtos.pendingUserDtos import *
+from core.dtos.releaseDtos import *
+from core.dtos.releaseItemDtos import *
 from core.dtos.requestLimitDtos import *
 from core.dtos.roleDtos import *
 from core.dtos.subjectDtos import *
@@ -42,11 +44,13 @@ from core.dtos.taskDtos import *
 from core.dtos.userDtos import *
 from core.dtos.userNotificationDtos import *
 from core.dtos.userSubjectLinkDtos import *
+from core.dtos.versionDtos import *
 from core.dtos.weekDtos import *
 from core.dtos.yearDtos import *
 from core.entities.department import Department
 from core.entities.faculty import Faculty
 from core.entities.notification import Notification
+from core.entities.releaseItem import ReleaseItem
 from core.entities.subject import Subject
 from core.entities.task import Task
 from core.entities.announcement import Announcement
@@ -69,6 +73,7 @@ def rebuild_response_dtos() -> None:
         Task=Task,
         Announcement=Announcement,
         Notification=Notification,
+        ReleaseItem=ReleaseItem,
         User=User,
         Event=Event,
     )

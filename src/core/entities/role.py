@@ -68,7 +68,9 @@ class Role(Base):
     )
 
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Arguments
     __table_args__ = (Index("idx_role_name", func.lower(name), unique=True),)
@@ -142,6 +144,10 @@ class Role(Base):
             "Add EventOrganizers",
             "Edit EventOrganizers",
             "Delete EventOrganizers",
+            "View Releases",
+            "Add Releases",
+            "Edit Releases",
+            "Delete Releases",
             "View Logs",
             "Delete Logs",
             "View Messages",

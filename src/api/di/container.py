@@ -3,7 +3,6 @@ import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from dependency_injector import containers, providers
 
-
 # Fix for ModuleNotFoundError
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
@@ -45,6 +44,10 @@ from api.routes.eventOrganizerRoutes import (
     create_event_organizer_user_router,
     create_event_organizer_admin_router,
 )
+from api.routes.releaseRoutes import (
+    create_release_admin_router,
+    create_release_user_router,
+)
 from api.routes.weekRoutes import (
     create_week_user_router,
     create_week_admin_router,
@@ -65,6 +68,8 @@ from api.routes.facultyRoutes import (
 from api.routes.systemRoutes import create_system_public_router
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
+from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
+from business.contextVars.sessionContext import session_context
 from api.controllers.userController import UserController
 from api.controllers.roleController import RoleController
 from api.controllers.examController import ExamController
@@ -82,6 +87,7 @@ from api.controllers.calendarController import CalendarController
 from api.controllers.notificationController import NotificationController
 from api.controllers.yearController import YearController
 from api.controllers.departmentController import DepartmentController
+from api.controllers.releaseController import ReleaseController
 from api.controllers.weekController import WeekController
 from api.controllers.eventController import EventController
 from api.controllers.attachmentController import AttachmentController
@@ -105,14 +111,18 @@ from business.services.weekService import WeekService
 from business.services.eventService import EventService
 from business.services.requestLimitService import RequestLimitService
 from business.services.examService import ExamService
+from business.services.releaseService import ReleaseService
 from business.services.attachmentService import AttachmentService
 from business.services.helperService import HelperService
-from business.services.aiService import AIService
-from business.services.userService import UserService
-from business.services.patientService import PatientService
-from business.services.patientUserService import PatientUserService
+from business.loggers.baseLogger import BaseLogger
+from infrastructure.repositories.baseRepository import BaseRepository
 from core.entities.log import Log
 from core.entities.user import User
+from core.entities.role import Role
+from core.entities.exactRole import ExactRole
+from core.entities.material import Material
+from core.entities.subject import Subject
+from core.entities.pendingUser import PendingUser
 from core.entities.token import Token
 from core.entities.requestLimit import RequestLimit
 from core.entities.subject import Subject
@@ -127,6 +137,9 @@ from core.entities.userNotification import UserNotification
 from core.entities.notification import Notification
 from core.entities.message import Message
 from core.entities.faculty import Faculty
+from core.entities.release import Release
+from core.entities.version import Version
+from core.entities.releaseItem import ReleaseItem
 from core.entities.eventOrganizer import EventOrganizer
 from core.entities.week import Week
 from core.entities.event import Event
@@ -134,8 +147,6 @@ from core.entities.userEvent import UserEvent
 from core.entities.eventOrganizer import EventOrganizer
 from core.entities.attachment import Attachment
 from core.utils.databaseHandler import DatabaseHandler
-from business.contextVars.sessionContext import session_context
-from infrastructure.repositories.baseRepository import BaseRepository
 
 DB_URL = DatabaseHandler.get_db_url()
 ENGINE_OPTIONS = DatabaseHandler.get_engine_options(DB_URL)
@@ -172,13 +183,16 @@ class Container(containers.DeclarativeContainer):
     user_repository = providers.Factory(
         BaseRepository, session=db_session, model=User, session_factory=session_factory
     )
-    patient_repository = providers.Factory(
+    role_repository = providers.Factory(
+        BaseRepository, session=db_session, model=Role, session_factory=session_factory
+    )
+    exact_role_repository = providers.Factory(
         BaseRepository,
         session=db_session,
-        model=Patient,
+        model=ExactRole,
         session_factory=session_factory,
     )
-    patient_user_repository = providers.Factory(
+    material_repository = providers.Factory(
         BaseRepository,
         session=db_session,
         model=Material,
@@ -259,6 +273,24 @@ class Container(containers.DeclarativeContainer):
         model=Week,
         session_factory=session_factory,
     )
+    release_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Release,
+        session_factory=session_factory,
+    )
+    version_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Version,
+        session_factory=session_factory,
+    )
+    release_item_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=ReleaseItem,
+        session_factory=session_factory,
+    )
     event_repository = providers.Factory(
         BaseRepository,
         session=db_session,
@@ -306,22 +338,45 @@ class Container(containers.DeclarativeContainer):
     user_service = providers.Factory(
         UserService,
         user_repository=user_repository,
-        patient_repository=patient_repository,
         token_repository=token_repository,
+        role_repository=role_repository,
+        pending_user_repository=pending_user_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+    role_service = providers.Factory(
+        RoleService,
+        role_repository=role_repository,
+        exact_role_repository=exact_role_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+    log_service = providers.Factory(
+        LogService,
+        log_repository=log_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+    material_service = providers.Factory(
+        MaterialService,
+        material_repository=material_repository,
+        subject_repository=subject_repository,
+        user_repository=user_repository,
+        week_repository=week_repository,
         logger=logger,
         helper_service=helper_service,
     )
 
-    patient_service = providers.Factory(
-        PatientService,
-        patient_repository=patient_repository,
+    message_service = providers.Factory(
+        MessageService,
+        message_repository=message_repository,
         logger=logger,
         helper_service=helper_service,
     )
 
-    patient_user_service = providers.Factory(
-        PatientUserService,
-        patient_user_repository=patient_user_repository,
+    faculty_service = providers.Factory(
+        FacultyService,
+        faculty_repository=faculty_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -419,6 +474,14 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
+    release_service = providers.Factory(
+        ReleaseService,
+        release_repository=release_repository,
+        version_repository=version_repository,
+        release_item_repository=release_item_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
     attachment_service = providers.Factory(
         AttachmentService,
         attachment_repository=attachment_repository,
@@ -434,10 +497,15 @@ class Container(containers.DeclarativeContainer):
     # --- 5. Middlewares ---
     auth_middleware = providers.Factory(
         AuthMiddleware,
-        user_repository=user_repository,
-        patient_repository=patient_repository,
-        token_repository=token_repository,
+        user_service=user_service,
         logger=logger,
+    )
+
+    request_limit_middleware = providers.Factory(
+        RequestLimitMiddleware,
+        request_limit_service=request_limit_service,
+        logger=logger,
+        helper_service=helper_service,
     )
 
     validation_middleware = providers.Factory(
@@ -445,6 +513,7 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
     )
 
+    # --- 6. Controllers ---
     user_controller = providers.Factory(
         UserController, user_service=user_service, logger=logger
     )
@@ -512,12 +581,15 @@ class Container(containers.DeclarativeContainer):
         SubjectController,
         subject_service=subject_service,
         helper_service=helper_service,
-        ai_service=ai_service,
         logger=logger,
     )
 
     exam_controller = providers.Factory(
         ExamController, exam_service=exam_service, logger=logger
+    )
+
+    release_controller = providers.Factory(
+        ReleaseController, release_service=release_service, logger=logger
     )
 
     role_controller = providers.Factory(
@@ -540,9 +612,9 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
-    patient_routes = providers.Factory(
-        create_patient_router,
-        controller_provider=patient_controller.provider,
+    user_user_routes = providers.Factory(
+        create_user_user_router,
+        controller_provider=user_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
@@ -719,6 +791,19 @@ class Container(containers.DeclarativeContainer):
     event_organizer_admin_routes = providers.Factory(
         create_event_organizer_admin_router,
         controller_provider=event_organizer_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
+    release_user_routes = providers.Factory(
+        create_release_user_router,
+        controller_provider=release_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+    )
+
+    release_admin_routes = providers.Factory(
+        create_release_admin_router,
+        controller_provider=release_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
     )
