@@ -34,9 +34,6 @@ class ExamController(IExamController):
                 [
                     "author",
                     "subject",
-                    "faculty",
-                    "department",
-                    "year",
                 ],
             )
 
