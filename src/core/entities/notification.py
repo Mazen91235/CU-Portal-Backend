@@ -31,7 +31,7 @@ class Notification(Base):
     # Columns
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     content: Mapped[str] = mapped_column(String(200), nullable=False)
-    notification_type: Mapped[Optional[str]] = mapped_column(
+    notification_type: Mapped[Optional["NotificationType"]] = mapped_column(
         String(20), nullable=True
     )  # e.g., 'task', 'announcement', 'event'
     parent_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -75,7 +75,9 @@ class Notification(Base):
     )
 
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Arguments
     __table_args__ = (

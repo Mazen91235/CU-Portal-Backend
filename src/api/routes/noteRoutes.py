@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iNoteController import INoteController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -17,7 +18,7 @@ from core.utils.cookieHandler import cookie_scheme
 def create_note_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/notes", tags=["User Notes"])
+    router = APIRouter(prefix="/notes", tags=["User Notes"], route_class=CustomRoute)
 
     def _get_controller() -> INoteController:
         return controller_provider()

@@ -42,7 +42,7 @@ class NoteService(INoteService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Note, data, ["title", "content"], is_and, starts_with, is_exact
+                Note, data, ["title", "content"], is_and, starts_with, is_exact, True
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Note, includes
@@ -75,7 +75,7 @@ class NoteService(INoteService):
                 level="error",
                 code=500,
                 message="Error finding note",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NoteService",
             )
             return BaseResponseDto(
@@ -100,7 +100,7 @@ class NoteService(INoteService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Note, data, ["title", "content"], is_and, starts_with, is_exact
+                Note, data, ["title", "content"], is_and, starts_with, is_exact, True
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Note, includes
@@ -135,7 +135,7 @@ class NoteService(INoteService):
                 level="error",
                 code=500,
                 message="An error occurred while finding notes",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NoteService",
             )
             return BaseResponseDto(
@@ -257,7 +257,7 @@ class NoteService(INoteService):
                 level="error",
                 code=500,
                 message="An error occurred while creating note",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NoteService",
             )
             return BaseResponseDto(
@@ -421,7 +421,7 @@ class NoteService(INoteService):
                 level="error",
                 code=500,
                 message="An error occurred while updating note",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NoteService",
             )
             return BaseResponseDto(
@@ -535,7 +535,7 @@ class NoteService(INoteService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting note",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="NoteService",
             )
             return BaseResponseDto(

@@ -83,7 +83,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while finding event",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(
@@ -143,7 +143,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while finding events",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(
@@ -511,7 +511,7 @@ class EventService(IEventService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.EVENT,
                 updated_event.id,
-                f"New Event '{updated_event.name}' has been posted.",
+                f"New Event '{updated_event.title}' has been posted.",
                 share_link,
                 faculty_id=updated_event.faculty_id,
                 department_id=updated_event.department_id,
@@ -538,7 +538,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while creating event",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(
@@ -1054,7 +1054,7 @@ class EventService(IEventService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.EVENT,
                 updated_event.id,
-                f"Event '{updated_event.name}' has been updated.",
+                f"Event '{updated_event.title}' has been updated.",
                 share_link,
                 faculty_id=updated_event.faculty_id,
                 department_id=updated_event.department_id,
@@ -1081,7 +1081,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while updating event",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(
@@ -1266,7 +1266,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting event",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(
@@ -1413,7 +1413,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while registering for event",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(
@@ -1541,7 +1541,7 @@ class EventService(IEventService):
                 level="error",
                 code=500,
                 message="An error occurred while unregistering from event",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventService",
             )
             return BaseResponseDto(

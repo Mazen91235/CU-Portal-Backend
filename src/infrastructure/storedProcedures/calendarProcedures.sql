@@ -5,8 +5,22 @@ CREATE OR REPLACE FUNCTION get_user_calendar(
 )
 RETURNS JSON AS $$
 DECLARE
+    v_faculty_id INT;
+    v_department_id INT;
+    v_year_id INT;
     v_result JSON;
 BEGIN
+    SELECT 
+        u.faculty_id,
+        u.department_id,
+        u.year_id
+    INTO 
+        v_faculty_id,
+        v_department_id,
+        v_year_id
+    FROM users u
+    WHERE u.id = p_user_id;
+
     WITH registered_subjects AS (
         -- 1. Fetch all subject IDs registered by the user
         SELECT subject_id 
@@ -44,21 +58,29 @@ BEGIN
           AND a.date <= p_date_to
     ),
     filtered_events AS (
-        -- 5. Fetch Events with non-null date within range
-        SELECT e.*, json_build_object('id', f.id, 'name', f.name) AS faculty,
-                      json_build_object('id', d.id, 'name', d.name, 'code', d.code) AS department,
-                      json_build_object('id', y.id, 'year', y.year) AS year,
-                      json_build_object('id', a.id, 'url', a.url, 'details', a.details) AS logo,
-                      json_build_object('id', ue.id) AS attendees
-        FROM events e
-        LEFT JOIN faculties f ON f.id = e.faculty_id
-        LEFT JOIN departments d ON d.id = e.department_id
-        LEFT JOIN years y ON y.id = e.year_id
-        LEFT JOIN attachments a ON a.id = e.logo_id
-        LEFT JOIN user_events ue ON ue.event_id = e.id
-        WHERE e.start_date IS NOT NULL
-          AND e.start_date >= p_date_from 
-          AND e.start_date <= p_date_to
+    -- 5. Fetch Events with non-null date within range
+    SELECT e.*,
+           json_build_object('id', f.id, 'name', f.name) AS faculty,
+           json_build_object('id', d.id, 'name', d.name, 'code', d.code) AS department,
+           json_build_object('id', y.id, 'year', y.year) AS year,
+           json_build_object('id', a.id, 'url', a.url, 'details', a.details) AS logo,
+           COALESCE(
+               json_agg(json_build_object('id', ue.id)) FILTER (WHERE ue.id IS NOT NULL),
+               '[]'::json
+           ) AS attendees
+    FROM events e
+    LEFT JOIN faculties f ON f.id = e.faculty_id
+    LEFT JOIN departments d ON d.id = e.department_id
+    LEFT JOIN years y ON y.id = e.year_id
+    LEFT JOIN attachments a ON a.id = e.logo_id
+    LEFT JOIN user_events ue ON ue.event_id = e.id
+    WHERE e.faculty_id IS NULL OR e.faculty_id = v_faculty_id
+      AND e.department_id IS NULL OR e.department_id = v_department_id
+      AND e.year_id IS NULL OR e.year_id = v_year_id
+      AND e.start_date IS NOT NULL
+      AND e.start_date >= p_date_from 
+      AND e.start_date <= p_date_to
+    GROUP BY e.id, f.id, d.id, y.id, a.id
     ),
     filtered_notes AS (
         -- 6. Fetch Notes with non-null date within range

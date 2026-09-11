@@ -73,7 +73,7 @@ class NoteController(INoteController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="NoteController",
             )
             return ResponseHandler.generate_response(
@@ -137,7 +137,7 @@ class NoteController(INoteController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="NoteController",
             )
             return ResponseHandler.generate_response(
@@ -197,7 +197,7 @@ class NoteController(INoteController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="NoteController",
             )
             return ResponseHandler.generate_response(
@@ -258,7 +258,7 @@ class NoteController(INoteController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="NoteController",
             )
             return ResponseHandler.generate_response(
@@ -298,7 +298,7 @@ class NoteController(INoteController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="NoteController",
             )
             return ResponseHandler.generate_response(

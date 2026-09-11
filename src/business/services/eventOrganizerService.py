@@ -81,7 +81,7 @@ class EventOrganizerService(IEventOrganizerService):
                 level="error",
                 code=500,
                 message="An error occurred while finding event organizer",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventOrganizerService",
             )
             return BaseResponseDto(
@@ -146,7 +146,7 @@ class EventOrganizerService(IEventOrganizerService):
                 level="error",
                 code=500,
                 message="An error occurred while finding event organizers",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventOrganizerService",
             )
             return BaseResponseDto(
@@ -442,7 +442,7 @@ class EventOrganizerService(IEventOrganizerService):
                 level="error",
                 code=500,
                 message="An error occurred while creating event organizer",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventOrganizerService",
             )
             return BaseResponseDto(
@@ -799,7 +799,7 @@ class EventOrganizerService(IEventOrganizerService):
                 level="error",
                 code=500,
                 message="An error occurred while updating event organizer",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventOrganizerService",
             )
             return BaseResponseDto(
@@ -870,7 +870,7 @@ class EventOrganizerService(IEventOrganizerService):
                 level="error",
                 code=500,
                 message="An error occurred while deleting event organizer",
-                details={"error": str(ex)},
+                details={"error": repr(ex)},
                 source="EventOrganizerService",
             )
             return BaseResponseDto(

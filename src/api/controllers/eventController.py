@@ -37,7 +37,7 @@ class EventController(IEventController):
                     "department",
                     "year",
                     "event_organizer",
-                    "attendees",
+                    "user_events.user",
                     "logo",
                     "attachments",
                 ],
@@ -78,7 +78,7 @@ class EventController(IEventController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="EventController",
             )
             return ResponseHandler.generate_response(
@@ -140,7 +140,7 @@ class EventController(IEventController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="EventController",
             )
             return ResponseHandler.generate_response(
@@ -195,7 +195,7 @@ class EventController(IEventController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="EventController",
             )
             return ResponseHandler.generate_response(
@@ -251,7 +251,7 @@ class EventController(IEventController):
                 level="error",
                 code=500,
                 message=f"An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="EventController",
             )
             return ResponseHandler.generate_response(
@@ -290,7 +290,7 @@ class EventController(IEventController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="EventController",
             )
             return ResponseHandler.generate_response(
@@ -325,7 +325,7 @@ class EventController(IEventController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="EventController",
             )
             return ResponseHandler.generate_response(
@@ -359,7 +359,7 @@ class EventController(IEventController):
                 level="error",
                 code=500,
                 message="An error occurred while processing the request",
-                details={"error": str(e)},
+                details={"error": repr(e)},
                 source="EventController",
             )
             return ResponseHandler.generate_response(

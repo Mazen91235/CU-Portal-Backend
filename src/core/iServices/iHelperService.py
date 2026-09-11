@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, Any, Type
+from collections.abc import AsyncIterable
 from core.entities.user import User
 from core.entities.notification import Notification
 from core.entities.attachment import Attachment
 from core.dtos.baseDtos import BaseResponseDto
+
 from core.models.fileModels import FetchedModel, DownloadedFileModel, FileModel
 
 T = TypeVar("T")  # Entity Type
@@ -82,6 +84,7 @@ class IHelperService(ABC, Generic[U]):
         is_and: bool,
         starts_with: bool,
         is_exact: bool,
+        allow_nulls: bool = False,
     ) -> Any:
         pass
 
@@ -188,7 +191,7 @@ class IHelperService(ABC, Generic[U]):
         self,
         access_token: str,
         name: str,
-        content: bytes,
+        content: AsyncIterable[bytes],
         size: str | None = None,
         max_retries: int = 6,
     ) -> BaseResponseDto[FileModel]:

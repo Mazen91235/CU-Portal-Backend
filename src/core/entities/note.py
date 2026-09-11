@@ -28,7 +28,7 @@ class Note(Base):
     # Columns
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(100), nullable=False)
-    content: Mapped[str] = mapped_column(String(500), nullable=False)
+    content: Mapped[str] = mapped_column(String(1000), nullable=False)
     date: Mapped[Optional[datetime]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
@@ -55,7 +55,9 @@ class Note(Base):
     author: Mapped["User"] = relationship("User", back_populates="notes")
 
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Arguments
     __table_args__ = (

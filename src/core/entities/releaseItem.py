@@ -65,7 +65,7 @@ class ReleaseItem(Base):
     # Attributes
     class ItemType(str, Enum):
         FEATURE = "Feature"
-        ENHANCEMENT = "Enhancement"
+        IMPROVEMENT = "Improvement"
         REFACTORING = "Refactoring"
         SECURITY_FIX = "Security Fix"
         BUG_FIX = "Bug Fix"

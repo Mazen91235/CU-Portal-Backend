@@ -1,5 +1,10 @@
 from sqlalchemy import and_
-from core.iServices.iMaterialService import IMaterialService
+import re
+from datetime import datetime, timezone
+from collections.abc import AsyncGenerator
+from stat import S_IFDIR, S_IFREG
+import struct
+import zlib
 from core.iServices.iMaterialService import IMaterialService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -9,6 +14,7 @@ from core.entities.subject import Subject
 from core.entities.user import User
 from core.entities.week import Week
 from core.entities.notification import Notification
+from core.entities.attachment import Attachment
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import FetchedModel
 from core.utils.validator import Validator
@@ -1812,7 +1818,7 @@ class MaterialService(IMaterialService):
                 parent_id=created_data.id,
                 content=f"New material '{created_data.name}' has been fetched from drive to subject '{subject.name}'",
                 url=share_link,
-                subject_id=created_data.subject_id, 
+                subject_id=created_data.subject_id,
             )
             await self.logger.log(
                 action="FetchMaterialsFromDrive",
@@ -1846,7 +1852,93 @@ class MaterialService(IMaterialService):
                 message="An error occurred while fetching materials from Google Drive",
             )
 
-    # Material Specific Functions
+    async def download_many(self, data):
+        try:
+            material_ids = data.material_ids
+            selected_material_ids = set(material_ids)
+            roots = []
+
+            for material_id in material_ids:
+                dynamic_includes = self.helper_service.generate_dynamic_includes(
+                    Material, ["attachment"]
+                )
+                material_response = await self.material_repository.find_one(
+                    Material.id == material_id, dynamic_includes
+                )
+                if not material_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=material_response.code,
+                        data=None,
+                        message=material_response.message,
+                    )
+
+                material = material_response.data
+                if not material:
+                    await self.logger.log(
+                        action="DownloadMany",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Material with ID {material_id} not found",
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Material with ID {material_id} not found",
+                    )
+
+                if await self._has_selected_ancestor(material, selected_material_ids):
+                    continue
+
+                tree_response = await self._build_download_tree(material)
+                if not tree_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=tree_response.code,
+                        data=None,
+                        message=tree_response.message,
+                    )
+                roots.append(tree_response.data)
+
+            if not roots:
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message="No materials available for download",
+                )
+
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data={
+                    "stream": self._stream_download_zip(roots),
+                    "filename": "archive.zip",
+                },
+                message="Materials download prepared successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="DownloadMany",
+                entity="Material",
+                level="error",
+                code=500,
+                message="An error occurred while preparing materials download",
+                details={"error": repr(ex)},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while processing the request",
+                error=repr(ex),
+            )
+
+    # Helper Functions
     async def _generate_unique_name(
         self, name: str | None, subject_id: int | None, parent_id: int | None
     ) -> BaseResponseDto[str]:
@@ -2431,3 +2523,521 @@ class MaterialService(IMaterialService):
                 data=None,
                 message=f"An error occurred while trying to create material from Drive",
             )
+
+    async def _iter_download_zip_members(
+        self, roots: list[dict]
+    ) -> AsyncGenerator[tuple[str, datetime, int, AsyncGenerator], None]:
+        root_links = []
+
+        for root in roots:
+            material = root["material"]
+            if material.material_type in {"youtube", "drive", "external"}:
+                root_links.append(material)
+                continue
+
+            async for member in self._iter_download_members(root):
+                yield member
+
+        if root_links:
+            yield (
+                "links.txt",
+                datetime.now(timezone.utc),
+                S_IFREG | 0o644,
+                self._iter_links_content(root_links),
+            )
+
+    @staticmethod
+    def _zip_dos_datetime(modified_at: datetime) -> tuple[int, int]:
+        if modified_at.tzinfo is not None:
+            modified_at = modified_at.astimezone(timezone.utc)
+
+        year = max(1980, min(modified_at.year, 2107))
+        dos_time = (
+            (modified_at.hour << 11)
+            | (modified_at.minute << 5)
+            | (modified_at.second // 2)
+        )
+        dos_date = ((year - 1980) << 9) | (modified_at.month << 5) | modified_at.day
+        return dos_time, dos_date
+
+    async def _stream_download_zip(
+        self, roots: list[dict]
+    ) -> AsyncGenerator[bytes, None]:
+        offset = 0
+        central_directory = []
+
+        async for name, modified_at, mode, chunks in self._iter_download_zip_members(
+            roots
+        ):
+            name_bytes = name.encode("utf-8")
+            if len(name_bytes) > 0xFFFF:
+                raise ValueError(f"ZIP member name is too long: {name}")
+
+            dos_time, dos_date = self._zip_dos_datetime(modified_at)
+            is_directory = bool(mode & S_IFDIR)
+            flags = 0x0800  # UTF-8 names.
+            compression = 0 if is_directory else 8  # Store directories, deflate files.
+            external_attr = (mode << 16) | (0x10 if name_bytes.endswith(b"/") else 0)
+
+            local_header_extra = b""
+            if not is_directory:
+                # ZIP64 local extra field. Actual sizes are written in the
+                # trailing ZIP64 data descriptor after the streamed member.
+                local_header_extra = struct.pack(
+                    "<HHQQ",
+                    0x0001,
+                    16,
+                    0,
+                    0,
+                )
+                flags |= 0x0008  # Data descriptor follows member data.
+
+            if is_directory:
+                member_offset = offset
+                local_header = struct.pack(
+                    "<4sHHHHHIIIHH",
+                    b"PK\x03\x04",
+                    45,
+                    flags,
+                    compression,
+                    dos_time,
+                    dos_date,
+                    0,
+                    0,
+                    0,
+                    len(name_bytes),
+                    len(local_header_extra),
+                )
+                local_header += name_bytes + local_header_extra
+
+                yield local_header
+                offset += len(local_header)
+
+                central_directory.append(
+                    (
+                        name_bytes,
+                        dos_time,
+                        dos_date,
+                        45,
+                        flags,
+                        compression,
+                        0,
+                        0,
+                        0,
+                        external_attr,
+                        member_offset,
+                    )
+                )
+                continue
+
+            local_header = struct.pack(
+                "<4sHHHHHIIIHH",
+                b"PK\x03\x04",
+                45,
+                flags,
+                compression,
+                dos_time,
+                dos_date,
+                0,
+                0xFFFFFFFF,
+                0xFFFFFFFF,
+                len(name_bytes),
+                len(local_header_extra),
+            )
+            local_header += name_bytes + local_header_extra
+
+            member_offset = offset
+            yield local_header
+            offset += len(local_header)
+
+            stats = {
+                "uncompressed_size": 0,
+                "compressed_size": 0,
+                "crc32": 0,
+            }
+            compressor = zlib.compressobj(level=9, wbits=-zlib.MAX_WBITS)
+
+            # Keep consuming the source stream until EOF. The ZIP member is
+            # not complete until every source chunk has been processed.
+            async for chunk in chunks:
+                if not chunk:
+                    continue
+
+                stats["uncompressed_size"] += len(chunk)
+                stats["crc32"] = zlib.crc32(chunk, stats["crc32"])
+
+                compressed_chunk = compressor.compress(chunk)
+                if compressed_chunk:
+                    stats["compressed_size"] += len(compressed_chunk)
+                    yield compressed_chunk
+                    offset += len(compressed_chunk)
+
+            compressed_chunk = compressor.flush()
+            if compressed_chunk:
+                stats["compressed_size"] += len(compressed_chunk)
+                yield compressed_chunk
+                offset += len(compressed_chunk)
+
+            descriptor = struct.pack(
+                "<4sIQQ",
+                b"PK\x07\x08",
+                stats["crc32"] & 0xFFFFFFFF,
+                stats["compressed_size"],
+                stats["uncompressed_size"],
+            )
+            yield descriptor
+            offset += len(descriptor)
+
+            central_directory.append(
+                (
+                    name_bytes,
+                    dos_time,
+                    dos_date,
+                    45,
+                    flags,
+                    compression,
+                    stats["crc32"] & 0xFFFFFFFF,
+                    stats["compressed_size"],
+                    stats["uncompressed_size"],
+                    external_attr,
+                    member_offset,
+                )
+            )
+
+        central_directory_offset = offset
+
+        for entry in central_directory:
+            (
+                name_bytes,
+                dos_time,
+                dos_date,
+                version,
+                flags,
+                compression,
+                crc32,
+                compressed_size,
+                uncompressed_size,
+                external_attr,
+                member_offset,
+            ) = entry
+
+            central_extra = struct.pack(
+                "<HHQQQ",
+                0x0001,
+                24,
+                uncompressed_size,
+                compressed_size,
+                member_offset,
+            )
+
+            central_header = struct.pack(
+                "<4sHHHHHHIIIHHHHHII",
+                b"PK\x01\x02",
+                (3 << 8) | 45,
+                version,
+                flags,
+                compression,
+                dos_time,
+                dos_date,
+                crc32,
+                0xFFFFFFFF,
+                0xFFFFFFFF,
+                len(name_bytes),
+                len(central_extra),
+                0,
+                0,
+                0,
+                external_attr,
+                0xFFFFFFFF,
+            )
+            central_header += name_bytes + central_extra
+
+            yield central_header
+            offset += len(central_header)
+
+        central_directory_size = offset - central_directory_offset
+        entry_count = len(central_directory)
+
+        zip64_end_offset = offset
+        zip64_end = struct.pack(
+            "<4sQHHIIQQQQ",
+            b"PK\x06\x06",
+            44,
+            45,
+            45,
+            0,
+            0,
+            entry_count,
+            entry_count,
+            central_directory_size,
+            central_directory_offset,
+        )
+        yield zip64_end
+        offset += len(zip64_end)
+
+        zip64_locator = struct.pack(
+            "<4sIQI",
+            b"PK\x06\x07",
+            0,
+            zip64_end_offset,
+            1,
+        )
+        yield zip64_locator
+        offset += len(zip64_locator)
+
+        end_of_central_directory = struct.pack(
+            "<4sHHHHIIH",
+            b"PK\x05\x06",
+            0xFFFF,
+            0xFFFF,
+            0xFFFF,
+            0xFFFF,
+            0xFFFFFFFF,
+            0xFFFFFFFF,
+            0,
+        )
+        yield end_of_central_directory
+
+    async def _iter_links_content(
+        self, materials: list[Material]
+    ) -> AsyncGenerator[bytes, None]:
+        for material in materials:
+            attachment = material.attachment
+            if not attachment or not attachment.url:
+                continue
+            details = attachment.details or {}
+            link_title = details.get("link_title") or material.name or ""
+            yield f"{link_title}: {attachment.url}\n".encode("utf-8")
+
+    async def _has_selected_ancestor(
+        self, material: Material, selected_material_ids: set[int]
+    ) -> bool:
+        parent_id = material.parent_id
+        visited = set()
+
+        while parent_id:
+            if parent_id in selected_material_ids:
+                return True
+            if parent_id in visited:
+                return False
+            visited.add(parent_id)
+
+            parent_response = await self.material_repository.find_one(
+                Material.id == parent_id
+            )
+            if not parent_response.success or not parent_response.data:
+                return False
+            parent = parent_response.data
+            parent_id = parent.parent_id
+
+        return False
+
+    async def _build_download_tree(self, material: Material) -> BaseResponseDto[dict]:
+        try:
+            node = {
+                "material": material,
+                "children": [],
+            }
+
+            if material.material_type != "folder":
+                if material.material_type not in {
+                    "file",
+                    "youtube",
+                    "drive",
+                    "external",
+                }:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=(
+                            f"Material with ID {material.id} has an unsupported "
+                            f"material type: {material.material_type}"
+                        ),
+                    )
+
+                if not material.attachment or not material.attachment.url:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=(
+                            f"Material with ID {material.id} does not have a "
+                            "downloadable attachment"
+                        ),
+                    )
+
+                return BaseResponseDto(
+                    success=True,
+                    code=200,
+                    data=node,
+                )
+
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Material, ["attachment"]
+            )
+            children_response = await self.material_repository.find(
+                Material.parent_id == material.id,
+                dynamic_includes,
+                limit=int(1e6),
+            )
+            if not children_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=children_response.code,
+                    data=None,
+                    message=children_response.message,
+                )
+
+            for child in children_response.data or []:
+                child_response = await self._build_download_tree(child)
+                if not child_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=child_response.code,
+                        data=None,
+                        message=child_response.message,
+                    )
+                child_data = child_response.data
+                if not child_data:
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message=f"Failed to build download tree for child material with ID {child.id}",
+                    )
+                node["children"].append(child_data)
+
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=node,
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="BuildDownloadTree",
+                entity="Material",
+                level="error",
+                code=500,
+                message=f"An error occurred while preparing material with ID {material.id}",
+                details={"error": repr(ex)},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message=f"An error occurred while preparing material with ID {material.id}",
+                error=repr(ex),
+            )
+
+    async def _iter_download_members(
+        self, node: dict, parent_path=""
+    ) -> AsyncGenerator:
+        material = node["material"]
+        children = node["children"] or []
+        safe_name = self._sanitize_zip_name(material.name or f"material-{material.id}")
+        current_path = f"{parent_path}/{safe_name}" if parent_path else safe_name
+        modified_at = (
+            material.updated_at or material.created_at or datetime.now(timezone.utc)
+        )
+
+        if material.material_type == "folder":
+            yield (
+                f"{current_path}/",
+                modified_at,
+                S_IFDIR | 0o755,
+                (),
+            )
+
+            link_materials = []
+            for child in children:
+                if child["material"].material_type in {"youtube", "drive", "external"}:
+                    link_materials.append(child["material"])
+
+            for child in children:
+                if child["material"].material_type not in {
+                    "youtube",
+                    "drive",
+                    "external",
+                }:
+                    async for member in self._iter_download_members(
+                        child, current_path
+                    ):
+                        yield member
+
+            if link_materials:
+                yield (
+                    f"{current_path}/links.txt",
+                    modified_at,
+                    S_IFREG | 0o644,
+                    self._iter_links_content(link_materials),
+                )
+            return
+
+        if material.material_type in {"youtube", "drive", "external"}:
+            return
+
+        attachment = material.attachment
+        if not attachment or not attachment.url:
+            raise ValueError(
+                f"Material with ID {material.id} does not have a downloadable attachment"
+            )
+
+        file_name = self._get_attachment_file_name(material, attachment)
+        file_path = f"{parent_path}/{file_name}" if parent_path else file_name
+
+        yield (
+            file_path,
+            modified_at,
+            S_IFREG | 0o644,
+            self._stream_attachment_file(attachment),
+        )
+
+    async def _stream_attachment_file(
+        self, attachment: Attachment
+    ) -> AsyncGenerator[bytes, None]:
+        details = attachment.details or {}
+        file_data = details.get("file_data") or {}
+
+        file_id = file_data.get("id") or self.helper_service.get_file_id_from_url(
+            attachment.url
+        )
+        if not file_id:
+            raise ValueError(
+                f"Could not determine Google Drive file ID for attachment {attachment.id}"
+            )
+
+        download_response = await self.helper_service.download_file_from_drive(file_id)
+        if not download_response.success:
+            raise ValueError(
+                download_response.error
+                or download_response.message
+                or f"Failed to download Google Drive file {file_id}"
+            )
+
+        downloaded_file = download_response.data
+        if not downloaded_file or downloaded_file.content is None:
+            raise ValueError(
+                f"No download stream returned for Google Drive file {file_id}"
+            )
+
+        # Keep the returned async iterable alive and consume it directly in
+        # this generator. The ZIP writer above awaits every chunk until EOF
+        # before it writes the data descriptor and moves to the next member.
+        async for chunk in downloaded_file.content:
+            if chunk:
+                yield chunk
+
+    def _get_attachment_file_name(
+        self, material: Material, attachment: Attachment
+    ) -> str:
+        details = attachment.details or {}
+        file_data = details.get("file_data") or {}
+        file_name = file_data.get("name") or material.name or f"material-{material.id}"
+        return self._sanitize_zip_name(file_name)
+
+    @staticmethod
+    def _sanitize_zip_name(name: str) -> str:
+        safe_name = re.sub(r'[\\\\/:*?"<>|]+', "_", str(name)).strip(" .")
+        return safe_name or "unnamed"

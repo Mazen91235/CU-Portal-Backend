@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from core.dtos.departmentDtos import DepartmentResponseDto
     from core.dtos.yearDtos import YearResponseDto
     from core.dtos.attachmentDtos import AttachmentResponseDto
-#   from core.dtos.eventOrganizerDtos import EventOrganizerResponseDto
+    from core.dtos.eventOrganizerDtos import EventOrganizerResponseDto
 
 from .baseDtos import BaseSearchDto
 
@@ -85,9 +85,9 @@ class EventResponseDto(BaseModel):
     attachments: list[AttachmentResponseDto] | None = Field(
         default=None, description="Attachments of the event"
     )
-    # event_organizer: EventOrganizerResponseDto | None = Field(
-    #     None, description="Organizer of the event"
-    # )
+    event_organizer: EventOrganizerResponseDto | None = Field(
+        None, description="Organizer of the event"
+    )
 
     model_config = {
         "from_attributes": True,

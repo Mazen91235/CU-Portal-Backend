@@ -68,6 +68,30 @@ async def _enforce_active_user(request: Request):
     return None
 
 
+async def _log(
+    request: Request,
+    action: str,
+    entity: str,
+    level: str,
+    code: int,
+    message: str,
+    details: dict,
+):
+    try:
+        logger: IBaseLogger = request.app.state.container.logger()
+        await logger.log(
+            action=action,
+            entity=entity,
+            level=level,
+            code=code,
+            message=message,
+            details=details,
+            source="CustomRoute",
+        )
+    except Exception:
+        pass
+
+
 class CacheHitException(Exception):
     def __init__(self, response: JSONResponse):
         self.response = response
@@ -93,7 +117,16 @@ async def _check_cache(request: Request):
         return None
     except CacheHitException as ex:
         raise ex
-    except Exception:
+    except Exception as e:
+        await _log(
+            request,
+            action="Check",
+            entity="Cache",
+            level="error",
+            code=500,
+            message="Failed to check cache",
+            details={"error": repr(e)},
+        )
         return None
 
 
@@ -110,18 +143,16 @@ async def _update_cache(request: Request, response: Response):
             cache_key = f"{token}:{request.url.path}?{request.url.query}"
             body_bytes = getattr(response, "body", b"{}")
             body = json.loads(body_bytes.decode("utf-8"))
-            asyncio.create_task(
-                caching_handler.set(
-                    cache_key,
-                    {
-                        "success": body.get("success", True),
-                        "code": response.status_code,
-                        "message": body.get("message", ""),
-                        "data": body.get("data", None),
-                        "next_page": body.get("next_page", False),
-                    },
-                    expire=CACHE_TTL,
-                )
+            await caching_handler.set(
+                cache_key,
+                {
+                    "success": body.get("success", True),
+                    "code": response.status_code,
+                    "message": body.get("message", ""),
+                    "data": body.get("data", None),
+                    "next_page": body.get("next_page", False),
+                },
+                expire=CACHE_TTL,
             )
         elif (
             request.method.upper() in ["POST", "PATCH", "PUT", "DELETE"]
@@ -129,23 +160,28 @@ async def _update_cache(request: Request, response: Response):
         ):
             module = _extract_module_from_path(request.url.path)
             if module:
-                asyncio.create_task(caching_handler.invalidate_module_cache(module))
+                await caching_handler.invalidate_module_cache(module)
         return None
-    except Exception:
+    except Exception as e:
+        await _log(
+            request,
+            action="Update",
+            entity="Cache",
+            level="error",
+            code=500,
+            message="Failed to update cache",
+            details={"error": repr(e)},
+        )
         return None
 
 
 def _extract_module_from_path(path: str) -> str:
-    if "/user/" in path:
-        if not "/" in path.split("/user/")[1]:
-            return "user/"
-        return path.split("/user/")[1].split("/")[0]
-    elif "/admin/" in path:
-        return path.split("/admin/")[1].split("/")[0]
-    elif "/auth/" in path:
-        return path.split("/auth/")[1].split("/")[0]
-    else:
-        return ""
+    module = path.removeprefix("/user/").removeprefix("/admin/")
+    if not module:
+        return "user"
+    if "auth" in module:
+        return "auth"
+    return module.split("/")[0] if "/" in module else module
 
 
 async def _generate_inflight_key(request: Request) -> str:
@@ -206,37 +242,48 @@ class CustomRoute(APIRoute):
                 if lock_key:
                     acquired = await caching_handler.acquire_lock(lock_key)
                     if not acquired:
-                        raise HTTPException(
-                            status_code=409,
-                            detail="A similar request is already being processed. Please wait for it to complete.",
+                        await _log(
+                            request,
+                            action="InflightCheck",
+                            entity="Request",
+                            level="warning",
+                            code=409,
+                            message="A similar request is already being processed.",
+                            details={},
                         )
-                response = await asyncio.wait_for(
-                    original_route_handler(request), timeout=timeout_seconds
-                )
-                await _update_cache(request, response)
+                        return ResponseHandler.generate_response(
+                            success=False,
+                            code=409,
+                            message="A similar request is already being processed. Please wait for it to complete.",
+                        )
+                if timeout_seconds == 0:
+                    response = await original_route_handler(request)
+                else:
+                    response = await asyncio.wait_for(
+                        original_route_handler(request), timeout=timeout_seconds
+                    )
+                asyncio.create_task(_update_cache(request, response))
                 return response
             except CacheHitException as ex:
                 return ex.response
             except asyncio.TimeoutError:
-                try:
-                    logger: IBaseLogger = request.app.state.container.logger()
-                    await logger.log(
-                        action="Timeout",
-                        entity="Request",
-                        level="warning",
-                        code=504,
-                        message=f"Request timed out after {timeout_seconds}s",
-                        details={"path": str(request.url.path)},
-                        source="CustomRoute",
-                    )
-                except Exception:
-                    pass
+                await _log(
+                    request,
+                    action="Timeout",
+                    entity="Request",
+                    level="error",
+                    code=504,
+                    message="The request took too long to process.",
+                    details={},
+                )
                 raise HTTPException(
                     status_code=504,
                     detail="The request took too long to process. Please try again.",
                 )
+            except Exception:
+                raise
             finally:
                 if lock_key and acquired:
-                    await caching_handler.release_lock(lock_key)
+                    asyncio.create_task(caching_handler.release_lock(lock_key))
 
         return custom_route_handler

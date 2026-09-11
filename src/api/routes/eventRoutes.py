@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, Depends
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iEventController import IEventController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -12,12 +13,13 @@ from core.dtos.userEventDtos import UserEventActionDto
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.queryModel import QueryModel
 from core.utils.parser import Parser
+from core.utils.cookieHandler import cookie_scheme
 
 
 def create_event_user_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/events", tags=["User Events"])
+    router = APIRouter(prefix="/events", tags=["User Events"], route_class=CustomRoute)
 
     def _get_controller() -> IEventController:
         return controller_provider()
@@ -31,8 +33,9 @@ def create_event_user_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     async def _is_ready(
         request: Request,
@@ -127,7 +130,7 @@ def create_event_user_router(
 def create_event_admin_router(
     controller_provider, auth_middleware_provider, validation_middleware_provider
 ):
-    router = APIRouter(prefix="/events", tags=["Admin Events"])
+    router = APIRouter(prefix="/events", tags=["Admin Events"], route_class=CustomRoute)
 
     def _get_controller() -> IEventController:
         return controller_provider()
@@ -141,8 +144,9 @@ def create_event_admin_router(
     async def _is_logged_in(
         request: Request,
         auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+        refresh_token: str | None = Depends(cookie_scheme),
     ):
-        return await auth_middleware.is_logged_in(request)
+        return await auth_middleware.is_logged_in(request, refresh_token)
 
     async def _is_ready(
         request: Request,

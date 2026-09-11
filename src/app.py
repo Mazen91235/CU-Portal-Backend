@@ -35,6 +35,8 @@ from core.dtos.materialDtos import *
 from core.dtos.messageDtos import *
 from core.dtos.notificationDtos import *
 from core.dtos.pendingUserDtos import *
+from core.dtos.releaseDtos import *
+from core.dtos.releaseItemDtos import *
 from core.dtos.requestLimitDtos import *
 from core.dtos.roleDtos import *
 from core.dtos.subjectDtos import *
@@ -42,11 +44,13 @@ from core.dtos.taskDtos import *
 from core.dtos.userDtos import *
 from core.dtos.userNotificationDtos import *
 from core.dtos.userSubjectLinkDtos import *
+from core.dtos.versionDtos import *
 from core.dtos.weekDtos import *
 from core.dtos.yearDtos import *
 from core.entities.department import Department
 from core.entities.faculty import Faculty
 from core.entities.notification import Notification
+from core.entities.releaseItem import ReleaseItem
 from core.entities.subject import Subject
 from core.entities.task import Task
 from core.entities.announcement import Announcement
@@ -69,6 +73,7 @@ def rebuild_response_dtos() -> None:
         Task=Task,
         Announcement=Announcement,
         Notification=Notification,
+        ReleaseItem=ReleaseItem,
         User=User,
         Event=Event,
     )
@@ -160,11 +165,15 @@ def create_app() -> FastAPI:
     faculty_admin_routes = container.faculty_admin_routes()
     event_organizer_user_routes = container.event_organizer_user_routes()
     event_organizer_admin_routes = container.event_organizer_admin_routes()
+    notification_public_routes = container.notification_public_routes()
     notification_user_routes = container.notification_user_routes()
+    release_user_routes = container.release_user_routes()
+    release_admin_routes = container.release_admin_routes()
     subject_user_routes = container.subject_user_routes()
     subject_admin_routes = container.subject_admin_routes()
     week_admin_routes = container.week_admin_routes()
     event_admin_routes = container.event_admin_routes()
+    system_public_routes = container.system_public_routes()
     main_user_routes.include_router(user_user_routes)
     main_user_routes.include_router(material_user_routes)
     main_user_routes.include_router(notification_user_routes)
@@ -174,6 +183,7 @@ def create_app() -> FastAPI:
     main_user_routes.include_router(note_user_routes)
     main_user_routes.include_router(exam_user_routes)
     main_user_routes.include_router(event_organizer_user_routes)
+    main_user_routes.include_router(release_user_routes)
     main_user_routes.include_router(subject_user_routes)
     main_user_routes.include_router(faculty_user_routes)
     main_user_routes.include_router(department_user_routes)
@@ -192,6 +202,7 @@ def create_app() -> FastAPI:
     main_admin_routes.include_router(material_admin_routes)
     main_admin_routes.include_router(event_organizer_admin_routes)
     main_admin_routes.include_router(message_admin_routes)
+    main_admin_routes.include_router(release_admin_routes)
     main_admin_routes.include_router(subject_admin_routes)
     main_admin_routes.include_router(week_admin_routes)
     main_admin_routes.include_router(event_admin_routes)
@@ -201,6 +212,8 @@ def create_app() -> FastAPI:
     app.include_router(attachment_public_routes)
     app.include_router(file_public_routes)
     app.include_router(message_public_routes)
+    app.include_router(notification_public_routes)
+    app.include_router(system_public_routes)
 
     app.add_middleware(
         CORSMiddleware,
@@ -209,6 +222,10 @@ def create_app() -> FastAPI:
             "http://localhost:5173",
             "http://localhost:8000",
             "https://cu-portal-dev.vercel.app",
+            "https://api-cu-portal-dev.vercel.app",
+            "https://cu-portal-backend.onrender.com",
+            "https://cu-portal.com",
+            "https://api.cu-portal.com",
         ],
         allow_methods=["*"],
         allow_headers=["*"],

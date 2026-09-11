@@ -1,3 +1,4 @@
+import os
 from typing import cast
 from core.iControllers.iMaterialController import IMaterialController
 from core.iServices.iMaterialService import IMaterialService
@@ -14,6 +15,7 @@ from core.dtos.materialDtos import (
     MaterialUpdateDto,
     MaterialsDeleteDto,
     MaterialSearchDto,
+    MaterialDownloadManyDto,
 )
 
 
@@ -396,6 +398,63 @@ class MaterialController(IMaterialController):
                 message="An error occurred while processing the request, please try again later",
             )
 
+    async def download_many(self, request, data):
+        try:
+            if "onrender.com" not in (request.url.hostname or "").lower():
+                background_url = self._generate_background_download_url(request)
+                if not background_url:
+                    return ResponseHandler.generate_response(
+                        success=False,
+                        code=500,
+                        message="Background download server is not configured",
+                    )
+                return ResponseHandler.generate_redirect_response(background_url)
+
+            response = await self.material_service.download_many(data)
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+
+            download_data = response.data
+            if not download_data:
+                await self.logger.log(
+                    action="DownloadMany",
+                    entity="Material",
+                    level="error",
+                    code=500,
+                    message="Failed to prepare materials download",
+                    source="MaterialController",
+                )
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=500,
+                    message="An error occurred while processing the request, please try again later",
+                )
+
+            return ResponseHandler.generate_streaming_response(
+                download_data["stream"],
+                download_data["filename"],
+                "application/zip",
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="DownloadMany",
+                entity="Material",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="MaterialController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
     async def fetch_materials_from_drive(self, request, data):
         try:
             await self.material_service.begin_transaction()
@@ -429,3 +488,11 @@ class MaterialController(IMaterialController):
                 code=500,
                 message="An error occurred while processing the request, please try again later",
             )
+
+    # Helper Functions
+    def _generate_background_download_url(self, request):
+        background_url = os.environ.get("BACKGROUND_WORKER_URL")
+        if not background_url:
+            return None
+        query = f"?{request.url.query}" if request.url.query else ""
+        return f"{background_url.rstrip('/')}{request.url.path}{query}"

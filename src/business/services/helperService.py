@@ -3,6 +3,7 @@ import aiohttp
 from aiohttp import FormData
 import asyncio
 import json
+from collections.abc import AsyncIterable
 from typing import TypeVar, cast
 from sqlalchemy import and_, func, or_
 from sqlalchemy.future import select
@@ -656,7 +657,7 @@ class HelperService(IHelperService[U]):
         return order_by_arr
 
     def generate_dynamic_predicate(
-        self, cls, data, query_fields, is_and, starts_with, is_exact
+        self, cls, data, query_fields, is_and, starts_with, is_exact, allow_nulls=False
     ):
         if not cls:
             return None
@@ -712,16 +713,27 @@ class HelperService(IHelperService[U]):
                 continue
 
             if key.endswith("_from"):
-                # Column isn't null and >= value
-                conditions.append(
-                    column.isnot(None)
-                    & (column >= TimezoneHandler.from_isoformat(value))
-                )
+                if allow_nulls:
+                    conditions.append(
+                        (column.is_(None))
+                        | (column >= TimezoneHandler.from_isoformat(value))
+                    )
+                else:
+                    conditions.append(
+                        column.isnot(None)
+                        & (column >= TimezoneHandler.from_isoformat(value))
+                    )
             elif key.endswith("_to"):
-                conditions.append(
-                    column.isnot(None)
-                    & (column <= TimezoneHandler.from_isoformat(value))
-                )
+                if allow_nulls:
+                    conditions.append(
+                        (column.is_(None))
+                        | (column <= TimezoneHandler.from_isoformat(value)),
+                    )
+                else:
+                    conditions.append(
+                        column.isnot(None)
+                        & (column <= TimezoneHandler.from_isoformat(value))
+                    )
             elif isinstance(value, str):
                 if not self._is_string_column(column):
                     conditions.append(column == value)
@@ -1185,6 +1197,77 @@ class HelperService(IHelperService[U]):
                 error=repr(ex),
             )
 
+    async def _send_notification_to_background_worker(
+        self,
+        notification_type,
+        parent_id,
+        content,
+        url=None,
+        faculty_id=None,
+        department_id=None,
+        year_id=None,
+        subject_id=None,
+    ):
+        try:
+            if not os.environ.get("BACKGROUND_WORKER_URL") or not os.environ.get(
+                "API_KEY"
+            ):
+                await self._log(
+                    action="SendNotificationToBackgroundWorker",
+                    entity="Notification",
+                    level="error",
+                    code=500,
+                    message="Background worker URL or API key is not configured",
+                    details={
+                        "background_worker_url": (
+                            os.environ.get("BACKGROUND_WORKER_URL") is not None
+                        ),
+                        "api_key": (os.environ.get("API_KEY") is not None),
+                    },
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=False,
+                    message="Background worker URL or API key is not configured",
+                )
+            response = await self._request_with_retries(
+                method="POST",
+                url=f"{os.environ.get('BACKGROUND_WORKER_URL', 'http://localhost:3000')}/notifications",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-API-Key": os.environ.get("API_KEY", ""),
+                },
+                json_data={
+                    "notification_type": notification_type,
+                    "parent_id": parent_id,
+                    "content": content,
+                    "url": url,
+                    "faculty_id": faculty_id,
+                    "department_id": department_id,
+                    "year_id": year_id,
+                    "subject_id": subject_id,
+                },
+            )
+            if not response.success:
+                await self._log(
+                    action="SendNotificationToBackgroundWorker",
+                    entity="Notification",
+                    level="error",
+                    code=response.code or 500,
+                    message=f"Failed to send notification to background worker: {response.message}",
+                    details={"error": response.error},
+                )
+        except Exception as ex:
+            await self._log(
+                action="SendNotificationToBackgroundWorker",
+                entity="Notification",
+                level="error",
+                code=500,
+                message="An error occurred while sending notification to background worker",
+                details={"error": repr(ex)},
+            )
+
     async def send_notification(
         self,
         notification_type,
@@ -1196,18 +1279,64 @@ class HelperService(IHelperService[U]):
         year_id=None,
         subject_id=None,
     ):
-        asyncio.create_task(
-            self._send_notification(
-                notification_type,
-                parent_id,
-                content,
-                url,
-                faculty_id,
-                department_id,
-                year_id,
-                subject_id,
+        request = request_context.get(None)
+        if not request:
+            await self._log(
+                action="SendNotification",
+                entity="Notification",
+                level="error",
+                code=500,
+                message="Request context is not available",
+                details={},
             )
-        )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="Request context is not available",
+            )
+        hostname = request.url.hostname
+        if not hostname:
+            await self._log(
+                action="SendNotification",
+                entity="Notification",
+                level="error",
+                code=500,
+                message="Hostname is not available in the request context",
+                details={},
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=False,
+                message="Hostname is not available in the request context",
+            )
+        if "onrender.com" in hostname.lower():
+            asyncio.create_task(
+                self._send_notification(
+                    notification_type,
+                    parent_id,
+                    content,
+                    url,
+                    faculty_id,
+                    department_id,
+                    year_id,
+                    subject_id,
+                )
+            )
+        else:
+            asyncio.create_task(
+                self._send_notification_to_background_worker(
+                    notification_type=notification_type,
+                    parent_id=parent_id,
+                    content=content,
+                    url=url,
+                    faculty_id=faculty_id,
+                    department_id=department_id,
+                    year_id=year_id,
+                    subject_id=subject_id,
+                )
+            )
         return BaseResponseDto(
             success=True,
             code=200,
@@ -1216,6 +1345,19 @@ class HelperService(IHelperService[U]):
         )
 
     # File Functions
+    async def _stream_aiohttp_response(
+        self,
+        session: aiohttp.ClientSession,
+        response: aiohttp.ClientResponse,
+    ) -> AsyncIterable[bytes]:
+        try:
+            async for chunk in response.content.iter_chunked(1024 * 1024):
+                if chunk:
+                    yield chunk
+        finally:
+            response.release()
+            await session.close()
+            
     async def _request_with_retries(
         self,
         method: str,
@@ -1225,6 +1367,7 @@ class HelperService(IHelperService[U]):
         data: aiohttp.FormData | None = None,
         json_data: dict | None = None,
         max_retries=6,
+        stream_response: bool = False,
     ) -> BaseResponseDto[RequestResponseModel]:
         RATE_LIMIT_REASONS = [
             "userRateLimitExceeded",
@@ -1232,65 +1375,90 @@ class HelperService(IHelperService[U]):
             "quotaExceeded",
         ]
         errors = []
+
         for attempt in range(max_retries):
+            session = aiohttp.ClientSession()
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.request(
-                        method,
-                        url,
-                        headers=headers,
-                        params=params,
-                        data=data,
-                        json=json_data,
-                    ) as response:
-                        json_response = {}
-                        content = None
-                        try:
+                response = await session.request(
+                    method,
+                    url,
+                    headers=headers,
+                    params=params,
+                    data=data,
+                    json=json_data,
+                )
+
+                json_response = {}
+                if not stream_response or response.status in {403, 429}:
+                    try:
+                        json_response = await response.json()
+                    except Exception:
+                        pass
+
+                if response.status == 429:  # Too Many Requests
+                    retry_after = int(response.headers.get("Retry-After", 1))
+                    response.release()
+                    await session.close()
+                    await asyncio.sleep(retry_after)
+                    continue
+
+                if response.status == 403:  # Forbidden
+                    reason = (
+                        json_response.get("error", {})
+                        .get("errors", [{}])[0]
+                        .get("reason", "")
+                    )
+                    if any(x in reason for x in RATE_LIMIT_REASONS):
+                        retry_after = int(response.headers.get("Retry-After", 1))
+                        response.release()
+                        await session.close()
+                        await asyncio.sleep(retry_after)
+                        continue
+
+                if str(response.status)[0] != "2":  # Not a 2xx response
+                    try:
+                        if not json_response:
                             json_response = await response.json()
-                        except Exception:
-                            pass
-                        try:
-                            content = await response.read()
-                        except Exception:
-                            pass
-                        response_model = RequestResponseModel(
+                    except Exception:
+                        pass
+                    response.release()
+                    await session.close()
+                    return BaseResponseDto(
+                        success=False,
+                        code=response.status,
+                        data=None,
+                        message=f"Request failed with status {response.status}",
+                        error=f"Request for {url} with method {method} failed with status {response.status} and response: {json.dumps(json_response)}",
+                    )
+
+                if stream_response:
+                    return BaseResponseDto(
+                        success=True,
+                        code=response.status,
+                        data=RequestResponseModel(
                             json_response=json_response,
-                            content=content,
-                        )
-                        if response.status == 429:  # Too Many Requests
-                            retry_after = int(response.headers.get("Retry-After", 1))
-                            await asyncio.sleep(retry_after)
-                            continue
-                        if response.status == 403:  # Forbidden
-                            reason = (
-                                json_response.get("error", {})
-                                .get("errors", [{}])[0]
-                                .get("reason", "")
-                            )
-                            if any(x in reason for x in RATE_LIMIT_REASONS):
-                                retry_after = int(
-                                    response.headers.get("Retry-After", 1)
-                                )
-                                await asyncio.sleep(retry_after)
-                                continue
-                        if response.status != 200:
-                            return BaseResponseDto(
-                                success=False,
-                                code=response.status,
-                                data=None,
-                                message=f"Request failed with status {response.status}",
-                                error=f"Request for {url} with method {method} failed with status {response.status} and response: {json.dumps(json_response)}",
-                            )
-                        return BaseResponseDto(
-                            success=True,
-                            code=response.status,
-                            data=response_model,
-                            message="Request successful",
-                        )
+                            content=self._stream_aiohttp_response(session, response),
+                        ),
+                        message="Request successful",
+                    )
+
+                response_model = RequestResponseModel(json_response=json_response)
+                response.release()
+                await session.close()
+                return BaseResponseDto(
+                    success=True,
+                    code=response.status,
+                    data=response_model,
+                    message="Request successful",
+                )
             except Exception as ex:
                 errors.append(repr(ex))
-                await asyncio.sleep(2**attempt)  # Exponential backoff
-                continue
+                await session.close()
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2**attempt)
+                    continue
+                break
+
         return BaseResponseDto(
             success=False,
             code=500,
@@ -1607,7 +1775,7 @@ class HelperService(IHelperService[U]):
         file_id,
         visited=None,
         max_retries=6,
-    ) -> BaseResponseDto[FetchedModel]:
+    ):
         try:
             if not file_id:
                 return BaseResponseDto(
@@ -1791,7 +1959,7 @@ class HelperService(IHelperService[U]):
 
     async def get_google_access_token(
         self, user_refresh_token, max_retries=6
-    ) -> BaseResponseDto[str]:
+    ):
         try:
             if not user_refresh_token:
                 return BaseResponseDto(
@@ -1861,7 +2029,7 @@ class HelperService(IHelperService[U]):
 
     async def download_file_from_drive(
         self, file_id, max_retries=6
-    ) -> BaseResponseDto[DownloadedFileModel]:
+    ):
         try:
             if not file_id:
                 return BaseResponseDto(
@@ -1900,11 +2068,13 @@ class HelperService(IHelperService[U]):
                     message="File cannot be downloaded directly from Google Drive",
                     error=f"No web content link for file ID: {file_id}",
                 )
+
             download_url = f"{file_metadata.web_content_link}&key={api_key}"
             response = await self._request_with_retries(
                 method="GET",
                 url=download_url,
                 max_retries=max_retries,
+                stream_response=True,
             )
             if not response.success:
                 return BaseResponseDto(
@@ -1914,42 +2084,33 @@ class HelperService(IHelperService[U]):
                     message=response.message,
                     error=response.error,
                 )
-            response_data = response.data
-            if not response_data:
+            if not response.data or response.data.content is None:
                 return BaseResponseDto(
                     success=False,
                     code=500,
                     data=None,
                     message="Bad Response from Google Drive API, please try again later",
-                    error=f"Empty response data while downloading file for file ID: {file_id}",
+                    error=f"No download stream returned for file ID: {file_id}",
                 )
-            content = response_data.content
-            if not content:
-                return BaseResponseDto(
-                    success=False,
-                    code=500,
-                    data=None,
-                    message="Bad Response from Google Drive API, please try again later",
-                    error=f"Empty content while downloading file for file ID: {file_id}",
-                )
+
             downloaded_file = DownloadedFileModel(
                 name=file_metadata.name,
                 size=file_metadata.size,
-                content=content,
+                content=response.data.content,
             )
             return BaseResponseDto(
                 success=True,
                 code=200,
                 data=downloaded_file,
-                message="File downloaded successfully",
+                message="File download stream created successfully",
             )
         except Exception as ex:
-            print(f"Error downloading file from Google Drive: {repr(ex)}")
+            print(f"Error creating download stream from Google Drive: {repr(ex)}")
             return BaseResponseDto(
                 success=False,
                 code=500,
                 data=None,
-                message="An error occurred while downloading the file from Google Drive",
+                message="An error occurred while creating the download stream from Google Drive",
                 error=repr(ex),
             )
 
@@ -1958,7 +2119,7 @@ class HelperService(IHelperService[U]):
         access_token,
         file_id,
         max_retries=6,
-    ) -> BaseResponseDto[bool]:
+    ):
         try:
             if not access_token or not file_id:
                 return BaseResponseDto(
@@ -2034,9 +2195,9 @@ class HelperService(IHelperService[U]):
         content,
         size=None,
         max_retries=6,
-    ) -> BaseResponseDto[FileModel]:
+    ):
         try:
-            if not access_token or not name or not content:
+            if not access_token or not name or content is None:
                 return BaseResponseDto(
                     success=False,
                     code=400,
@@ -2070,7 +2231,7 @@ class HelperService(IHelperService[U]):
                 url=upload_url,
                 headers=headers,
                 data=multipart_data,
-                max_retries=max_retries,
+                max_retries=1,
             )
             if not response.success:
                 return BaseResponseDto(
@@ -2098,7 +2259,7 @@ class HelperService(IHelperService[U]):
                     message="Bad Response from Google Drive API, please try again later",
                     error=f"Invalid JSON response while uploading file: {name}, response: {json.dumps(json_response)}",
                 )
-            json_response["size"] = size if size else str(len(content))
+            json_response["size"] = size if size else "0 B"
             uploaded_file = self._format_file_model(json_response)
             public_response = await self.set_file_public_on_drive(
                 access_token=access_token,
@@ -2133,7 +2294,7 @@ class HelperService(IHelperService[U]):
         access_token,
         file_id,
         max_retries=6,
-    ) -> BaseResponseDto[bool]:
+    ):
         try:
             if not access_token or not file_id:
                 return BaseResponseDto(
@@ -2182,7 +2343,7 @@ class HelperService(IHelperService[U]):
         file_id,
         new_name=None,
         max_retries=6,
-    ) -> BaseResponseDto[FileModel]:
+    ):
         try:
             if not access_token or not file_id:
                 return BaseResponseDto(
@@ -2192,6 +2353,7 @@ class HelperService(IHelperService[U]):
                     message="Access token and file ID are required",
                     error="Missing required parameters for copying file on Google Drive",
                 )
+
             downloaded_file_response = await self.download_file_from_drive(
                 file_id=file_id, max_retries=max_retries
             )
@@ -2209,8 +2371,9 @@ class HelperService(IHelperService[U]):
                     code=500,
                     data=None,
                     message="Bad Response from Google Drive API, please try again later",
-                    error=f"Empty data while downloading file for file ID: {file_id}",
+                    error=f"Empty data while creating download stream for file ID: {file_id}",
                 )
+
             downloaded_file = downloaded_file_response.data
             upload_name = new_name if new_name else downloaded_file.name
             upload_response = await self.upload_file_to_drive(
@@ -2234,7 +2397,7 @@ class HelperService(IHelperService[U]):
                     code=500,
                     data=None,
                     message="Bad Response from Google Drive API, please try again later",
-                    error=f"Empty data while uploading copied file for original file ID: {file_id}",
+                    error=f"Empty response data while uploading copied file for original file ID: {file_id}",
                 )
             uploaded_file = upload_response.data
             return BaseResponseDto(

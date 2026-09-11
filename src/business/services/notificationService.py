@@ -176,6 +176,57 @@ class NotificationService(INotificationService):
                 message="An error occurred while finding notifications",
             )
 
+    async def create(self, data):
+        try:
+            if not data.notification_type or not data.parent_id:
+                await self.logger.log(
+                    action="Create",
+                    entity="Notification",
+                    level="error",
+                    code=400,
+                    message=f"Notification type and parent ID are required for creating a notification",
+                    details={"error": "Missing notification_type or parent_id"},
+                    source="NotificationService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Notification type and parent ID are required for creating a notification",
+                )
+            await self.helper_service.send_notification(
+                notification_type=data.notification_type,
+                parent_id=data.parent_id,
+                content=data.content,
+                url=data.url,
+                faculty_id=data.faculty_id,
+                department_id=data.department_id,
+                year_id=data.year_id,
+                subject_id=data.subject_id,
+            )
+            return BaseResponseDto(
+                success=True,
+                code=201,
+                data=None,
+                message="Notification created successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="Create",
+                entity="Notification",
+                level="error",
+                code=500,
+                message=f"An error occurred while creating a notification",
+                details={"error": repr(ex)},
+                source="NotificationService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while creating a notification",
+            )
+
     # Notification Specific Methods
     async def mark_notification_as_seen(self, notification_id):
         try:

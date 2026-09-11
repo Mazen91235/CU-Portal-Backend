@@ -25,7 +25,10 @@ from api.routes.subjectRoutes import (
     create_subject_admin_router,
     create_subject_user_router,
 )
-from api.routes.notificationRoutes import create_notification_user_router
+from api.routes.notificationRoutes import (
+    create_notification_public_router,
+    create_notification_user_router,
+)
 from api.routes.logRoutes import create_log_admin_router
 from api.routes.materialRoutes import (
     create_material_user_router,
@@ -40,6 +43,10 @@ from api.routes.messageRoutes import (
 from api.routes.eventOrganizerRoutes import (
     create_event_organizer_user_router,
     create_event_organizer_admin_router,
+)
+from api.routes.releaseRoutes import (
+    create_release_admin_router,
+    create_release_user_router,
 )
 from api.routes.weekRoutes import (
     create_week_user_router,
@@ -58,6 +65,7 @@ from api.routes.facultyRoutes import (
     create_faculty_user_router,
     create_faculty_admin_router,
 )
+from api.routes.systemRoutes import create_system_public_router
 from api.middlewares.authMiddleware import AuthMiddleware
 from api.middlewares.validationMiddleware import ValidationMiddleware
 from api.middlewares.requestLimitMiddleware import RequestLimitMiddleware
@@ -79,9 +87,11 @@ from api.controllers.calendarController import CalendarController
 from api.controllers.notificationController import NotificationController
 from api.controllers.yearController import YearController
 from api.controllers.departmentController import DepartmentController
+from api.controllers.releaseController import ReleaseController
 from api.controllers.weekController import WeekController
 from api.controllers.eventController import EventController
 from api.controllers.attachmentController import AttachmentController
+from api.controllers.systemController import SystemController
 from business.services.userService import UserService
 from business.services.roleService import RoleService
 from business.services.taskService import TaskService
@@ -101,6 +111,7 @@ from business.services.weekService import WeekService
 from business.services.eventService import EventService
 from business.services.requestLimitService import RequestLimitService
 from business.services.examService import ExamService
+from business.services.releaseService import ReleaseService
 from business.services.attachmentService import AttachmentService
 from business.services.helperService import HelperService
 from business.loggers.baseLogger import BaseLogger
@@ -126,6 +137,9 @@ from core.entities.userNotification import UserNotification
 from core.entities.notification import Notification
 from core.entities.message import Message
 from core.entities.faculty import Faculty
+from core.entities.release import Release
+from core.entities.version import Version
+from core.entities.releaseItem import ReleaseItem
 from core.entities.eventOrganizer import EventOrganizer
 from core.entities.week import Week
 from core.entities.event import Event
@@ -257,6 +271,24 @@ class Container(containers.DeclarativeContainer):
         BaseRepository,
         session=db_session,
         model=Week,
+        session_factory=session_factory,
+    )
+    release_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Release,
+        session_factory=session_factory,
+    )
+    version_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Version,
+        session_factory=session_factory,
+    )
+    release_item_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=ReleaseItem,
         session_factory=session_factory,
     )
     event_repository = providers.Factory(
@@ -442,6 +474,14 @@ class Container(containers.DeclarativeContainer):
         logger=logger,
         helper_service=helper_service,
     )
+    release_service = providers.Factory(
+        ReleaseService,
+        release_repository=release_repository,
+        version_repository=version_repository,
+        release_item_repository=release_item_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
     attachment_service = providers.Factory(
         AttachmentService,
         attachment_repository=attachment_repository,
@@ -548,6 +588,10 @@ class Container(containers.DeclarativeContainer):
         ExamController, exam_service=exam_service, logger=logger
     )
 
+    release_controller = providers.Factory(
+        ReleaseController, release_service=release_service, logger=logger
+    )
+
     role_controller = providers.Factory(
         RoleController, role_service=role_service, logger=logger
     )
@@ -555,6 +599,8 @@ class Container(containers.DeclarativeContainer):
     attachment_controller = providers.Factory(
         AttachmentController, attachment_service=attachment_service, logger=logger
     )
+
+    system_controller = providers.Factory(SystemController, logger=logger)
 
     # --- 7. Routes ---
     main_user_routes = providers.Factory(create_main_user_router)
@@ -628,11 +674,16 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    notification_public_routes = providers.Factory(
+        create_notification_public_router,
+        controller_provider=notification_controller.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
     notification_user_routes = providers.Factory(
         create_notification_user_router,
         controller_provider=notification_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
-        validation_middleware_provider=validation_middleware.provider,
     )
 
     log_admin_routes = providers.Factory(
@@ -744,6 +795,19 @@ class Container(containers.DeclarativeContainer):
         validation_middleware_provider=validation_middleware.provider,
     )
 
+    release_user_routes = providers.Factory(
+        create_release_user_router,
+        controller_provider=release_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+    )
+
+    release_admin_routes = providers.Factory(
+        create_release_admin_router,
+        controller_provider=release_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
+        validation_middleware_provider=validation_middleware.provider,
+    )
+
     subject_user_routes = providers.Factory(
         create_subject_user_router,
         controller_provider=subject_controller.provider,
@@ -784,4 +848,9 @@ class Container(containers.DeclarativeContainer):
         controller_provider=event_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
+    )
+
+    system_public_routes = providers.Factory(
+        create_system_public_router,
+        controller_provider=system_controller.provider,
     )

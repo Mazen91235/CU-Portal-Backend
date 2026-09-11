@@ -7,6 +7,27 @@ if TYPE_CHECKING:
     from core.entities.notification import Notification
 
 
+class NotificationCreateDto(BaseModel):
+    notification_type: Notification.NotificationType = Field(
+        ..., description="Type of the notification (e.g., task, announcement)"
+    )
+    parent_id: int = Field(..., description="ID of the related parent entity")
+    content: str = Field(..., description="Content of the notification")
+    url: str | None = Field(default=None, description="URL to redirect to")
+    faculty_id: int | None = Field(
+        default=None, description="ID of the related faculty (if applicable)"
+    )
+    department_id: int | None = Field(
+        default=None, description="ID of the related department (if applicable)"
+    )
+    year_id: int | None = Field(
+        default=None, description="ID of the related year (if applicable)"
+    )
+    subject_id: int | None = Field(
+        default=None, description="ID of the related subject (if applicable)"
+    )
+
+
 class NotificationResponseDto(BaseModel):
     id: int | None = Field(default=None, description="ID of the notification")
     content: str | None = Field(default=None, description="Content of the notification")
