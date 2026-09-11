@@ -3,7 +3,7 @@ import re
 from datetime import datetime, timezone
 from collections.abc import AsyncGenerator
 from stat import S_IFDIR, S_IFREG
-from stream_zip import ZIP_64, async_stream_zip
+from stream_zip import ZIP_32, ZIP_64, async_stream_zip
 from core.iServices.iMaterialService import IMaterialService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -2704,7 +2704,7 @@ class MaterialService(IMaterialService):
                 f"{current_path}/",
                 modified_at,
                 S_IFDIR | 0o755,
-                ZIP_64,
+                ZIP_32,
                 (),
             )
 
@@ -2729,7 +2729,7 @@ class MaterialService(IMaterialService):
                     f"{current_path}/links.txt",
                     modified_at,
                     S_IFREG | 0o644,
-                    ZIP_64,
+                    ZIP_32,
                     self._iter_links_content(link_materials),
                 )
             return
@@ -2750,7 +2750,7 @@ class MaterialService(IMaterialService):
             file_path,
             modified_at,
             S_IFREG | 0o644,
-            ZIP_64,
+            self._get_download_zip_method(attachment),
             self._stream_attachment_file(attachment),
         )
 
@@ -2782,6 +2782,37 @@ class MaterialService(IMaterialService):
         async for chunk in download_response.data.content:
             if chunk:
                 yield chunk
+
+    def _get_download_zip_method(self, attachment: Attachment):
+        details = attachment.details or {}
+        file_data = details.get("file_data") or {}
+        size = self._parse_file_size(file_data.get("size"))
+
+        if size is not None and size <= 0xFFFFFFFF:
+            return ZIP_32
+        return ZIP_64
+
+    @staticmethod
+    def _parse_file_size(size: str | int | float | None) -> int | None:
+        if isinstance(size, (int, float)) and size >= 0:
+            return int(size)
+        if not isinstance(size, str):
+            return None
+
+        match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([KMGTPE]?B)\s*", size, re.IGNORECASE)
+        if not match:
+            return None
+
+        units = {
+            "B": 1,
+            "KB": 1024,
+            "MB": 1024**2,
+            "GB": 1024**3,
+            "TB": 1024**4,
+            "PB": 1024**5,
+            "EB": 1024**6,
+        }
+        return int(float(match.group(1)) * units[match.group(2).upper()])
 
     def _get_attachment_file_name(
         self, material: Material, attachment: Attachment
