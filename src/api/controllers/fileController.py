@@ -1,10 +1,9 @@
 import os
-
 from core.iControllers.iFileController import IFileController
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.responseHandler import ResponseHandler
-
+from core.utils.validator import Validator
 
 class FileController(IFileController):
     def __init__(self, helper_service: IHelperService, logger: IBaseLogger):
@@ -14,7 +13,7 @@ class FileController(IFileController):
     # File Specific Functions
     async def download(self, request, id):
         try:
-            if "onrender.com" not in (request.url.hostname or "").lower():
+            if not Validator.validate_hostname_is_background_worker(request.url.hostname or ""):
                 background_url = self._generate_background_download_url(request)
                 if not background_url:
                     return ResponseHandler.generate_response(

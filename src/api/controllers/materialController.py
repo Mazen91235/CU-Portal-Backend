@@ -6,6 +6,7 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
 from core.utils.mapper import Mapper
+from core.utils.validator import Validator
 
 # Entities & DTOs
 from core.entities.material import Material
@@ -400,7 +401,7 @@ class MaterialController(IMaterialController):
 
     async def download_many(self, request, data):
         try:
-            if "onrender.com" not in (request.url.hostname or "").lower():
+            if not Validator.validate_hostname_is_background_worker(request.url.hostname or ""):
                 background_url = self._generate_background_download_url(request)
                 if not background_url:
                     return ResponseHandler.generate_response(
