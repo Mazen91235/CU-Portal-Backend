@@ -1,3 +1,4 @@
+import asyncio
 import urllib.parse
 from collections.abc import AsyncIterable, Iterable
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
@@ -29,7 +30,7 @@ class ResponseHandler:
             },
         )
         if success and request and hasattr(request.state, "background"):
-            response.background = request.state.background
+            asyncio.create_task(request.state.background())
         return response
 
     @staticmethod
@@ -37,7 +38,7 @@ class ResponseHandler:
         request = request_context.get(None)
         response = RedirectResponse(redirect_url)
         if request and hasattr(request.state, "background"):
-            response.background = request.state.background
+            asyncio.create_task(request.state.background())
         return response
 
     @staticmethod
@@ -62,5 +63,5 @@ class ResponseHandler:
         stream = content if not isinstance(content, bytes) else iter((content,))
         response = StreamingResponse(stream, media_type=content_type, headers=headers)
         if request and hasattr(request.state, "background"):
-            response.background = request.state.background
+            asyncio.create_task(request.state.background())
         return response

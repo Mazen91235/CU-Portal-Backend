@@ -1312,7 +1312,7 @@ class HelperService(IHelperService[U]):
                 message="Hostname is not available in the request context",
             )
         if Validator.validate_hostname_is_background_worker(hostname):
-            request.state.background = self._send_notification(
+            request.state.background = lambda: self._send_notification(
                 notification_type,
                 parent_id,
                 content,
