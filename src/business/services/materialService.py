@@ -363,6 +363,22 @@ class MaterialService(IMaterialService):
                     message=verify_restricted_access_response.message,
                 )
             if data.week_id:
+                if data.material_type == "folder":
+                    await self.logger.log(
+                        action="Create",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Week ID should not be provided for folder type materials",
+                        details={"error": "Week ID is not applicable for folders"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Week ID should not be provided for folder type materials",
+                    )
                 week_response = await self.week_repository.find_one(
                     Week.id == data.week_id
                 )
@@ -719,6 +735,25 @@ class MaterialService(IMaterialService):
                     message=verify_restricted_access_response.message,
                 )
             if data.week_id:
+                if (
+                    data.material_type == "folder"
+                    or existing_material.material_type == "folder"
+                ):
+                    await self.logger.log(
+                        action="Update",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Week ID should not be provided for folder type materials",
+                        details={"error": "Week ID is not applicable for folders"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Week ID should not be provided for folder type materials",
+                    )
                 week_response = await self.week_repository.find_one(
                     Week.id == data.week_id
                 )
