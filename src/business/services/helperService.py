@@ -168,16 +168,16 @@ class HelperService(IHelperService[U]):
         try:
             user = user_context.get(None)
             if user:
-                return BaseResponseDto[User | None](success=True, data=user)
+                return BaseResponseDto(success=True, data=user)
             else:
-                return BaseResponseDto[User | None](
+                return BaseResponseDto(
                     success=False,
                     code=401,
                     data=None,
                     message="No logged-in user found",
                 )
         except Exception as ex:
-            return BaseResponseDto[User | None](
+            return BaseResponseDto(
                 success=False,
                 code=500,
                 data=None,

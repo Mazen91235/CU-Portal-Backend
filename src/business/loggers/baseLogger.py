@@ -1,4 +1,5 @@
 import json
+from sqlalchemy import inspect
 from business.contextVars.requestContext import request_context
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -19,11 +20,16 @@ class BaseLogger(IBaseLogger):
                 ip_address_response.data if ip_address_response.success else None
             )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
-            logged_in_user_id = (
-                logged_in_user_response.data.id
-                if logged_in_user_response.success and logged_in_user_response.data
-                else None
-            )
+            logged_in_user_id = None
+            if logged_in_user_response.success and logged_in_user_response.data:
+                logged_in_user = logged_in_user_response.data
+                inspected_user = inspect(logged_in_user, raiseerr=False)
+                if inspected_user is not None and inspected_user.identity:
+                    logged_in_user_id = inspected_user.identity[0]
+                elif isinstance(logged_in_user, dict):
+                    logged_in_user_id = logged_in_user.get("id")
+                else:
+                    logged_in_user_id = getattr(logged_in_user, "id", None)
 
             request = request_context.get(None)
             route = request.url.path if request else None

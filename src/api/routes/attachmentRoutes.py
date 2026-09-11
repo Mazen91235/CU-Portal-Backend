@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute, set_timeout
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iAttachmentController import IAttachmentController
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 
@@ -29,7 +29,6 @@ def create_attachment_public_router(
         "/seed",
         dependencies=[
             # Depends(_validate_api_key),
-            Depends(set_timeout(1800)),
         ],  # Set a timeout of 30 minutes for the seed operation
         summary="Seed Attachments",
         description="Seed the attachments table with initial data",
@@ -44,7 +43,6 @@ def create_attachment_public_router(
         "/validate",
         dependencies=[
             Depends(_validate_api_key),
-            Depends(set_timeout(1800)),
         ],  # Set a timeout of 30 minutes for the validate operation
         summary="Validate Attachments",
         description="Validate the attachments in the database",
