@@ -229,14 +229,22 @@ async def _check_for_redirect(request: Request):
         getattr(body_json, "details"), dict
     ):
         details = getattr(body_json, "details")
-        if "url" in details and details["url"]:
+        if (
+            "url" in details
+            and details["url"]
+            and Validator.is_valid_drive_url(details["url"])
+        ):
             return ResponseHandler.generate_redirect_response(redirect_url)
-        if "avatar" in details and details["avatar"]:
+        if (
+            "avatar" in details
+            and details["avatar"]
+            and Validator.is_valid_drive_url(details["avatar"])
+        ):
             return ResponseHandler.generate_redirect_response(redirect_url)
         if (
             "urls" in details
             and isinstance(details["urls"], list)
-            and any(details["urls"])
+            and any(Validator.is_valid_drive_url(url) for url in details["urls"])
         ):
             return ResponseHandler.generate_redirect_response(redirect_url)
     return None
