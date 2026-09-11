@@ -137,3 +137,7 @@ class Validator:
             return True
         except ValueError:
             return False
+
+    @staticmethod
+    def validate_hostname_is_background_worker(hostname: str) -> bool:
+        return "onrender" in hostname.lower() or "bg-worker" in hostname.lower()

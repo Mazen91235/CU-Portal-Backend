@@ -1311,7 +1311,7 @@ class HelperService(IHelperService[U]):
                 data=False,
                 message="Hostname is not available in the request context",
             )
-        if "onrender.com" in hostname.lower():
+        if Validator.validate_hostname_is_background_worker(hostname):
             asyncio.create_task(
                 self._send_notification(
                     notification_type,
