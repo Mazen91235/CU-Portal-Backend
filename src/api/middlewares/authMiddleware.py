@@ -9,8 +9,10 @@ from core.iLoggers.iBaseLogger import IBaseLogger
 from core.entities.user import User
 from core.dtos.userDtos import UserSearchDto
 from core.utils.timezoneHandler import TimezoneHandler
+from core.utils.cachingHandler import CachingHandler
 
 cookie_scheme = APIKeyCookie(name="token", auto_error=False)
+caching_handler = CachingHandler()
 
 
 class AuthMiddleware(IAuthMiddleware):
@@ -24,6 +26,13 @@ class AuthMiddleware(IAuthMiddleware):
 
     async def is_logged_in(self, request: Request, refresh_token: str | None = None):
         try:
+            if not refresh_token:
+                token = request.query_params.get("token")
+                if token:
+                    token_data = await caching_handler.get(token)
+                    if token_data and "token" in token_data:
+                        refresh_token = token_data["token"]
+                        await caching_handler.delete(token)
             if not refresh_token:
                 await self.logger.log(
                     action="AuthCheck",

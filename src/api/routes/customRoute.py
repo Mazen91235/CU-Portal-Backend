@@ -8,10 +8,11 @@ from fastapi import Request, Response, Depends, HTTPException
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
 from business.contextVars.userContext import user_context
-from business.contextVars.sessionContext import session_context
 from core.iMiddlewares.iRequestLimitMiddleware import IRequestLimitMiddleware
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.cachingHandler import CachingHandler
+from core.utils.stringHandler import StringHandler
+from core.utils.validator import Validator
 from core.utils.responseHandler import ResponseHandler
 
 load_dotenv()  # Load environment variables from .env file
@@ -199,6 +200,48 @@ async def _generate_inflight_key(request: Request) -> str:
     return lock_key
 
 
+async def _check_for_redirect(request: Request):
+    if request.method.upper() not in ["POST", "PATCH", "PUT", "DELETE"]:
+        return None
+    if Validator.validate_hostname_is_background_worker(request.url.hostname or ""):
+        return None
+    if not request.cookies.get("token"):
+        return None
+    token = StringHandler.generate_random_string(32)
+    await caching_handler.set(token, {"token": request.cookies.get("token", "")})
+    query = (
+        f"?token={token}"
+        if request.url.query == ""
+        else f"?{request.url.query}&token={token}"
+    )
+    redirect_url = f"{os.environ.get('BACKGROUND_WORKER_URL', 'http://localhost:8001')}{request.url.path}{query}"
+    modules_to_redirect = ["material", "file"]
+    if any(module in request.url.path for module in modules_to_redirect):
+        return ResponseHandler.generate_redirect_response(redirect_url)
+    body_bytes = await request.body()
+    try:
+        body_json = json.loads(body_bytes) if body_bytes else {}
+    except Exception:
+        body_json = {}
+    if hasattr(body_json, "url") and getattr(body_json, "url"):
+        return ResponseHandler.generate_redirect_response(redirect_url)
+    if hasattr(body_json, "details") and isinstance(
+        getattr(body_json, "details"), dict
+    ):
+        details = getattr(body_json, "details")
+        if "url" in details and details["url"]:
+            return ResponseHandler.generate_redirect_response(redirect_url)
+        if "avatar" in details and details["avatar"]:
+            return ResponseHandler.generate_redirect_response(redirect_url)
+        if (
+            "urls" in details
+            and isinstance(details["urls"], list)
+            and any(details["urls"])
+        ):
+            return ResponseHandler.generate_redirect_response(redirect_url)
+    return None
+
+
 class CustomRoute(APIRoute):
     def __init__(self, *args, dependencies=None, **kwargs):
         dependencies = list(dependencies) if dependencies else []
@@ -256,6 +299,9 @@ class CustomRoute(APIRoute):
                             code=409,
                             message="A similar request is already being processed. Please wait for it to complete.",
                         )
+                redirect_response = await _check_for_redirect(request)
+                if redirect_response is not None:
+                    return redirect_response
                 if timeout_seconds == 0:
                     response = await original_route_handler(request)
                 else:
