@@ -2,6 +2,7 @@ import urllib.parse
 from collections.abc import AsyncIterable, Iterable
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
+from business.contextVars.requestContext import request_context
 
 
 class ResponseHandler:
@@ -14,9 +15,10 @@ class ResponseHandler:
         next_page: bool | None = None,
         **kwargs,
     ):
+        request = request_context.get(None)
         if isinstance(data, BaseModel):
             data = data.model_dump(mode="json")
-        return JSONResponse(
+        response = JSONResponse(
             status_code=code or (200 if success else 500),
             content={
                 "success": success,
@@ -26,10 +28,17 @@ class ResponseHandler:
                 **kwargs,
             },
         )
+        if success and request and hasattr(request.state, "background"):
+            response.background = request.state.background
+        return response
 
     @staticmethod
     def generate_redirect_response(redirect_url: str):
-        return RedirectResponse(redirect_url)
+        request = request_context.get(None)
+        response = RedirectResponse(redirect_url)
+        if request and hasattr(request.state, "background"):
+            response.background = request.state.background
+        return response
 
     @staticmethod
     def generate_streaming_response(
@@ -37,6 +46,7 @@ class ResponseHandler:
         filename: str,
         content_type: str = "application/octet-stream",
     ):
+        request = request_context.get(None)
         # 1. Percent-encode the filename for UTF-8 compatibility (RFC 5987)
         encoded_filename = urllib.parse.quote(filename)
 
@@ -50,4 +60,7 @@ class ResponseHandler:
         }
 
         stream = content if not isinstance(content, bytes) else iter((content,))
-        return StreamingResponse(stream, media_type=content_type, headers=headers)
+        response = StreamingResponse(stream, media_type=content_type, headers=headers)
+        if request and hasattr(request.state, "background"):
+            response.background = request.state.background
+        return response

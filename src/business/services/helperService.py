@@ -1312,31 +1312,28 @@ class HelperService(IHelperService[U]):
                 message="Hostname is not available in the request context",
             )
         if Validator.validate_hostname_is_background_worker(hostname):
-            asyncio.create_task(
-                self._send_notification(
-                    notification_type,
-                    parent_id,
-                    content,
-                    url,
-                    faculty_id,
-                    department_id,
-                    year_id,
-                    subject_id,
-                )
+            request.state.background = self._send_notification(
+                notification_type,
+                parent_id,
+                content,
+                url,
+                faculty_id,
+                department_id,
+                year_id,
+                subject_id,
             )
         else:
-            asyncio.create_task(
-                self._send_notification_to_background_worker(
-                    notification_type=notification_type,
-                    parent_id=parent_id,
-                    content=content,
-                    url=url,
-                    faculty_id=faculty_id,
-                    department_id=department_id,
-                    year_id=year_id,
-                    subject_id=subject_id,
-                )
+            request.state.background = self._send_notification_to_background_worker(
+                notification_type=notification_type,
+                parent_id=parent_id,
+                content=content,
+                url=url,
+                faculty_id=faculty_id,
+                department_id=department_id,
+                year_id=year_id,
+                subject_id=subject_id,
             )
+        request_context.set(request)
         return BaseResponseDto(
             success=True,
             code=200,
