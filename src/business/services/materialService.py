@@ -3,7 +3,8 @@ import re
 from datetime import datetime, timezone
 from collections.abc import AsyncGenerator
 from stat import S_IFDIR, S_IFREG
-from stream_zip import ZIP_32, ZIP_64, async_stream_zip
+import struct
+import zlib
 from core.iServices.iMaterialService import IMaterialService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -1914,7 +1915,7 @@ class MaterialService(IMaterialService):
                 success=True,
                 code=200,
                 data={
-                    "stream": async_stream_zip(self._iter_download_zip_members(roots)),
+                    "stream": self._stream_download_zip(roots),
                     "filename": "archive.zip",
                 },
                 message="Materials download prepared successfully",
@@ -2523,37 +2524,279 @@ class MaterialService(IMaterialService):
                 message=f"An error occurred while trying to create material from Drive",
             )
 
-    async def _iter_download_zip_members(self, roots: list[dict]) -> AsyncGenerator:
-        try:
-            root_links = []
+    async def _iter_download_zip_members(
+        self, roots: list[dict]
+    ) -> AsyncGenerator[tuple[str, datetime, int, AsyncGenerator], None]:
+        root_links = []
 
-            for root in roots:
-                if root["material"].material_type in {"youtube", "drive", "external"}:
-                    root_links.append(root["material"])
+        for root in roots:
+            material = root["material"]
+            if material.material_type in {"youtube", "drive", "external"}:
+                root_links.append(material)
+                continue
+
+            async for member in self._iter_download_members(root):
+                yield member
+
+        if root_links:
+            yield (
+                "links.txt",
+                datetime.now(timezone.utc),
+                S_IFREG | 0o644,
+                self._iter_links_content(root_links),
+            )
+
+    @staticmethod
+    def _zip_dos_datetime(modified_at: datetime) -> tuple[int, int]:
+        if modified_at.tzinfo is not None:
+            modified_at = modified_at.astimezone(timezone.utc)
+
+        year = max(1980, min(modified_at.year, 2107))
+        dos_time = (
+            (modified_at.hour << 11)
+            | (modified_at.minute << 5)
+            | (modified_at.second // 2)
+        )
+        dos_date = ((year - 1980) << 9) | (modified_at.month << 5) | modified_at.day
+        return dos_time, dos_date
+
+    async def _stream_download_zip(
+        self, roots: list[dict]
+    ) -> AsyncGenerator[bytes, None]:
+        offset = 0
+        central_directory = []
+
+        async for name, modified_at, mode, chunks in self._iter_download_zip_members(
+            roots
+        ):
+            name_bytes = name.encode("utf-8")
+            if len(name_bytes) > 0xFFFF:
+                raise ValueError(f"ZIP member name is too long: {name}")
+
+            dos_time, dos_date = self._zip_dos_datetime(modified_at)
+            is_directory = bool(mode & S_IFDIR)
+            flags = 0x0800  # UTF-8 names.
+            compression = 0 if is_directory else 8  # Store directories, deflate files.
+            external_attr = (mode << 16) | (0x10 if name_bytes.endswith(b"/") else 0)
+
+            local_header_extra = b""
+            if not is_directory:
+                # ZIP64 local extra field. Actual sizes are written in the
+                # trailing ZIP64 data descriptor after the streamed member.
+                local_header_extra = struct.pack(
+                    "<HHQQ",
+                    0x0001,
+                    16,
+                    0,
+                    0,
+                )
+                flags |= 0x0008  # Data descriptor follows member data.
+
+            if is_directory:
+                member_offset = offset
+                local_header = struct.pack(
+                    "<4sHHHHHIIIHH",
+                    b"PK\x03\x04",
+                    45,
+                    flags,
+                    compression,
+                    dos_time,
+                    dos_date,
+                    0,
+                    0,
+                    0,
+                    len(name_bytes),
+                    len(local_header_extra),
+                )
+                local_header += name_bytes + local_header_extra
+
+                yield local_header
+                offset += len(local_header)
+
+                central_directory.append(
+                    (
+                        name_bytes,
+                        dos_time,
+                        dos_date,
+                        45,
+                        flags,
+                        compression,
+                        0,
+                        0,
+                        0,
+                        external_attr,
+                        member_offset,
+                    )
+                )
+                continue
+
+            local_header = struct.pack(
+                "<4sHHHHHIIIHH",
+                b"PK\x03\x04",
+                45,
+                flags,
+                compression,
+                dos_time,
+                dos_date,
+                0,
+                0xFFFFFFFF,
+                0xFFFFFFFF,
+                len(name_bytes),
+                len(local_header_extra),
+            )
+            local_header += name_bytes + local_header_extra
+
+            member_offset = offset
+            yield local_header
+            offset += len(local_header)
+
+            stats = {
+                "uncompressed_size": 0,
+                "compressed_size": 0,
+                "crc32": 0,
+            }
+            compressor = zlib.compressobj(level=9, wbits=-zlib.MAX_WBITS)
+
+            # Keep consuming the source stream until EOF. The ZIP member is
+            # not complete until every source chunk has been processed.
+            async for chunk in chunks:
+                if not chunk:
                     continue
 
-                async for member in self._iter_download_members(root):
-                    yield member
+                stats["uncompressed_size"] += len(chunk)
+                stats["crc32"] = zlib.crc32(chunk, stats["crc32"])
 
-            if root_links:
-                yield (
-                    "links.txt",
-                    datetime.now(timezone.utc),
-                    S_IFREG | 0o644,
-                    ZIP_64,
-                    self._iter_links_content(root_links),
-                )
-        except Exception as ex:
-            await self.logger.log(
-                action="DownloadMany",
-                entity="Material",
-                level="error",
-                code=500,
-                message="An error occurred while streaming materials download",
-                details={"error": repr(ex)},
-                source="MaterialService",
+                compressed_chunk = compressor.compress(chunk)
+                if compressed_chunk:
+                    stats["compressed_size"] += len(compressed_chunk)
+                    yield compressed_chunk
+                    offset += len(compressed_chunk)
+
+            compressed_chunk = compressor.flush()
+            if compressed_chunk:
+                stats["compressed_size"] += len(compressed_chunk)
+                yield compressed_chunk
+                offset += len(compressed_chunk)
+
+            descriptor = struct.pack(
+                "<4sIQQ",
+                b"PK\x07\x08",
+                stats["crc32"] & 0xFFFFFFFF,
+                stats["compressed_size"],
+                stats["uncompressed_size"],
             )
-            raise
+            yield descriptor
+            offset += len(descriptor)
+
+            central_directory.append(
+                (
+                    name_bytes,
+                    dos_time,
+                    dos_date,
+                    45,
+                    flags,
+                    compression,
+                    stats["crc32"] & 0xFFFFFFFF,
+                    stats["compressed_size"],
+                    stats["uncompressed_size"],
+                    external_attr,
+                    member_offset,
+                )
+            )
+
+        central_directory_offset = offset
+
+        for entry in central_directory:
+            (
+                name_bytes,
+                dos_time,
+                dos_date,
+                version,
+                flags,
+                compression,
+                crc32,
+                compressed_size,
+                uncompressed_size,
+                external_attr,
+                member_offset,
+            ) = entry
+
+            central_extra = struct.pack(
+                "<HHQQQ",
+                0x0001,
+                24,
+                uncompressed_size,
+                compressed_size,
+                member_offset,
+            )
+
+            central_header = struct.pack(
+                "<4sHHHHHHIIIHHHHHII",
+                b"PK\x01\x02",
+                (3 << 8) | 45,
+                version,
+                flags,
+                compression,
+                dos_time,
+                dos_date,
+                crc32,
+                0xFFFFFFFF,
+                0xFFFFFFFF,
+                len(name_bytes),
+                len(central_extra),
+                0,
+                0,
+                0,
+                external_attr,
+                0xFFFFFFFF,
+            )
+            central_header += name_bytes + central_extra
+
+            yield central_header
+            offset += len(central_header)
+
+        central_directory_size = offset - central_directory_offset
+        entry_count = len(central_directory)
+
+        zip64_end_offset = offset
+        zip64_end = struct.pack(
+            "<4sQHHIIQQQQ",
+            b"PK\x06\x06",
+            44,
+            45,
+            45,
+            0,
+            0,
+            entry_count,
+            entry_count,
+            central_directory_size,
+            central_directory_offset,
+        )
+        yield zip64_end
+        offset += len(zip64_end)
+
+        zip64_locator = struct.pack(
+            "<4sIQI",
+            b"PK\x06\x07",
+            0,
+            zip64_end_offset,
+            1,
+        )
+        yield zip64_locator
+        offset += len(zip64_locator)
+
+        end_of_central_directory = struct.pack(
+            "<4sHHHHIIH",
+            b"PK\x05\x06",
+            0xFFFF,
+            0xFFFF,
+            0xFFFF,
+            0xFFFF,
+            0xFFFFFFFF,
+            0xFFFFFFFF,
+            0,
+        )
+        yield end_of_central_directory
 
     async def _iter_links_content(
         self, materials: list[Material]
@@ -2704,7 +2947,6 @@ class MaterialService(IMaterialService):
                 f"{current_path}/",
                 modified_at,
                 S_IFDIR | 0o755,
-                ZIP_32,
                 (),
             )
 
@@ -2729,7 +2971,6 @@ class MaterialService(IMaterialService):
                     f"{current_path}/links.txt",
                     modified_at,
                     S_IFREG | 0o644,
-                    ZIP_32,
                     self._iter_links_content(link_materials),
                 )
             return
@@ -2750,11 +2991,12 @@ class MaterialService(IMaterialService):
             file_path,
             modified_at,
             S_IFREG | 0o644,
-            self._get_download_zip_method(attachment),
             self._stream_attachment_file(attachment),
         )
 
-    async def _stream_attachment_file(self, attachment: Attachment) -> AsyncGenerator:
+    async def _stream_attachment_file(
+        self, attachment: Attachment
+    ) -> AsyncGenerator[bytes, None]:
         details = attachment.details or {}
         file_data = details.get("file_data") or {}
 
@@ -2774,45 +3016,18 @@ class MaterialService(IMaterialService):
                 or f"Failed to download Google Drive file {file_id}"
             )
 
-        if not download_response.data or download_response.data.content is None:
+        downloaded_file = download_response.data
+        if not downloaded_file or downloaded_file.content is None:
             raise ValueError(
                 f"No download stream returned for Google Drive file {file_id}"
             )
 
-        async for chunk in download_response.data.content:
+        # Keep the returned async iterable alive and consume it directly in
+        # this generator. The ZIP writer above awaits every chunk until EOF
+        # before it writes the data descriptor and moves to the next member.
+        async for chunk in downloaded_file.content:
             if chunk:
                 yield chunk
-
-    def _get_download_zip_method(self, attachment: Attachment):
-        details = attachment.details or {}
-        file_data = details.get("file_data") or {}
-        size = self._parse_file_size(file_data.get("size"))
-
-        if size is not None and size <= 0xFFFFFFFF:
-            return ZIP_32
-        return ZIP_64
-
-    @staticmethod
-    def _parse_file_size(size: str | int | float | None) -> int | None:
-        if isinstance(size, (int, float)) and size >= 0:
-            return int(size)
-        if not isinstance(size, str):
-            return None
-
-        match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([KMGTPE]?B)\s*", size, re.IGNORECASE)
-        if not match:
-            return None
-
-        units = {
-            "B": 1,
-            "KB": 1024,
-            "MB": 1024**2,
-            "GB": 1024**3,
-            "TB": 1024**4,
-            "PB": 1024**5,
-            "EB": 1024**6,
-        }
-        return int(float(match.group(1)) * units[match.group(2).upper()])
 
     def _get_attachment_file_name(
         self, material: Material, attachment: Attachment
