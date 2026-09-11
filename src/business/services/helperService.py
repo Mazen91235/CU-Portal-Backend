@@ -1357,7 +1357,7 @@ class HelperService(IHelperService[U]):
         finally:
             response.release()
             await session.close()
-            
+
     async def _request_with_retries(
         self,
         method: str,
@@ -1957,9 +1957,7 @@ class HelperService(IHelperService[U]):
                 error=repr(ex),
             )
 
-    async def get_google_access_token(
-        self, user_refresh_token, max_retries=6
-    ):
+    async def get_google_access_token(self, user_refresh_token, max_retries=6):
         try:
             if not user_refresh_token:
                 return BaseResponseDto(
@@ -2027,9 +2025,7 @@ class HelperService(IHelperService[U]):
                 error=repr(ex),
             )
 
-    async def download_file_from_drive(
-        self, file_id, max_retries=6
-    ):
+    async def download_file_from_drive(self, file_id, max_retries=6):
         try:
             if not file_id:
                 return BaseResponseDto(
