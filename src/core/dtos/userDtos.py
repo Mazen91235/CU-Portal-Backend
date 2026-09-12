@@ -234,6 +234,9 @@ class UserGetUserWithDetailsDto(BaseModel):
     logs: list[LogResponseDto] | None = Field(
         default=None, description="Logs associated with the user"
     )
+    avatar: AttachmentResponseDto | None = Field(
+        default=None, description="Avatar attachment associated with the user"
+    )
 
 
 class UserSignUpResponseDto(BaseModel):
