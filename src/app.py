@@ -112,6 +112,9 @@ def create_app() -> FastAPI:
         origin = request.headers.get("origin") or request.headers.get(
             "referer", ""
         ).rstrip("/")
+        print(f"Incoming request: {request.method} {request.url} from origin: {origin}")
+        print(f"Request headers: {request.headers}")
+        print(f"Request Origin In ALLOWED_ORIGINS: {origin in ALLOWED_ORIGINS}")
         if request.method.upper() == "OPTIONS":
             response = Response(status_code=204)
             if origin and origin in ALLOWED_ORIGINS:
