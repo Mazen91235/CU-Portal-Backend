@@ -109,8 +109,8 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
+        origin = request.headers.get("origin")
         if request.method.upper() == "OPTIONS":
-            origin = request.headers.get("origin")
             response = Response(status_code=204)
             if origin and origin in ALLOWED_ORIGINS:
                 response.headers["Access-Control-Allow-Origin"] = origin
@@ -128,7 +128,6 @@ def create_app() -> FastAPI:
         request_token = request_context.set(request)
         try:
             response = await call_next(request)
-            return response
         except Exception:
             if session.in_transaction():
                 try:
@@ -148,6 +147,16 @@ def create_app() -> FastAPI:
                     pass
             except Exception:
                 pass
+        if origin and origin in ALLOWED_ORIGINS:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = (
+                "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+            )
+            response.headers["Access-Control-Allow-Headers"] = "*"
+            response.headers["Access-Control-Expose-Headers"] = "*"
+            response.headers["Vary"] = "Origin"
+        return response
 
     app.add_middleware(
         SessionMiddleware,
