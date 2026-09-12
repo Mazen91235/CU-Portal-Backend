@@ -96,6 +96,29 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan,
     )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://localhost:8000",
+            "https://cu-portal-dev.vercel.app",
+            "https://api-cu-portal-dev.vercel.app",
+            "https://cu-portal-backend-dev.onrender.com",
+            "https://cu-portal.com",
+            "https://api.cu-portal.com",
+            "https://bg-worker.cu-portal.com",
+        ],
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+        allow_credentials=True,
+    )
+
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=os.environ.get("SECRET_KEY", ""),
+    )
     container = Container()
     app.state.container = container
     app.router.route_class = CustomRoute
@@ -214,29 +237,6 @@ def create_app() -> FastAPI:
     app.include_router(message_public_routes)
     app.include_router(notification_public_routes)
     app.include_router(system_public_routes)
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://localhost:8000",
-            "https://cu-portal-dev.vercel.app",
-            "https://api-cu-portal-dev.vercel.app",
-            "https://cu-portal-backend-dev.onrender.com",
-            "https://cu-portal.com",
-            "https://api.cu-portal.com",
-            "https://bg-worker.cu-portal.com",
-        ],
-        allow_methods=["*"],
-        allow_headers=["*"],
-        allow_credentials=True,
-    )
-
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key=os.environ.get("SECRET_KEY", ""),
-    )
 
     return app
 

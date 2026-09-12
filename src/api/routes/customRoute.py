@@ -223,12 +223,10 @@ async def _check_for_redirect(request: Request):
         body_json = json.loads(body_bytes) if body_bytes else {}
     except Exception:
         body_json = {}
-    if hasattr(body_json, "url") and getattr(body_json, "url"):
+    if "url" in body_json and Validator.is_valid_drive_url(body_json["url"]):
         return ResponseHandler.generate_redirect_response(redirect_url)
-    if hasattr(body_json, "details") and isinstance(
-        getattr(body_json, "details"), dict
-    ):
-        details = getattr(body_json, "details")
+    if "details" in body_json and isinstance(body_json["details"], dict):
+        details = body_json["details"]
         if (
             "url" in details
             and details["url"]
@@ -286,6 +284,10 @@ class CustomRoute(APIRoute):
             ):
                 return await _get_rate_limit_middleware().throttle(request)
 
+            redirect_response = await _check_for_redirect(request)
+            if redirect_response is not None:
+                return redirect_response
+
             lock_key = await _generate_inflight_key(request)
             acquired = False
             try:
@@ -307,9 +309,6 @@ class CustomRoute(APIRoute):
                             code=409,
                             message="A similar request is already being processed. Please wait for it to complete.",
                         )
-                redirect_response = await _check_for_redirect(request)
-                if redirect_response is not None:
-                    return redirect_response
                 if timeout_seconds == 0:
                     response = await original_route_handler(request)
                 else:
