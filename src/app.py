@@ -3,8 +3,7 @@ import sys
 import uvicorn
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request, Response
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.exc import IllegalStateChangeError
 
@@ -60,6 +59,17 @@ from core.utils.firebaseHandler import FirebaseHandler
 
 load_dotenv()  # Load environment variables from .env file
 
+ALLOWED_ORIGINS = {
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://cu-portal-dev.vercel.app",
+    "https://api-cu-portal-dev.vercel.app",
+    "https://cu-portal-backend-dev.onrender.com",
+    "https://cu-portal.com",
+    "https://api.cu-portal.com",
+    "https://bg-worker.cu-portal.com",
+}
+
 
 def rebuild_response_dtos() -> None:
     dto_namespace = {
@@ -99,7 +109,19 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
-        # Create one DB session per request and store it in ContextVar.
+        if request.method.upper() == "OPTIONS":
+            origin = request.headers.get("origin")
+            response = Response(status_code=204)
+            if origin and origin in ALLOWED_ORIGINS:
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                response.headers["Access-Control-Allow-Methods"] = (
+                    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+                )
+                response.headers["Access-Control-Allow-Headers"] = "*"
+                response.headers["Vary"] = "Origin"
+            return response
+
         session = container.session_factory()()
 
         session_token = session_context.set(session)
@@ -130,25 +152,6 @@ def create_app() -> FastAPI:
     app.add_middleware(
         SessionMiddleware,
         secret_key=os.environ.get("SECRET_KEY", ""),
-    )
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://localhost:8000",
-            "https://cu-portal-dev.vercel.app",
-            "https://api-cu-portal-dev.vercel.app",
-            "https://cu-portal-backend-dev.onrender.com",
-            "https://cu-portal.com",
-            "https://api.cu-portal.com",
-            "https://bg-worker.cu-portal.com",
-        ],
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["*"],
-        allow_credentials=True,
     )
 
     container = Container()
