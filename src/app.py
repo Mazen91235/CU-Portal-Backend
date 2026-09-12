@@ -153,7 +153,7 @@ def create_app() -> FastAPI:
                     pass
             except Exception:
                 pass
-        if origin and origin in ALLOWED_ORIGINS:
+        if real_origin and real_origin in ALLOWED_ORIGINS:
             req_headers = request.headers.get(
                 "access-control-request-headers", "content-type, authorization"
             )
