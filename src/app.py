@@ -109,9 +109,9 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
-        origin = request.headers.get("origin") or request.headers.get(
-            "referer", ""
-        ).rstrip("/")
+        origin = request.headers.get("origin")
+        if not origin or origin == "null":
+            origin = request.headers.get("referer", "").rstrip("/")
         print(f"Incoming request: {request.method} {request.url} from origin: {origin}")
         print(f"Request headers: {request.headers}")
         print(f"Request Origin In ALLOWED_ORIGINS: {origin in ALLOWED_ORIGINS}")
