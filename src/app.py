@@ -110,18 +110,16 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
         origin = request.headers.get("origin")
-        if not origin or origin == "null":
-            origin = request.headers.get("referer", "").rstrip("/")
-        print(f"Incoming request: {request.method} {request.url} from origin: {origin}")
-        print(f"Request headers: {request.headers}")
-        print(f"Request Origin In ALLOWED_ORIGINS: {origin in ALLOWED_ORIGINS}")
+        real_origin = origin
+        if not real_origin or real_origin == "null":
+            real_origin = request.headers.get("referer", "").rstrip("/")
         if request.method.upper() == "OPTIONS":
             response = Response(status_code=204)
-            if origin and origin in ALLOWED_ORIGINS:
+            if real_origin and real_origin in ALLOWED_ORIGINS:
                 req_headers = request.headers.get(
                     "access-control-request-headers", "content-type, authorization"
                 )
-                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Origin"] = origin or real_origin
                 response.headers["Access-Control-Allow-Credentials"] = "true"
                 response.headers["Access-Control-Allow-Methods"] = (
                     "GET, POST, PUT, PATCH, DELETE, OPTIONS"
@@ -159,7 +157,7 @@ def create_app() -> FastAPI:
             req_headers = request.headers.get(
                 "access-control-request-headers", "content-type, authorization"
             )
-            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Origin"] = origin or real_origin
             response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Allow-Methods"] = (
                 "GET, POST, PUT, PATCH, DELETE, OPTIONS"
