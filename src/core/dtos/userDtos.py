@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from core.dtos.noteDtos import NoteResponseDto
     from core.dtos.logDtos import LogResponseDto
     from core.dtos.subjectDtos import SubjectResponseDto
+    from core.dtos.eventDtos import EventResponseDto
     from core.dtos.attachmentDtos import AttachmentResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
@@ -121,6 +122,9 @@ class UserResponseDto(BaseModel):
     )
     subjects: list[SubjectResponseDto] | None = Field(
         default=None, description="Subjects associated with the user"
+    )
+    events: list[EventResponseDto] | None = Field(
+        default=None, description="Events associated with the user"
     )
     avatar: AttachmentResponseDto | None = Field(
         default=None, description="Avatar attachment associated with the user"
@@ -230,6 +234,9 @@ class UserGetUserWithDetailsDto(BaseModel):
     )
     subjects: list[SubjectResponseDto] | None = Field(
         default=None, description="Subjects associated with the user"
+    )
+    events: list[EventResponseDto] | None = Field(
+        default=None, description="Events associated with the user"
     )
     logs: list[LogResponseDto] | None = Field(
         default=None, description="Logs associated with the user"
