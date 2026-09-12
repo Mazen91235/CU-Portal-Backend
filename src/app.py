@@ -96,32 +96,6 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan,
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://localhost:8000",
-            "https://cu-portal-dev.vercel.app",
-            "https://api-cu-portal-dev.vercel.app",
-            "https://cu-portal-backend-dev.onrender.com",
-            "https://cu-portal.com",
-            "https://api.cu-portal.com",
-            "https://bg-worker.cu-portal.com",
-        ],
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["*"],
-        allow_credentials=True,
-    )
-
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key=os.environ.get("SECRET_KEY", ""),
-    )
-    container = Container()
-    app.state.container = container
-    app.router.route_class = CustomRoute
 
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
@@ -152,6 +126,34 @@ def create_app() -> FastAPI:
                     pass
             except Exception:
                 pass
+
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=os.environ.get("SECRET_KEY", ""),
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://localhost:8000",
+            "https://cu-portal-dev.vercel.app",
+            "https://api-cu-portal-dev.vercel.app",
+            "https://cu-portal-backend-dev.onrender.com",
+            "https://cu-portal.com",
+            "https://api.cu-portal.com",
+            "https://bg-worker.cu-portal.com",
+        ],
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+        allow_credentials=True,
+    )
+
+    container = Container()
+    app.state.container = container
+    app.router.route_class = CustomRoute
 
     # We resolve the router here at startup.
     # Because we are now using `Depends()` inside `create_user_router`,
