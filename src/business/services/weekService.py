@@ -1,4 +1,5 @@
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, between
+from datetime import timedelta
 from core.iServices.iWeekService import IWeekService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -42,8 +43,17 @@ class WeekService(IWeekService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Week, data, ["week_number"], is_and, starts_with, is_exact
+                Week, data, [], is_and, starts_with, is_exact
             )
+            if data and data.start_date_includes is not None:
+                condition = between(
+                    data.start_date_includes,
+                    Week.start_date,
+                    Week.start_date + timedelta(days=7),
+                )
+                predicate = (
+                    and_(predicate, condition) if predicate is not None else condition
+                )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Week, includes
             )
@@ -100,8 +110,17 @@ class WeekService(IWeekService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Week, data, ["week_number"], is_and, starts_with, is_exact
+                Week, data, [], is_and, starts_with, is_exact
             )
+            if data and data.start_date_includes is not None:
+                condition = between(
+                    data.start_date_includes,
+                    Week.start_date,
+                    Week.start_date + timedelta(days=7),
+                )
+                predicate = (
+                    and_(predicate, condition) if predicate is not None else condition
+                )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Week, includes
             )

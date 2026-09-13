@@ -69,6 +69,15 @@ class WeekSearchDto(BaseSearchDto):
         default=None, description="Department ID to filter by"
     )
     year_id: int | None = Field(default=None, description="Year ID to filter by")
+    start_date_from: datetime | None = Field(
+        default=None, description="Filter weeks starting after this date"
+    )
+    start_date_to: datetime | None = Field(
+        default=None, description="Filter weeks starting before this date"
+    )
+    start_date_includes: datetime | None = Field(
+        default=None, description="Filter weeks that include this date"
+    )
     created_at_from: datetime | None = Field(
         default=None, description="Filter weeks created after this date"
     )
