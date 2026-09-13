@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, allow_inactive
 from core.iControllers.iUserController import IUserController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -159,7 +159,7 @@ def create_auth_router(
 
     @router.get(
         "/is-logged-in",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive)],
         response_model=BaseResponseDto,
         status_code=200,
         summary="Check if user is logged in",
@@ -194,7 +194,7 @@ def create_auth_router(
 
     @router.get(
         "/logout",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive)],
         response_model=BaseResponseDto,
         status_code=200,
         summary="Logout user",
