@@ -108,6 +108,24 @@ class AuthMiddleware(IAuthMiddleware):
 
             permissions_context.set(user_permissions)
 
+            if "/other-materials" in request.url.path or (
+                "/admin" not in request.url.path
+                and (
+                    any(
+                        [
+                            x in request.url.path
+                            for x in [
+                                "/faculties",
+                                "/departments",
+                                "/years",
+                                "/courses",
+                            ]
+                        ]
+                    )
+                )
+            ):
+                return None
+
             if (
                 "/admin" not in request.url.path
                 or "Access All Faculties" not in user_permissions
