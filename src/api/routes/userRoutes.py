@@ -53,7 +53,7 @@ def create_user_user_router(
 
     @router.get(
         "/me",
-        dependencies=[Depends(_is_logged_in), Depends(allow_inactive)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto[UserResponseDto],
         status_code=200,
         summary="Get Current User",
@@ -82,7 +82,7 @@ def create_user_user_router(
 
     @router.get(
         "/permissions",
-        dependencies=[Depends(_is_logged_in), Depends(allow_inactive)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto[list[str]],
         status_code=200,
         summary="Get User Permissions",
@@ -97,7 +97,7 @@ def create_user_user_router(
         "/has-permissions",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(allow_inactive),
+            Depends(allow_inactive()),
             Depends(_validate("required_permissions", "is_and")),
         ],
         response_model=BaseResponseDto[bool],
@@ -116,7 +116,7 @@ def create_user_user_router(
         "/",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(allow_inactive),
+            Depends(allow_inactive()),
             Depends(_validate("name")),
         ],
         response_model=BaseResponseDto[UserResponseDto],
@@ -135,7 +135,7 @@ def create_user_user_router(
         "/academic-data",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(allow_inactive),
+            Depends(allow_inactive()),
             Depends(_validate("faculty_id", "department_id", "year_id", "study_type")),
         ],
         response_model=BaseResponseDto,
@@ -154,7 +154,7 @@ def create_user_user_router(
         "/devices/register",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(allow_inactive),
+            Depends(allow_inactive()),
             Depends(_validate("device_token")),
         ],
         response_model=BaseResponseDto,
@@ -173,7 +173,7 @@ def create_user_user_router(
         "/devices/unregister",
         dependencies=[
             Depends(_is_logged_in),
-            Depends(allow_inactive),
+            Depends(allow_inactive()),
             Depends(_validate("device_token")),
         ],
         response_model=BaseResponseDto,

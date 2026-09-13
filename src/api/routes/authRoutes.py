@@ -159,7 +159,7 @@ def create_auth_router(
 
     @router.get(
         "/is-logged-in",
-        dependencies=[Depends(_is_logged_in), Depends(allow_inactive)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto,
         status_code=200,
         summary="Check if user is logged in",
@@ -194,7 +194,7 @@ def create_auth_router(
 
     @router.get(
         "/logout",
-        dependencies=[Depends(_is_logged_in), Depends(allow_inactive)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto,
         status_code=200,
         summary="Logout user",
