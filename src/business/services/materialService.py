@@ -1384,7 +1384,10 @@ class MaterialService(IMaterialService):
                         data=None,
                         message="All materials must belong to the provided subject",
                     )
-                if destination_material and existing_material.parent_id == destination_material.id:
+                if (
+                    destination_material
+                    and existing_material.parent_id == destination_material.id
+                ):
                     await self.logger.log(
                         action="MoveMany",
                         entity="Material",
@@ -1402,7 +1405,10 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"Material '{existing_material.name}' is already in the destination folder '{destination_material.name}'.",
                     )
-                if destination_material and existing_material.id == destination_material.id:
+                if (
+                    destination_material
+                    and existing_material.id == destination_material.id
+                ):
                     await self.logger.log(
                         action="MoveMany",
                         entity="Material",
@@ -2263,22 +2269,6 @@ class MaterialService(IMaterialService):
                     code=404,
                     data=None,
                     message=f"Material with ID {material_id} not found",
-                )
-            if existing_material.subject_id != subject_id:
-                await self.logger.log(
-                    action="RecursiveCopy",
-                    entity="Material",
-                    level="error",
-                    code=400,
-                    message=f"Material with ID {material_id} does not belong to subject with ID {subject_id}",
-                    details={"error": "Material does not belong to the provided subject"},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message=f"Material with ID {material_id} does not belong to subject with ID {subject_id}",
                 )
             new_material = Material(
                 name=existing_material.name,
