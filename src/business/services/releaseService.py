@@ -429,19 +429,13 @@ class ReleaseService(IReleaseService):
             target_release.date = data.date
             target_release.details = data.details
             target_release.release_version = version
-            release_items = set(
-                f"{item.item_type}|{item.content}"
-                for item in target_release.release_items
-            )
-            release_items.update(
-                f"{item.item_type}|{item.content}" for item in data.release_items
-            )
+            target_release.release_items.clear()
             target_release.release_items = set(
                 ReleaseItem(
-                    item_type=item.split("|")[0],
-                    content="".join(item.split("|")[1:]),
+                    item_type=item.item_type,
+                    content=item.content,
                 )
-                for item in release_items
+                for item in data.release_items
             )
             update_release_response = await self.release_repository.update(
                 target_release
