@@ -114,6 +114,9 @@ class MaterialSearchDto(BaseSearchDto):
     week_id: int | None = Field(
         default=None, description="ID of the associated week to filter by"
     )
+    author_id: int | None = Field(
+        default=None, description="ID of the author to filter by"
+    )
     created_at_from: datetime | None = Field(
         default=None, description="Filter materials created after this date"
     )
