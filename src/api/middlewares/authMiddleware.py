@@ -108,6 +108,11 @@ class AuthMiddleware(IAuthMiddleware):
 
             permissions_context.set(user_permissions)
 
+            request.state.restrict_faculties = False
+            request.state.restrict_departments = False
+            request.state.restrict_years = False
+            request.state.restrict_courses = False
+
             if "/other-materials" in request.url.path or (
                 "/admin" not in request.url.path
                 and (
@@ -124,6 +129,7 @@ class AuthMiddleware(IAuthMiddleware):
                     )
                 )
             ):
+                request_context.set(request)
                 return None
 
             if (
@@ -131,32 +137,24 @@ class AuthMiddleware(IAuthMiddleware):
                 or "Access All Faculties" not in user_permissions
             ):
                 request.state.restrict_faculties = True
-            else:
-                request.state.restrict_faculties = False
 
             if (
                 "/admin" not in request.url.path
                 or "Access All Departments" not in user_permissions
             ):
                 request.state.restrict_departments = True
-            else:
-                request.state.restrict_departments = False
 
             if (
                 "/admin" not in request.url.path
                 or "Access All Years" not in user_permissions
             ):
                 request.state.restrict_years = True
-            else:
-                request.state.restrict_years = False
 
             if (
                 "/admin" not in request.url.path
                 or "Access All Courses" not in user_permissions
             ):
                 request.state.restrict_courses = True
-            else:
-                request.state.restrict_courses = False
 
             request_context.set(request)
 
