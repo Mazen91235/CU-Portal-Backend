@@ -20,6 +20,10 @@ class ReleaseCreateDto(BaseModel):
         ..., min_length=1, max_length=100, description="Title of the release"
     )
     date: datetime = Field(..., description="Date of the release")
+    details: dict | None = Field(
+        default=None,
+        description="Additional metadata about the release (e.g., description)",
+    )
     release_items: list[ReleaseItemMutationDto] = Field(
         default_factory=list, description="Items included in this release"
     )
@@ -30,6 +34,9 @@ class ReleaseResponseDto(BaseModel):
     release_number: str | None = Field(None, description="Release version number")
     title: str | None = Field(None, description="Title of the release")
     date: datetime | None = Field(None, description="Date of the release")
+    details: dict | None = Field(
+        None, description="Additional metadata about the release (e.g., description)"
+    )
     created_at: datetime | None = Field(None, description="Creation timestamp")
     updated_at: datetime | None = Field(None, description="Last updated timestamp")
 
@@ -57,6 +64,9 @@ class ReleaseUpdateDto(BaseModel):
         ..., min_length=1, max_length=100, description="Title of the release"
     )
     date: datetime = Field(..., description="Date of the release")
+    details: dict | None = Field(
+        None, description="Additional metadata about the release (e.g., description)"
+    )
     release_items: list[ReleaseItemMutationDto] = Field(
         default_factory=list, description="Updated list of items (replaces old items)"
     )

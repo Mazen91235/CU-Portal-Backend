@@ -235,6 +235,7 @@ class ReleaseService(IReleaseService):
                 release_number=data.release_number,
                 title=data.title,
                 date=data.date,
+                details=data.details,
                 release_version=version,
                 release_items=set(
                     ReleaseItem(
@@ -393,6 +394,7 @@ class ReleaseService(IReleaseService):
             target_release.release_number = data.release_number
             target_release.title = data.title
             target_release.date = data.date
+            target_release.details = data.details
             target_release.release_version = version
             target_release.release_items.update(
                 set(
