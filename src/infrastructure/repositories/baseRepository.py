@@ -8,7 +8,6 @@ from sqlalchemy.orm import load_only
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from business.contextVars.sessionContext import session_context
-from business.contextVars.requestContext import request_context
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.dtos.baseDtos import BaseResponseDto
 from core.utils.entitiesHandler import EntitiesHandler
@@ -541,18 +540,6 @@ class BaseRepository(IBaseRepository):
 
     async def commit_transaction(self, session=None):
         try:
-            request = request_context.get(None)
-            if request and await request.is_disconnected():
-                await self._log_error(
-                    action="CommitTransaction",
-                    level="warning",
-                    code=400,
-                    message=f"Request is disconnected. Rolling back transaction for {self._model.__name__}.",
-                    details={"request": str(request)},
-                    source="BaseRepository",
-                )
-                await self.rollback_transaction(session)
-                return
             if session is None:
                 session = self._resolve_session()
             if not session.in_transaction():

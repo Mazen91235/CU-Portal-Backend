@@ -2,6 +2,7 @@ import os
 import hashlib
 import asyncio
 import json
+from contextlib import suppress
 from dotenv import load_dotenv
 from typing import Callable
 from fastapi import Request, Response, Depends, HTTPException
@@ -248,6 +249,13 @@ async def _check_for_redirect(request: Request):
     return None
 
 
+async def _poll_for_disconnect(request: Request):
+    while True:
+        if await request.is_disconnected():
+            return True
+        await asyncio.sleep(0.5)
+
+
 class CustomRoute(APIRoute):
     def __init__(self, *args, dependencies=None, **kwargs):
         dependencies = list(dependencies) if dependencies else []
@@ -290,6 +298,7 @@ class CustomRoute(APIRoute):
 
             lock_key = await _generate_inflight_key(request)
             acquired = False
+            tasks = set()
             try:
                 await _rate_limit(request)
                 if lock_key:
@@ -309,11 +318,33 @@ class CustomRoute(APIRoute):
                             code=409,
                             message="A similar request is already being processed. Please wait for it to complete.",
                         )
-                if timeout_seconds == 0:
-                    response = await original_route_handler(request)
+                handler_task = asyncio.create_task(original_route_handler(request))
+                response_task = (
+                    handler_task
+                    if timeout_seconds == 0
+                    else asyncio.create_task(
+                        asyncio.wait_for(handler_task, timeout=timeout_seconds)
+                    )
+                )
+                disconnect_task = asyncio.create_task(_poll_for_disconnect(request))
+                tasks = {response_task, disconnect_task}
+                done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+                if response_task in done:
+                    response = response_task.result()
                 else:
-                    response = await asyncio.wait_for(
-                        original_route_handler(request), timeout=timeout_seconds
+                    await _log(
+                        request,
+                        action="ClientDisconnect",
+                        entity="Request",
+                        level="warning",
+                        code=499,
+                        message="Client disconnected before the request could complete.",
+                        details={},
+                    )
+                    raise HTTPException(
+                        status_code=499,
+                        detail="Client disconnected before the request could complete.",
                     )
                 asyncio.create_task(_update_cache(request, response))
                 return response
@@ -336,6 +367,12 @@ class CustomRoute(APIRoute):
             except Exception:
                 raise
             finally:
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                if tasks:
+                    with suppress(Exception):
+                        await asyncio.gather(*tasks, return_exceptions=True)
                 if lock_key and acquired:
                     asyncio.create_task(caching_handler.release_lock(lock_key))
 
