@@ -113,21 +113,17 @@ class AuthMiddleware(IAuthMiddleware):
             request.state.restrict_years = False
             request.state.restrict_courses = False
 
-            if "/other-materials" in request.url.path or (
-                "/admin" not in request.url.path
-                and (
-                    any(
-                        [
-                            x in request.url.path
-                            for x in [
-                                "/faculties",
-                                "/departments",
-                                "/years",
-                                "/courses",
-                            ]
-                        ]
-                    )
-                )
+            if any(
+                [
+                    x in request.url.path
+                    for x in [
+                        "/faculties",
+                        "/departments",
+                        "/years",
+                        "/courses",
+                        "/materials",
+                    ]
+                ]
             ):
                 request_context.set(request)
                 return None
