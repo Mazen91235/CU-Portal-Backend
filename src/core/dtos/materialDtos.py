@@ -132,6 +132,7 @@ class MaterialsCopyOrMoveDto(BaseModel):
     material_ids: list[int] = Field(
         ..., min_length=1, description="List of material IDs"
     )
+    subject_id: int = Field(..., description="ID of the subject for the operation")
     destination_id: int | None = Field(None, description="Destination parent ID")
 
 
