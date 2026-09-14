@@ -28,7 +28,10 @@ class ReleaseController(IReleaseController):
             entity_search_dto = Generator[ReleaseSearchDto].generate(
                 ReleaseSearchDto, {"id": id}
             )
-            response = await self.release_service.find_one(entity_search_dto)
+            response = await self.release_service.find_one(
+                entity_search_dto,
+                ["release_version", "release_items"],
+            )
             if not response.success:
                 return ResponseHandler.generate_response(
                     success=False,
