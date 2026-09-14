@@ -8,6 +8,8 @@ from core.utils.responseHandler import ResponseHandler
 
 # Entities & DTOs
 from core.entities.release import Release
+from core.entities.version import Version
+from core.dtos.versionDtos import VersionResponseDto
 from core.dtos.releaseDtos import (
     ReleaseCreateDto,
     ReleaseResponseDto,
@@ -31,10 +33,13 @@ class ReleaseController(IReleaseController):
                     code=response.code,
                     message=response.message,
                 )
+            versions_mapped = Mapper[Version, VersionResponseDto].map_list(
+                response.data or [], VersionResponseDto, True
+            )
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
-                data=response.data or [],
+                data=versions_mapped,
             )
         except Exception as e:
             await self.logger.log(

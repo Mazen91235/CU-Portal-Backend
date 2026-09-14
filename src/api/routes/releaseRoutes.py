@@ -10,6 +10,7 @@ from core.dtos.releaseDtos import (
     ReleaseUpdateDto,
     ReleaseSearchDto,
 )
+from core.dtos.versionDtos import VersionResponseDto
 from core.models.queryModel import QueryModel
 from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
@@ -38,7 +39,7 @@ def create_release_user_router(controller_provider, auth_middleware_provider):
         dependencies=[
             Depends(_is_logged_in),
         ],
-        response_model=BaseResponseDto[list[int]],
+        response_model=BaseResponseDto[list[VersionResponseDto]],
         status_code=200,
         summary="Find Release Versions",
         description="Get all release versions in the system",
@@ -137,7 +138,7 @@ def create_release_admin_router(
             Depends(_is_logged_in),
             Depends(_is_authorized("View Releases")),
         ],
-        response_model=BaseResponseDto[list[int]],
+        response_model=BaseResponseDto[list[VersionResponseDto]],
         status_code=200,
         summary="Find Release Versions",
         description="Get all release versions in the system",

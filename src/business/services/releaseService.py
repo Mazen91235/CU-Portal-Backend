@@ -36,8 +36,11 @@ class ReleaseService(IReleaseService):
 
     async def find_versions(self):
         try:
-            result = await self.version_repository.find_distinct(
-                column=Version.version_number
+            dynamic_order_by = self.helper_service.generate_dynamic_order_by(
+                "Version", ["version_number"]
+            )
+            result = await self.version_repository.find(
+                order_by=dynamic_order_by, limit=int(1e6)
             )
             if not result.success:
                 return BaseResponseDto(
@@ -46,7 +49,7 @@ class ReleaseService(IReleaseService):
                     data=None,
                     message=result.message,
                 )
-            return BaseResponseDto(success=True, data=sorted(result.data or []))
+            return BaseResponseDto(success=True, data=result.data)
         except Exception as ex:
             await self.logger.log(
                 action="FindVersions",
