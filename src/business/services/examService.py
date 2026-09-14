@@ -262,9 +262,6 @@ class ExamService(IExamService):
             )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(
-                    faculty_id=data.faculty_id,
-                    department_id=data.department_id,
-                    year_id=data.year_id,
                     subject_id=data.subject_id,
                 )
             )
@@ -283,9 +280,6 @@ class ExamService(IExamService):
                     code=403,
                     message="User does not have access to create exam for the specified criteria.",
                 )
-            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
-            data.department_id = data.department_id or logged_in_user.department_id
-            data.year_id = data.year_id or logged_in_user.year_id
             data.task_type = "exam"
             create_exam_response = await self.task_repository.create(data)
             if not create_exam_response.success:
@@ -470,9 +464,6 @@ class ExamService(IExamService):
                 )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(
-                    faculty_id=data.faculty_id,
-                    department_id=data.department_id,
-                    year_id=data.year_id,
                     subject_id=data.subject_id,
                 )
             )
@@ -491,9 +482,6 @@ class ExamService(IExamService):
                     code=403,
                     message="User does not have access to update exam for the specified criteria.",
                 )
-            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
-            data.department_id = data.department_id or logged_in_user.department_id
-            data.year_id = data.year_id or logged_in_user.year_id
             logged_in_user_permissions_response = (
                 await self.helper_service.get_logged_in_user_permissions()
             )
@@ -558,9 +546,6 @@ class ExamService(IExamService):
             target_exam.deadline = data.deadline
             target_exam.due_date = data.due_date
             target_exam.subject_id = data.subject_id
-            target_exam.faculty_id = data.faculty_id
-            target_exam.department_id = data.department_id
-            target_exam.year_id = data.year_id
             target_exam.details = data.details
             target_exam.author_id = data.author_id
             update_response = await self.task_repository.update(target_exam)
@@ -688,9 +673,6 @@ class ExamService(IExamService):
                 )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(
-                    faculty_id=data.faculty_id,
-                    department_id=data.department_id,
-                    year_id=data.year_id,
                     subject_id=data.subject_id,
                 )
             )
