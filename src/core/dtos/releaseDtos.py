@@ -34,7 +34,9 @@ class ReleaseResponseDto(BaseModel):
     updated_at: datetime | None = Field(None, description="Last updated timestamp")
 
     # Relationships
-    version: VersionResponseDto | None = Field(None, description="Parent major version")
+    release_version: VersionResponseDto | None = Field(
+        None, description="Parent major version"
+    )
     release_items: list[ReleaseItemResponseDto] | None = Field(
         None, description="Items associated with this release"
     )
@@ -66,7 +68,9 @@ class ReleaseDeleteDto(BaseModel):
 
 class ReleaseSearchDto(BaseSearchDto):
     id: int | None = Field(None, description="Filter by release ID")
-    version_id: int | None = Field(None, description="Filter by parent Version ID")
+    release_version_id: int | None = Field(
+        None, description="Filter by parent Version ID"
+    )
     date_from: datetime | None = Field(
         None, description="Filter by release date (from)"
     )
