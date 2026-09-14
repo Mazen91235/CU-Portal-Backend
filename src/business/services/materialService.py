@@ -2198,7 +2198,7 @@ class MaterialService(IMaterialService):
                 Material, ["attachment"]
             )
             existing_material_response = await self.material_repository.find_one(
-                Material.id == material_id
+                Material.id == material_id, dynamic_includes
             )
             if not existing_material_response.success:
                 return BaseResponseDto(
