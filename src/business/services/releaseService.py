@@ -430,7 +430,7 @@ class ReleaseService(IReleaseService):
             target_release.details = data.details
             target_release.release_version = version
             release_items = set(
-                f"{item.item_type}:{item.content}"
+                f"{item.item_type}|{item.content}"
                 for item in target_release.release_items
             )
             release_items.update(
