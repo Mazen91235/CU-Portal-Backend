@@ -11,6 +11,10 @@ class IReleaseService(
     IDeletableService[Release],
 ):
     @abstractmethod
+    async def find_versions(self) -> BaseResponseDto[list[int]]:
+        pass
+
+    @abstractmethod
     async def create(self, data: ReleaseCreateDto) -> BaseResponseDto[Release]:
         pass
 

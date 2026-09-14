@@ -22,6 +22,36 @@ class ReleaseController(IReleaseController):
         self.release_service = release_service
         self.logger = logger
 
+    async def find_versions(self, request):
+        try:
+            response = await self.release_service.find_versions()
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=response.data or [],
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="FindVersions",
+                entity="Version",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="ReleaseController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
     # CRUD Functions
     async def find_one(self, request, id):
         try:

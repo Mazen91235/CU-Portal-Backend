@@ -34,6 +34,22 @@ def create_release_user_router(controller_provider, auth_middleware_provider):
         return await auth_middleware.is_logged_in(request, refresh_token)
 
     @router.get(
+        "/versions",
+        dependencies=[
+            Depends(_is_logged_in),
+        ],
+        response_model=BaseResponseDto[list[int]],
+        status_code=200,
+        summary="Find Release Versions",
+        description="Get all release versions in the system",
+    )
+    async def find_release_versions(
+        request: Request,
+        controller: IReleaseController = Depends(_get_controller),
+    ):
+        return await controller.find_versions(request)
+
+    @router.get(
         "/{release_id}",
         dependencies=[
             Depends(_is_logged_in),
@@ -114,6 +130,23 @@ def create_release_admin_router(
             return await validation_middleware.validate(request, *keys)
 
         return validate_request
+
+    @router.get(
+        "/versions",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Releases")),
+        ],
+        response_model=BaseResponseDto[list[int]],
+        status_code=200,
+        summary="Find Release Versions",
+        description="Get all release versions in the system",
+    )
+    async def find_release_versions(
+        request: Request,
+        controller: IReleaseController = Depends(_get_controller),
+    ):
+        return await controller.find_versions(request)
 
     @router.get(
         "/{release_id}",

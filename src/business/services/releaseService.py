@@ -34,6 +34,36 @@ class ReleaseService(IReleaseService):
     async def rollback_transaction(self):
         await self.release_repository.rollback_transaction()
 
+    async def find_versions(self):
+        try:
+            result = await self.version_repository.find_distinct(
+                column=Version.version_number
+            )
+            if not result.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=result.code,
+                    data=None,
+                    message=result.message,
+                )
+            return BaseResponseDto(success=True, data=sorted(result.data or []))
+        except Exception as ex:
+            await self.logger.log(
+                action="FindVersions",
+                entity="Version",
+                level="error",
+                code=500,
+                message="An error occurred while finding versions",
+                details={"error": repr(ex)},
+                source="ReleaseService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while finding versions",
+            )
+
     # CRUD Functions
     async def find_one(
         self,
