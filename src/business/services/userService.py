@@ -1253,6 +1253,7 @@ class UserService(IUserService):
 
     async def login_with_google(self):
         try:
+            await self.logout()
             request = request_context.get()
             is_localhost = "localhost" in (request.url.hostname or "")
             redirect_response_url = (
@@ -1733,19 +1734,11 @@ class UserService(IUserService):
                 )
             user = user_response.data
             if not user:
-                await self.logger.log(
-                    action="Logout",
-                    entity="User",
-                    level="warning",
-                    code=404,
-                    message="Logged in user not found",
-                    source="UserService",
-                )
                 return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=False,
-                    message="Logged in user not found",
+                    success=True,
+                    code=200,
+                    data=True,
+                    message="Successfully logged out",
                 )
             invalidate_tokens_response = await self._invalidate_tokens(user.id)
             if not invalidate_tokens_response.success:
@@ -1767,7 +1760,7 @@ class UserService(IUserService):
                 success=True,
                 code=200,
                 data=True,
-                message="Logout successful",
+                message="Successfully logged out",
             )
         except Exception as ex:
             await self.logger.log(

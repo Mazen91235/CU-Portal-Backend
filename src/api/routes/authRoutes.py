@@ -146,7 +146,7 @@ def create_auth_router(
 
     @router.get(
         "/google-access-token",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto[str],
         status_code=200,
         summary="Get Google access token",
@@ -172,7 +172,7 @@ def create_auth_router(
 
     @router.get(
         "/login-with-google",
-        dependencies=[Depends(_is_logged_out)],
+        dependencies=[Depends(allow_inactive())],
         summary="Login with Google",
         description="Initiates the Google login process and redirects the user to the Google authentication page.",
     )
@@ -183,7 +183,7 @@ def create_auth_router(
 
     @router.get(
         "/google-authentication-redirect",
-        dependencies=[],
+        dependencies=[Depends(allow_inactive())],
         summary="Handle Google authentication redirect",
         description="Handles the redirect from Google after user authentication and processes the login. User is then redirected to the frontend url with the authentication result and token if logged in.",
     )
@@ -194,7 +194,7 @@ def create_auth_router(
 
     @router.get(
         "/logout",
-        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
+        dependencies=[Depends(allow_inactive())],
         response_model=BaseResponseDto,
         status_code=200,
         summary="Logout user",
