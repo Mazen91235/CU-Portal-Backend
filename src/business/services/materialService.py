@@ -263,8 +263,8 @@ class MaterialService(IMaterialService):
                         message=f"Parent material with ID {data.parent_id} not found",
                     )
                 parent_id = parent_material.id
-            subject_id = None
-            if not data.subject_id:
+            subject_id = data.subject_id
+            if not subject_id:
                 await self.logger.log(
                     action="Create",
                     entity="Material",
@@ -281,7 +281,7 @@ class MaterialService(IMaterialService):
                     message=f"Subject ID is required for material creation",
                 )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id,
+                Subject.id == subject_id,
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -297,7 +297,7 @@ class MaterialService(IMaterialService):
                     entity="Material",
                     level="error",
                     code=404,
-                    message=f"Subject with ID {data.subject_id} not found",
+                    message=f"Subject with ID {subject_id} not found",
                     details={"error": "Subject not found"},
                     source="MaterialService",
                 )
@@ -305,7 +305,7 @@ class MaterialService(IMaterialService):
                     success=False,
                     code=404,
                     data=None,
-                    message=f"Subject with ID {data.subject_id} not found",
+                    message=f"Subject with ID {subject_id} not found",
                 )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
@@ -521,11 +521,11 @@ class MaterialService(IMaterialService):
                         message=f"Failed to create attachment for material, please try again later.",
                     )
                 created_material.attachment = attachment
-            share_link = f"/user/materials/{subject_id}"
+            share_link = f"/user/materials?subject_id={subject_id}"
             if parent_id:
-                share_link += f"/{parent_id}"
+                share_link += f"&parent_id={parent_id}"
             if data.material_type == "file":
-                share_link += f"?material_id={created_material.id}"
+                share_link += f"&material_id={created_material.id}"
             elif data.material_type != "folder":
                 share_link = created_material.attachment.url
             await self.helper_service.send_notification(
@@ -961,11 +961,11 @@ class MaterialService(IMaterialService):
                     )
                 updated_material.attachment = attachment
             user_ids = [user.id for user in subject.users] if subject.users else []
-            share_link = f"/user/materials/{updated_material.subject_id}"
+            share_link = f"/user/materials?subject_id={updated_material.subject_id}"
             if updated_material.parent_id:
-                share_link += f"/{updated_material.parent_id}"
+                share_link += f"&parent_id={updated_material.parent_id}"
             if updated_material.material_type == "file":
-                share_link += f"?material_id={updated_material.id}"
+                share_link += f"&material_id={updated_material.id}"
             elif updated_material.material_type != "folder":
                 share_link = updated_material.attachment.url
             await self.helper_service.send_notification(
@@ -1681,6 +1681,22 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Invalid URL format: {url}",
                 )
+            if not subject_id:
+                await self.logger.log(
+                    action="FetchMaterialsFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message=f"Subject ID is required for fetching materials from Google Drive",
+                    details={"error": "Subject ID is required"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"Subject ID is required for fetching materials from Google Drive",
+                )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == subject_id
             )
@@ -1888,11 +1904,11 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Failed to create materials from Google Drive data, please try again later.",
                 )
-            share_link = f"/user/materials/{subject_id}"
+            share_link = f"/user/materials?subject_id={subject_id}"
             if parent_id:
-                share_link += f"/{parent_id}"
+                share_link += f"&parent_id={parent_id}"
             if len(fetched_data.children) == 0:
-                share_link += f"?material_id={created_data.id}"
+                share_link += f"&material_id={created_data.id}"
             await self.helper_service.send_notification(
                 notification_type=Notification.NotificationType.MATERIAL,
                 parent_id=created_data.id,
