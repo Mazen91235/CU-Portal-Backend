@@ -736,17 +736,46 @@ class HelperService(IHelperService[U]):
                     )
             elif isinstance(value, str):
                 if not self._is_string_column(column):
-                    conditions.append(column == value)
+                    if not allow_nulls:
+                        conditions.append(column.isnot(None) & (column == value))
+                    else:
+                        conditions.append(column.is_(None) | (column == value))
                 elif starts_with:
-                    conditions.append(func.lower(column).ilike(func.lower(f"{value}%")))
+                    if not allow_nulls:
+                        conditions.append(
+                            column.isnot(None)
+                            & func.lower(column).ilike(func.lower(f"{value}%"))
+                        )
+                    else:
+                        conditions.append(
+                            column.is_(None)
+                            | func.lower(column).ilike(func.lower(f"{value}%"))
+                        )
                 elif is_exact:
-                    conditions.append(column == value)
+                    if not allow_nulls:
+                        conditions.append(
+                            column.isnot(None) & (column == value),
+                        )
+                    else:
+                        conditions.append(
+                            column.is_(None) | (column == value),
+                        )
                 else:
-                    conditions.append(
-                        func.lower(column).ilike(func.lower(f"%{value}%"))
-                    )
+                    if not allow_nulls:
+                        conditions.append(
+                            column.isnot(None)
+                            & func.lower(column).ilike(func.lower(f"%{value}%"))
+                        )
+                    else:
+                        conditions.append(
+                            column.is_(None)
+                            | func.lower(column).ilike(func.lower(f"%{value}%"))
+                        )
             else:
-                conditions.append(column == value)
+                if not allow_nulls:
+                    conditions.append(column.isnot(None) & (column == value))
+                else:
+                    conditions.append(column.is_(None) | (column == value))
 
         result = None
 

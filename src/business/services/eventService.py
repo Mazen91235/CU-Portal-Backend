@@ -50,7 +50,7 @@ class EventService(IEventService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Event, data, ["title", "location"], is_and, starts_with, is_exact
+                Event, data, ["title", "location"], is_and, starts_with, is_exact, True
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Event, includes
@@ -108,7 +108,7 @@ class EventService(IEventService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Event, data, ["title", "location"], is_and, starts_with, is_exact
+                Event, data, ["title", "location"], is_and, starts_with, is_exact, True
             )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Event, includes
