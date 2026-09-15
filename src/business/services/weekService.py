@@ -375,28 +375,32 @@ class WeekService(IWeekService):
                     data=None,
                     message=verify_restricted_access_response.message,
                 )
-            verify_restricted_access_response = (
-                await self.helper_service.verify_restricted_access(
-                    faculty_id=data.faculty_id,
-                    department_id=data.department_id,
-                    year_id=data.year_id,
-                )
-            )
-            if not verify_restricted_access_response.success:
+            if (
+                data.faculty_id != target_week.faculty_id
+                or data.department_id != target_week.department_id
+                or data.year_id != target_week.year_id
+            ):
                 await self.logger.log(
                     action="Update",
                     entity="Week",
                     level="error",
-                    code=verify_restricted_access_response.code or 500,
-                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
-                    details={"error": verify_restricted_access_response.error},
+                    code=400,
+                    message="Faculty, Department, and Year cannot be changed during update",
+                    details={
+                        "original_faculty_id": target_week.faculty_id,
+                        "original_department_id": target_week.department_id,
+                        "original_year_id": target_week.year_id,
+                        "new_faculty_id": data.faculty_id,
+                        "new_department_id": data.department_id,
+                        "new_year_id": data.year_id,
+                    },
                     source="WeekService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=verify_restricted_access_response.code,
+                    code=400,
                     data=None,
-                    message=verify_restricted_access_response.message,
+                    message="Faculty, Department, and Year cannot be changed during update",
                 )
             existing_week_response = await self.week_repository.find_one(
                 and_(
@@ -488,9 +492,6 @@ class WeekService(IWeekService):
                 )
             target_week.week_number = data.week_number
             target_week.start_date = data.start_date
-            target_week.faculty_id = data.faculty_id
-            target_week.department_id = data.department_id
-            target_week.year_id = data.year_id
             update_response = await self.week_repository.update(target_week)
             if not update_response.success:
                 return BaseResponseDto(
