@@ -546,8 +546,11 @@ class WeekService(IWeekService):
 
     async def delete(self, data):
         try:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Week, ["materials"]
+            )
             target_week_response = await self.week_repository.find_one(
-                Week.id == data.id
+                Week.id == data.id, dynamic_includes
             )
             if not target_week_response.success:
                 return BaseResponseDto(
@@ -572,6 +575,25 @@ class WeekService(IWeekService):
                     code=404,
                     data=None,
                     message="Week not found",
+                )
+            if target_week.materials and len(target_week.materials) > 0:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Week",
+                    level="warning",
+                    code=400,
+                    message="Cannot delete week with associated materials",
+                    details={
+                        "week_id": data.id,
+                        "material_count": len(target_week.materials),
+                    },
+                    source="WeekService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Cannot delete week with associated materials",
                 )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(
