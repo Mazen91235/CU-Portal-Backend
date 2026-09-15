@@ -470,7 +470,7 @@ class AnnouncementService(IAnnouncementService):
                     message="Announcement not found",
                 )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id, dynamic_includes
+                Subject.id == data.subject_id
             )
             if not subject_response.success:
                 return BaseResponseDto(
