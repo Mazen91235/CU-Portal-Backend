@@ -653,7 +653,7 @@ class MaterialService(IMaterialService):
                     message=f"Material with ID {data.id} not found",
                 )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == existing_material.subject_id, dynamic_includes
+                Subject.id == existing_material.subject_id
             )
             if not subject_response.success:
                 return BaseResponseDto(
