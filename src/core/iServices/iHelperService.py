@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Generic, TypeVar, Any, Type
+from sqlalchemy.ext.asyncio import AsyncSession
 from collections.abc import AsyncIterable
 from core.entities.user import User
 from core.entities.notification import Notification
@@ -235,5 +236,6 @@ class IHelperService(ABC, Generic[U]):
         self,
         attachment_id: int | None = None,
         attachment: Attachment | None = None,
+        session: AsyncSession | None = None,
     ) -> BaseResponseDto:
         pass

@@ -492,6 +492,7 @@ class Container(containers.DeclarativeContainer):
         user_repository=user_repository,
         logger=logger,
         helper_service=helper_service,
+        session_factory=session_factory,
     )
 
     # --- 5. Middlewares ---

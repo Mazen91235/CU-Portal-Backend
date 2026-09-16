@@ -2633,6 +2633,7 @@ class HelperService(IHelperService[U]):
         self,
         attachment_id=None,
         attachment=None,
+        session=None,
     ):
         try:
             if not attachment_id and not attachment:
@@ -2655,7 +2656,7 @@ class HelperService(IHelperService[U]):
                 )
             if not attachment:
                 attachment_response = await self.attachment_repository.find_one(
-                    Attachment.id == attachment_id
+                    Attachment.id == attachment_id, session=session
                 )
                 if not attachment_response.success:
                     return BaseResponseDto(
@@ -2689,7 +2690,7 @@ class HelperService(IHelperService[U]):
                 if attachment.is_file and not attachment.details.get("fetched", False)
                 else None
             )
-            delete_response = await self.attachment_repository.delete(attachment)
+            delete_response = await self.attachment_repository.delete(attachment, session=session)
             if not delete_response.success:
                 return BaseResponseDto(
                     success=False,

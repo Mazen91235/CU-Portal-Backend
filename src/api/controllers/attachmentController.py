@@ -48,24 +48,20 @@ class AttachmentController(IAttachmentController):
 
     async def validate(self, request):
         try:
-            await self.attachment_service.begin_transaction()
             validate_response = await self.attachment_service.validate()
             if not validate_response.success:
-                await self.attachment_service.rollback_transaction()
                 return ResponseHandler.generate_response(
                     success=False,
                     code=validate_response.code,
                     data=None,
                     message=validate_response.message,
                 )
-            await self.attachment_service.commit_transaction()
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
                 message="Attachment validation completed successfully",
             )
         except Exception as e:
-            await self.attachment_service.rollback_transaction()
             await self.logger.log(
                 action="Validate",
                 entity="Attachment",
