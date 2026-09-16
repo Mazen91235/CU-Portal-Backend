@@ -463,8 +463,11 @@ class Container(containers.DeclarativeContainer):
         NotificationService,
         user_notification_repository=user_notification_repository,
         notification_repository=notification_repository,
+        task_repository=task_repository,
+        event_repository=event_repository,
         logger=logger,
         helper_service=helper_service,
+        session_factory=session_factory,
     )
     subject_service = providers.Factory(
         SubjectService,

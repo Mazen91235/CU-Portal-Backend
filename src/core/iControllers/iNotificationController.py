@@ -13,3 +13,7 @@ class INotificationController(
     @abstractmethod
     async def mark_notification_as_seen(self, request: Request, id: int) -> Response:
         pass
+    
+    @abstractmethod
+    async def send_reminders(self, request: Request) -> Response:
+        pass

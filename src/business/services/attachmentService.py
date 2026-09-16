@@ -37,6 +37,7 @@ class AttachmentService(IAttachmentService):
         self.logger = logger
         self.helper_service = helper_service
         self.session_factory = session_factory
+        self._background_tasks: set[asyncio.Task] = set()
 
     # Transaction Functions
     async def begin_transaction(self):
@@ -287,7 +288,9 @@ class AttachmentService(IAttachmentService):
 
     async def validate(self):
         try:
-            asyncio.create_task(self._validate())
+            task = asyncio.create_task(self._validate())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
             return BaseResponseDto(
                 success=True,
                 code=200,
@@ -419,3 +422,5 @@ class AttachmentService(IAttachmentService):
                     data=None,
                     message="An error occurred while validating attachments, please try again later",
                 )
+            finally:
+                await session.close()

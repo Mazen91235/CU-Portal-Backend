@@ -17,3 +17,7 @@ class INotificationService(IQueryableService[Notification, UserNotificationSearc
         self, notification_id: int
     ) -> BaseResponseDto[bool]:
         pass
+
+    @abstractmethod
+    async def send_reminders(self) -> BaseResponseDto:
+        pass

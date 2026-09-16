@@ -22,14 +22,13 @@ class TimezoneHandler:
         if " " in iso_datetime:
             return iso_datetime.replace(" ", "T")
         return iso_datetime + "T00:00:00.000Z"
-    
+
     @classmethod
     def to_isoformat(cls, dt: datetime, timezone: str = "UTC") -> str:
         if timezone.lower() == "cairo":
             return dt.astimezone(cls.CAIRO_TZ).isoformat()
         else:
             return dt.astimezone(cls.UTC_TZ).isoformat()
-        
 
     @classmethod
     def now(cls, timezone: str = "UTC") -> datetime:
@@ -74,10 +73,23 @@ class TimezoneHandler:
     def get_abs_diff_in_days(cls, dt1: datetime, dt2: datetime | None = None) -> int:
         if not dt2:
             dt2 = cls.now("UTC")
-        return abs((dt1 - dt2).days)
+        return abs(int((dt1 - dt2).total_seconds() // 86400))
 
     @classmethod
     def get_abs_diff_in_hours(cls, dt1: datetime, dt2: datetime | None = None) -> int:
         if not dt2:
             dt2 = cls.now("UTC")
-        return abs((dt1 - dt2).seconds // 3600)
+        return abs(int((dt1 - dt2).total_seconds() // 3600))
+
+    @classmethod
+    def get_due_as_str(cls, dt: datetime, timezone: str = "UTC") -> str | None:
+        now = cls.now(timezone)
+        if dt <= now:
+            return None
+        diff_hours = cls.get_abs_diff_in_hours(dt, now)
+        if diff_hours < 1:
+            return None
+        if diff_hours < 24:
+            return f"{diff_hours} hour{'s' if diff_hours > 1 else ''}"
+        diff_days = diff_hours // 24
+        return f"{diff_days} day{'s' if diff_days > 1 else ''}"

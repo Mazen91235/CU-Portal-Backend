@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar, Any, Type
+from typing import Generic, TypeVar, Any, Type, Coroutine
 from sqlalchemy.ext.asyncio import AsyncSession
 from collections.abc import AsyncIterable
 from core.entities.user import User
@@ -101,7 +101,8 @@ class IHelperService(ABC, Generic[U]):
         department_id: int | None = None,
         year_id: int | None = None,
         subject_id: int | None = None,
-    ) -> BaseResponseDto[bool]:
+        user_ids: set[int] | None = None,
+    ) -> BaseResponseDto[Coroutine[Any, Any, BaseResponseDto]]:
         pass
 
     # File Functions

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, set_timeout
 from core.iControllers.iNotificationController import INotificationController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -60,12 +60,26 @@ def create_notification_public_router(
     ):
         return await controller.create(request, data=data)
 
+    @router.post(
+        "/reminders",
+        dependencies=[
+            Depends(_validate_api_key),
+            Depends(set_timeout(3600)),
+        ],  # Set a timeout of 1 hour for the send reminders operation
+        response_model=BaseResponseDto,
+        summary="Send Reminders (Background)",
+        description="Sends reminders for tasks, exams, and events in the background.",
+    )
+    async def send_reminders(
+        request: Request,
+        controller: INotificationController = Depends(_get_controller),
+    ):
+        return await controller.send_reminders(request)
+
     return router
 
 
-def create_notification_user_router(
-    controller_provider, auth_middleware_provider
-):
+def create_notification_user_router(controller_provider, auth_middleware_provider):
     router = APIRouter(
         prefix="/notifications", tags=["User Notifications"], route_class=CustomRoute
     )

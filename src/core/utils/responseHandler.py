@@ -5,6 +5,8 @@ from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel
 from business.contextVars.requestContext import request_context
 
+BACKGROUND_TASKS: set[asyncio.Task] = set()
+
 
 class ResponseHandler:
     @staticmethod
@@ -30,7 +32,9 @@ class ResponseHandler:
             },
         )
         if success and request and hasattr(request.state, "background"):
-            asyncio.create_task(request.state.background)
+            task = asyncio.create_task(request.state.background)
+            BACKGROUND_TASKS.add(task)
+            task.add_done_callback(BACKGROUND_TASKS.discard)
         return response
 
     @staticmethod
@@ -38,7 +42,9 @@ class ResponseHandler:
         request = request_context.get(None)
         response = RedirectResponse(redirect_url)
         if request and hasattr(request.state, "background"):
-            asyncio.create_task(request.state.background)
+            task = asyncio.create_task(request.state.background)
+            BACKGROUND_TASKS.add(task)
+            task.add_done_callback(BACKGROUND_TASKS.discard)
         return response
 
     @staticmethod
@@ -63,5 +69,7 @@ class ResponseHandler:
         stream = content if not isinstance(content, bytes) else iter((content,))
         response = StreamingResponse(stream, media_type=content_type, headers=headers)
         if request and hasattr(request.state, "background"):
-            asyncio.create_task(request.state.background)
+            task = asyncio.create_task(request.state.background)
+            BACKGROUND_TASKS.add(task)
+            task.add_done_callback(BACKGROUND_TASKS.discard)
         return response

@@ -1,12 +1,16 @@
+import asyncio
 from sqlalchemy import and_
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from core.iServices.iNotificationService import INotificationService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.userNotification import UserNotification
 from core.entities.notification import Notification
-from core.dtos.userNotificationDtos import UserNotificationSearchDto
+from core.entities.task import Task
+from core.entities.event import Event
 from core.dtos.baseDtos import BaseResponseDto
+from core.utils.timezoneHandler import TimezoneHandler
 
 
 class NotificationService(INotificationService):
@@ -14,13 +18,20 @@ class NotificationService(INotificationService):
         self,
         user_notification_repository: IBaseRepository[UserNotification],
         notification_repository: IBaseRepository[Notification],
+        task_repository: IBaseRepository[Task],
+        event_repository: IBaseRepository[Event],
         logger: IBaseLogger,
         helper_service: IHelperService,
+        session_factory: async_sessionmaker[AsyncSession],
     ):
         self.user_notification_repository = user_notification_repository
         self.notification_repository = notification_repository
+        self.task_repository = task_repository
+        self.event_repository = event_repository
         self.logger = logger
         self.helper_service = helper_service
+        self.session_factory = session_factory
+        self._background_tasks: set[asyncio.Task] = set()
 
     async def begin_transaction(self):
         await self.notification_repository.begin_transaction()
@@ -203,6 +214,7 @@ class NotificationService(INotificationService):
                 department_id=data.department_id,
                 year_id=data.year_id,
                 subject_id=data.subject_id,
+                user_ids=data.user_ids,
             )
             return BaseResponseDto(
                 success=True,
@@ -347,3 +359,173 @@ class NotificationService(INotificationService):
                 data=None,
                 message="An error occurred while marking notification as seen",
             )
+
+    async def send_reminders(self):
+        try:
+            task = asyncio.create_task(self._send_reminders())
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=None,
+                message="Reminders sent successfully for tasks, exams, and events.",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="SendReminders",
+                entity="Notification",
+                level="error",
+                code=500,
+                message=f"An error occurred while sending reminders",
+                details={"error": repr(ex)},
+                source="NotificationService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while sending reminders",
+            )
+
+    # Helper Functions
+    async def _send_reminders(self):
+        async with self.session_factory() as session:
+            try:
+                await session.begin()
+                dynamic_includes = self.helper_service.generate_dynamic_includes(
+                    Task, ["subject"]
+                )
+                dynamic_order_by = self.helper_service.generate_dynamic_order_by(
+                    "Task", ["deadline"]
+                )
+                tasks_response = await self.task_repository.find(
+                    and_(
+                        Task.deadline >= TimezoneHandler.now(),
+                        Task.deadline <= TimezoneHandler.add_days(3),
+                    ),
+                    dynamic_includes,
+                    order_by=dynamic_order_by,
+                    limit=int(1e6),
+                )
+                if not tasks_response.success:
+                    await session.rollback()
+                    return BaseResponseDto(
+                        success=False,
+                        code=tasks_response.code,
+                        data=None,
+                        message=tasks_response.message,
+                    )
+                tasks = tasks_response.data or []
+                exams = [task for task in tasks if task.task_type == "exam"]
+                tasks = [task for task in tasks if task.task_type != "exam"]
+                bg_notifications = []
+                for task in tasks:
+                    due = TimezoneHandler.get_due_as_str(task.deadline)
+                    if due is None or task.subject is None:
+                        continue
+                    content = f"Reminder: Task '{task.name}' for subject '{task.subject.name}' is due in {due}."
+                    share_link = f"/user/tasks/{task.id}"
+                    response = await self.helper_service.send_notification(
+                        notification_type=Notification.NotificationType.TASK,
+                        parent_id=task.id,
+                        content=content,
+                        url=share_link,
+                        subject_id=task.subject_id,
+                    )
+                    if response.success and response.data is not None:
+                        bg_notifications.append(response.data)
+                for exam in exams:
+                    due = TimezoneHandler.get_due_as_str(exam.deadline)
+                    if due is None or exam.subject is None:
+                        continue
+                    content = f"Reminder: Exam '{exam.name}' for subject '{exam.subject.name}' is due in {due}."
+                    share_link = f"/user/exams/{exam.id}"
+                    response = await self.helper_service.send_notification(
+                        notification_type=Notification.NotificationType.EXAM,
+                        parent_id=exam.id,
+                        content=content,
+                        url=share_link,
+                        subject_id=exam.subject_id,
+                    )
+                    if response.success and response.data is not None:
+                        bg_notifications.append(response.data)
+                dynamic_includes = self.helper_service.generate_dynamic_includes(
+                    Event, ["user_events"]
+                )
+                dynamic_order_by = self.helper_service.generate_dynamic_order_by(
+                    "Event", ["start_date"]
+                )
+                events_response = await self.event_repository.find(
+                    and_(
+                        Event.start_date >= TimezoneHandler.now(),
+                        Event.start_date <= TimezoneHandler.add_days(3),
+                    ),
+                    dynamic_includes,
+                    order_by=dynamic_order_by,
+                    limit=int(1e6),
+                )
+                if not events_response.success:
+                    await session.rollback()
+                    return BaseResponseDto(
+                        success=False,
+                        code=events_response.code,
+                        data=None,
+                        message=events_response.message,
+                    )
+                events = events_response.data or []
+                for event in events:
+                    due = TimezoneHandler.get_due_as_str(event.start_date)
+                    if due is None:
+                        continue
+                    content = f"Reminder: Event '{event.title}' that you registered for is scheduled to start in {due}."
+                    share_link = f"/user/events/{event.id}"
+                    user_ids = {attendee.id for attendee in event.attendees}
+                    response = await self.helper_service.send_notification(
+                        notification_type=Notification.NotificationType.EVENT,
+                        parent_id=event.id,
+                        content=content,
+                        url=share_link,
+                        user_ids=user_ids,
+                    )
+                    if response.success and response.data is not None:
+                        bg_notifications.append(response.data)
+                await session.commit()
+                await asyncio.gather(*bg_notifications, return_exceptions=True)
+                await self.logger.log(
+                    action="BackgroundSendReminders",
+                    entity="Notification",
+                    level="info",
+                    code=200,
+                    message=f"Reminders sent successfully for tasks, exams, and events.",
+                    details={},
+                    source="NotificationService",
+                )
+                return BaseResponseDto(
+                    success=True,
+                    code=200,
+                    data=None,
+                    message="Reminders sent successfully for tasks, exams, and events.",
+                )
+            except Exception as ex:
+                await session.rollback()
+                await self.logger.log(
+                    action="BackgroundSendReminders",
+                    entity="Notification",
+                    level="error",
+                    code=500,
+                    message=f"An error occurred while sending reminders",
+                    details={"error": repr(ex)},
+                    source="NotificationService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="An error occurred while sending reminders",
+                )
+            finally:
+                try:
+                    await session.close()
+                except Exception:
+                    pass

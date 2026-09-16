@@ -276,6 +276,8 @@ class CustomRoute(APIRoute):
         dependencies.append(Depends(_check_cache))
 
         self.timeout_seconds = timeout_seconds
+        
+        self._background_tasks: set[asyncio.Task] = set()
 
         super().__init__(*args, dependencies=dependencies, **kwargs)
 
@@ -346,7 +348,9 @@ class CustomRoute(APIRoute):
                         status_code=499,
                         detail="Client disconnected before the request could complete.",
                     )
-                asyncio.create_task(_update_cache(request, response))
+                cache_update_task = asyncio.create_task(_update_cache(request, response))
+                self._background_tasks.add(cache_update_task)
+                cache_update_task.add_done_callback(self._background_tasks.discard)
                 return response
             except CacheHitException as ex:
                 return ex.response
@@ -374,6 +378,8 @@ class CustomRoute(APIRoute):
                     with suppress(Exception):
                         await asyncio.gather(*tasks, return_exceptions=True)
                 if lock_key and acquired:
-                    asyncio.create_task(caching_handler.release_lock(lock_key))
+                    release_lock_task = asyncio.create_task(caching_handler.release_lock(lock_key))
+                    self._background_tasks.add(release_lock_task)
+                    release_lock_task.add_done_callback(self._background_tasks.discard)
 
         return custom_route_handler
