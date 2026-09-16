@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from .userEvent import UserEvent
     from .note import Note
     from .attachment import Attachment
+    from .device import Device
 
 
 class User(Base):
@@ -76,9 +77,6 @@ class User(Base):
         String(500), nullable=True
     )
     ips: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
-    devices: Mapped[list[str]] = mapped_column(
         MutableList.as_mutable(JSON), nullable=True, default=list
     )
     refresh_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -240,6 +238,12 @@ class User(Base):
         back_populates="author",
         cascade="all, delete-orphan",
         foreign_keys="Attachment.author_id",
+        collection_class=set,
+    )
+    devices: Mapped[set["Device"]] = relationship(
+        "Device",
+        back_populates="user",
+        cascade="all, delete-orphan",
         collection_class=set,
     )
 

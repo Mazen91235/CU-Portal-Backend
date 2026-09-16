@@ -39,6 +39,7 @@ from core.utils.fernetHandler import FernetHandler
 from core.utils.timezoneHandler import TimezoneHandler
 from core.utils.validator import Validator
 from core.utils.firebaseHandler import FirebaseHandler
+from core.entities.device import Device
 
 U = TypeVar("U")  # EntitySearchDto Type
 
@@ -49,6 +50,7 @@ class HelperService(IHelperService[U]):
         notification_repository: IBaseRepository[Notification],
         user_notification_repository: IBaseRepository[UserNotification],
         user_repository: IBaseRepository[User],
+        device_repository: IBaseRepository[Device],
         role_repository: IBaseRepository[Role],
         faculty_repository: IBaseRepository[Faculty],
         department_repository: IBaseRepository[Department],
@@ -61,6 +63,7 @@ class HelperService(IHelperService[U]):
         self.notification_repository = notification_repository
         self.user_notification_repository = user_notification_repository
         self.user_repository = user_repository
+        self.device_repository = device_repository
         self.role_repository = role_repository
         self.faculty_repository = faculty_repository
         self.department_repository = department_repository
@@ -1201,10 +1204,24 @@ class HelperService(IHelperService[U]):
                         data=False,
                         message=f"User with ID {user_id} not found",
                     )
-                should_update_devices = False
-                for device_token in user.devices or []:
+                devices_response = await self.device_repository.find(
+                    Device.user_id == user_id,
+                    limit=int(1e6),
+                    session=session,
+                )
+                if not devices_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=devices_response.code,
+                        data=False,
+                        message=devices_response.message,
+                    )
+
+                for device in devices_response.data or []:
+                    device_token = device.device_token
                     if not device_token or not device_token.strip():
                         continue
+
                     send_response = FirebaseHandler.send_notification(
                         device_token=device_token,
                         title=title,
@@ -1212,22 +1229,31 @@ class HelperService(IHelperService[U]):
                         url=url,
                         notification_id=notification_id,
                     )
+
                     if not send_response.success and send_response.code == 404:
-                        user.devices.remove(device_token)
-                        should_update_devices = True
+                        delete_response = await self.device_repository.delete(
+                            device, session=session
+                        )
+                        if not delete_response.success:
+                            await self._log(
+                                action="RemoveInvalidDevice",
+                                entity="Device",
+                                level="error",
+                                code=delete_response.code or 500,
+                                message=f"Failed to remove invalid device {device.id} for user {user_id}",
+                                details={"error": delete_response.error},
+                            )
+
                     if not send_response.success:
                         await self._log(
                             action="SendPushNotifications",
                             entity="Notification",
                             level="error",
                             code=send_response.code or 500,
-                            message=f"Failed to send push notification to user {user_id} for device token {device_token}",
+                            message=f"Failed to send push notification to user {user_id} for device {device.id}",
                             details={"error": send_response.error},
                         )
-                if should_update_devices:
-                    await self.user_repository.update(
-                        user, ["devices"], session=session
-                    )
+
             await self._log(
                 action="SendPushNotifications",
                 entity="Notification",

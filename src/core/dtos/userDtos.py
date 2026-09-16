@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import TypedDict, TYPE_CHECKING
+from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field
 
 if TYPE_CHECKING:
@@ -358,4 +359,7 @@ class UserStatisticsResponseDto(BaseModel):
 
 
 class UserDeviceActionDto(BaseModel):
-    device_token: str = Field(..., description="Unique key of the device")
+    device_id: UUID = Field(
+        ..., description="Persistent unique identifier of the client device"
+    )
+    device_token: str = Field(..., min_length=1, description="Current FCM device token")

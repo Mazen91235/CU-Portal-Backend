@@ -133,6 +133,7 @@ from core.entities.note import Note
 from core.entities.subject import Subject
 from core.entities.year import Year
 from core.entities.department import Department
+from core.entities.device import Device
 from core.entities.userNotification import UserNotification
 from core.entities.notification import Notification
 from core.entities.message import Message
@@ -182,6 +183,12 @@ class Container(containers.DeclarativeContainer):
     )
     user_repository = providers.Factory(
         BaseRepository, session=db_session, model=User, session_factory=session_factory
+    )
+    device_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=Device,
+        session_factory=session_factory,
     )
     role_repository = providers.Factory(
         BaseRepository, session=db_session, model=Role, session_factory=session_factory
@@ -322,6 +329,7 @@ class Container(containers.DeclarativeContainer):
         notification_repository=notification_repository,
         user_notification_repository=user_notification_repository,
         user_repository=user_repository,
+        device_repository=device_repository,
         role_repository=role_repository,
         faculty_repository=faculty_repository,
         department_repository=department_repository,
@@ -338,6 +346,7 @@ class Container(containers.DeclarativeContainer):
     user_service = providers.Factory(
         UserService,
         user_repository=user_repository,
+        device_repository=device_repository,
         token_repository=token_repository,
         role_repository=role_repository,
         pending_user_repository=pending_user_repository,

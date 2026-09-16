@@ -155,7 +155,7 @@ def create_user_user_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(allow_inactive()),
-            Depends(_validate("device_token")),
+            Depends(_validate("device_id", "device_token")),
         ],
         response_model=BaseResponseDto,
         status_code=200,
@@ -174,7 +174,7 @@ def create_user_user_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(allow_inactive()),
-            Depends(_validate("device_token")),
+            Depends(_validate("device_id", "device_token")),
         ],
         response_model=BaseResponseDto,
         status_code=200,

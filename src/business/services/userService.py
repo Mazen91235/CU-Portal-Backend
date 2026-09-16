@@ -8,6 +8,7 @@ from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.user import User
+from core.entities.device import Device
 from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
 from core.entities.token import Token
@@ -34,6 +35,7 @@ class UserService(IUserService):
     def __init__(
         self,
         user_repository: IBaseRepository[User],
+        device_repository: IBaseRepository[Device],
         token_repository: IBaseRepository[Token],
         role_repository: IBaseRepository[Role],
         pending_user_repository: IBaseRepository[PendingUser],
@@ -41,6 +43,7 @@ class UserService(IUserService):
         helper_service: IHelperService,
     ):
         self.user_repository = user_repository
+        self.device_repository = device_repository
         self.token_repository = token_repository
         self.role_repository = role_repository
         self.pending_user_repository = pending_user_repository
@@ -3487,13 +3490,13 @@ class UserService(IUserService):
                 message="An error occurred while checking permissions, please try again.",
             )
 
-    async def register_device(self, device_token):
+    async def register_device(self, device_id, device_token):
         try:
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
                     action="RegisterDevice",
-                    entity="User",
+                    entity="Device",
                     level="error",
                     code=logged_in_user_response.code or 500,
                     message="Failed to retrieve logged in user for registering device",
@@ -3506,11 +3509,12 @@ class UserService(IUserService):
                     data=None,
                     message=logged_in_user_response.message,
                 )
+
             logged_in_user = logged_in_user_response.data
             if not logged_in_user:
                 await self.logger.log(
                     action="RegisterDevice",
-                    entity="User",
+                    entity="Device",
                     level="warning",
                     code=404,
                     message="Logged in user not found for registering device",
@@ -3522,22 +3526,51 @@ class UserService(IUserService):
                     data=None,
                     message="Logged in user not found, please log in again.",
                 )
-            logged_in_user.devices = logged_in_user.devices or []
-            if device_token not in logged_in_user.devices:
-                logged_in_user.devices.append(device_token)
-            update_user_response = await self.user_repository.update(
-                logged_in_user, ["devices"]
+
+            device_response = await self.device_repository.find_one(
+                Device.device_id == device_id
             )
-            if not update_user_response.success:
+            if not device_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=update_user_response.code,
+                    code=device_response.code,
                     data=None,
-                    message=update_user_response.message,
+                    message=device_response.message,
                 )
+
+            device = device_response.data
+            if device:
+                device.user_id = logged_in_user.id
+                device.device_token = device_token
+                update_response = await self.device_repository.update(
+                    device, ["user_id", "device_token"]
+                )
+                if not update_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=update_response.code,
+                        data=None,
+                        message=update_response.message,
+                    )
+            else:
+                create_response = await self.device_repository.create(
+                    Device(
+                        device_id=device_id,
+                        user_id=logged_in_user.id,
+                        device_token=device_token,
+                    )
+                )
+                if not create_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=create_response.code,
+                        data=None,
+                        message=create_response.message,
+                    )
+
             await self.logger.log(
                 action="RegisterDevice",
-                entity="User",
+                entity="Device",
                 level="info",
                 code=200,
                 message="Device registered successfully",
@@ -3552,10 +3585,10 @@ class UserService(IUserService):
         except Exception as ex:
             await self.logger.log(
                 action="RegisterDevice",
-                entity="User",
+                entity="Device",
                 level="error",
                 code=500,
-                message=f"An error occurred while registering device",
+                message="An error occurred while registering device",
                 details={"error": repr(ex)},
                 source="UserService",
             )
@@ -3566,13 +3599,13 @@ class UserService(IUserService):
                 message="An error occurred while registering device, please try again.",
             )
 
-    async def unregister_device(self, device_token):
+    async def unregister_device(self, device_id):
         try:
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
                     action="UnregisterDevice",
-                    entity="User",
+                    entity="Device",
                     level="error",
                     code=logged_in_user_response.code or 500,
                     message="Failed to retrieve logged in user for unregistering device",
@@ -3585,38 +3618,62 @@ class UserService(IUserService):
                     data=None,
                     message=logged_in_user_response.message,
                 )
+
             logged_in_user = logged_in_user_response.data
             if not logged_in_user:
-                await self.logger.log(
-                    action="UnregisterDevice",
-                    entity="User",
-                    level="warning",
-                    code=404,
-                    message="Logged in user not found for unregistering device",
-                    source="UserService",
-                )
                 return BaseResponseDto(
                     success=False,
                     code=404,
                     data=None,
                     message="Logged in user not found, please log in again.",
                 )
-            logged_in_user.devices = logged_in_user.devices or []
-            if device_token in logged_in_user.devices:
-                logged_in_user.devices.remove(device_token)
-                update_user_response = await self.user_repository.update(
-                    logged_in_user, ["devices"]
+
+            device_response = await self.device_repository.find_one(
+                (Device.device_id == device_id)
+            )
+            if not device_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=device_response.code,
+                    data=None,
+                    message=device_response.message,
                 )
-                if not update_user_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=update_user_response.code,
-                        data=None,
-                        message=update_user_response.message,
-                    )
+
+            device = device_response.data
+            if not device:
+                return BaseResponseDto(
+                    success=True,
+                    code=200,
+                    data=True,
+                    message="Device unregistered successfully.",
+                )
+            if device.user_id != logged_in_user.id:
+                await self.logger.log(
+                    action="UnregisterDevice",
+                    entity="Device",
+                    level="warning",
+                    code=403,
+                    message=f"Logged in user does not own device with ID {device_id} and cannot unregister it",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message=f"You do not have permission to unregister this device.",
+                )
+            delete_response = await self.device_repository.delete(device)
+            if not delete_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=delete_response.code,
+                    data=None,
+                    message=delete_response.message,
+                )
+
             await self.logger.log(
                 action="UnregisterDevice",
-                entity="User",
+                entity="Device",
                 level="info",
                 code=200,
                 message="Device unregistered successfully",
@@ -3631,10 +3688,10 @@ class UserService(IUserService):
         except Exception as ex:
             await self.logger.log(
                 action="UnregisterDevice",
-                entity="User",
+                entity="Device",
                 level="error",
                 code=500,
-                message=f"An error occurred while unregistering device",
+                message="An error occurred while unregistering device",
                 details={"error": repr(ex)},
                 source="UserService",
             )
@@ -3644,3 +3701,4 @@ class UserService(IUserService):
                 data=None,
                 message="An error occurred while unregistering device, please try again.",
             )
+

@@ -1148,7 +1148,9 @@ class UserController(IUserController):
     async def register_device(self, request, data):
         try:
             await self.user_service.begin_transaction()
-            response = await self.user_service.register_device(data.device_token)
+            response = await self.user_service.register_device(
+                data.device_id, data.device_token
+            )
             if not response.success:
                 await self.user_service.rollback_transaction()
                 return ResponseHandler.generate_response(
@@ -1181,7 +1183,7 @@ class UserController(IUserController):
     async def unregister_device(self, request, data):
         try:
             await self.user_service.begin_transaction()
-            response = await self.user_service.unregister_device(data.device_token)
+            response = await self.user_service.unregister_device(data.device_id)
             if not response.success:
                 await self.user_service.rollback_transaction()
                 return ResponseHandler.generate_response(
