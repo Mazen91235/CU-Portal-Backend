@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, set_timeout
 from core.iControllers.iAttachmentController import IAttachmentController
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 
@@ -43,15 +43,17 @@ def create_attachment_public_router(
         "/validate",
         dependencies=[
             Depends(_validate_api_key),
-        ],  # Set a timeout of 30 minutes for the validate operation
+            Depends(
+                set_timeout(3600)
+            ),  # Set a timeout of 1 hour for the validate operation
+        ],
         summary="Validate Attachments",
         description="Validate the attachments in the database",
     )
     async def validate_attachments(
         request: Request,
-        start_idx: int,
         controller: IAttachmentController = Depends(_get_controller),
     ):
-        return await controller.validate(request, start_idx)
+        return await controller.validate(request)
 
     return router

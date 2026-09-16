@@ -9,5 +9,5 @@ class IAttachmentService(IBaseService):
         pass
 
     @abstractmethod
-    async def validate(self, start_idx: int) -> BaseResponseDto[int]:
+    async def validate(self) -> BaseResponseDto:
         pass

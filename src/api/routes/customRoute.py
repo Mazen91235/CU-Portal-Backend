@@ -216,7 +216,7 @@ async def _check_for_redirect(request: Request):
         else f"?{request.url.query}&token={token}"
     )
     redirect_url = f"{os.environ.get('BACKGROUND_WORKER_URL', 'http://localhost:8001')}{request.url.path}{query}"
-    modules_to_redirect = ["material", "file"]
+    modules_to_redirect = ["material", "file", "attachment"]
     if any(module in request.url.path for module in modules_to_redirect):
         return ResponseHandler.generate_redirect_response(redirect_url)
     body_bytes = await request.body()
