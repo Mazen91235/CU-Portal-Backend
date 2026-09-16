@@ -42,7 +42,7 @@ def create_attachment_public_router(
     @router.post(
         "/validate",
         dependencies=[
-            # Depends(_validate_api_key),
+            Depends(_validate_api_key),
             Depends(
                 set_timeout(3600)
             ),  # Set a timeout of 1 hour for the validate operation
