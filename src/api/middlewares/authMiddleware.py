@@ -24,7 +24,7 @@ class AuthMiddleware(IAuthMiddleware):
         self.user_service = user_service
         self.logger = logger
 
-    async def is_logged_in(self, request: Request, refresh_token: str | None = None):
+    async def is_logged_in(self, request: Request, refresh_token: str | None = None, throw_error: bool = True):
         try:
             if not refresh_token:
                 token = request.query_params.get("token")
@@ -42,6 +42,8 @@ class AuthMiddleware(IAuthMiddleware):
                     message="No refresh token provided in request cookies",
                     source="AuthMiddleware",
                 )
+                if not throw_error:
+                    return None
                 raise HTTPException(
                     status_code=401,
                     detail="Unauthorized: No refresh token provided",
@@ -59,6 +61,8 @@ class AuthMiddleware(IAuthMiddleware):
             )
 
             if not user_response.success:
+                if not throw_error:
+                    return None
                 raise HTTPException(
                     status_code=user_response.code or 500, detail=user_response.message
                 )
@@ -72,6 +76,8 @@ class AuthMiddleware(IAuthMiddleware):
                     message="Invalid or Expired refresh token provided in request cookies",
                     source="AuthMiddleware",
                 )
+                if not throw_error:
+                    return None
                 raise HTTPException(
                     status_code=401,
                     detail="Unauthorized: Invalid or Expired refresh token",

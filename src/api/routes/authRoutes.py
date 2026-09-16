@@ -27,12 +27,17 @@ def create_auth_router(
     def _get_validation_middleware() -> IValidationMiddleware:
         return validation_middleware_provider()
 
-    async def _is_logged_in(
-        request: Request,
-        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
-        refresh_token: str | None = Depends(cookie_scheme),
-    ):
-        return await auth_middleware.is_logged_in(request, refresh_token)
+    def _is_logged_in(throw_error: bool = True):
+        async def is_logged_in_dependency(
+            request: Request,
+            auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+            refresh_token: str | None = Depends(cookie_scheme),
+        ):
+            return await auth_middleware.is_logged_in(
+                request, refresh_token, throw_error
+            )
+
+        return is_logged_in_dependency
 
     async def _is_logged_out(
         request: Request,
@@ -146,7 +151,7 @@ def create_auth_router(
 
     @router.get(
         "/google-access-token",
-        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
+        dependencies=[Depends(_is_logged_in()), Depends(allow_inactive())],
         response_model=BaseResponseDto[str],
         status_code=200,
         summary="Get Google access token",
@@ -159,7 +164,7 @@ def create_auth_router(
 
     @router.get(
         "/is-logged-in",
-        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
+        dependencies=[Depends(_is_logged_in()), Depends(allow_inactive())],
         response_model=BaseResponseDto,
         status_code=200,
         summary="Check if user is logged in",
@@ -194,7 +199,7 @@ def create_auth_router(
 
     @router.get(
         "/logout",
-        dependencies=[Depends(allow_inactive())],
+        dependencies=[Depends(_is_logged_in(False)), Depends(allow_inactive())],
         response_model=BaseResponseDto,
         status_code=200,
         summary="Logout user",

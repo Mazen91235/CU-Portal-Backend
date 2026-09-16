@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
+from typing import Any
 from fastapi import Request
 
 
 class IAuthMiddleware(ABC):
     @abstractmethod
     async def is_logged_in(
-        self, request: Request, refresh_token: str | None = None
-    ) -> None:
+        self, request: Request, refresh_token: str | None = None, throw_error: bool = True
+    ) -> Any:
         pass
 
     @abstractmethod
