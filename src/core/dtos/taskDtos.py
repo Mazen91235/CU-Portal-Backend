@@ -102,6 +102,15 @@ class TaskSearchDto(BaseSearchDto):
     subject_id: int | None = Field(
         default=None, description="ID of Subject to filter by"
     )
+    faculty_id: int | None = Field(
+        default=None, description="ID of Faculty to filter by"
+    )
+    department_id: int | None = Field(
+        default=None, description="ID of Department to filter by"
+    )
+    year_id: int | None = Field(
+        default=None, description="ID of Academic Year to filter by"
+    )
     author_id: int | None = Field(default=None, description="ID of Author to filter by")
     deadline_from: str | None = Field(
         default=None, description="Start date to filter by (>=)"

@@ -710,6 +710,32 @@ class HelperService(IHelperService[U]):
             column = getattr(cls, field_name, None)
 
             if not column:
+                if field_name not in [
+                    "faculty_id",
+                    "department_id",
+                    "year_id",
+                ] or not hasattr(cls, "subject_id"):
+                    continue
+                sub_condition = {
+                    "faculty_id": lambda: Subject.faculty_id == value,
+                    "department_id": lambda: Subject.department_id == value,
+                    "year_id": lambda: Subject.year_id == value,
+                }
+                subject_subquery = (
+                    select(Subject.id)
+                    .where(sub_condition[field_name]())
+                    .scalar_subquery()
+                )
+                if allow_nulls:
+                    conditions.append(
+                        (getattr(cls, "subject_id").is_(None))
+                        | (getattr(cls, "subject_id").in_(subject_subquery))
+                    )
+                else:
+                    conditions.append(
+                        getattr(cls, "subject_id").isnot(None)
+                        & (getattr(cls, "subject_id").in_(subject_subquery))
+                    )
                 continue
 
             if key.endswith("_from"):
