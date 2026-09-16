@@ -1725,21 +1725,14 @@ class UserService(IUserService):
     async def logout(self):
         try:
             user_response = await self.helper_service.get_logged_in_user()
-            if not user_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=user_response.code,
-                    data=False,
-                    message=user_response.message,
-                )
-            user = user_response.data
-            if not user:
+            if not user_response.success or not user_response.data:
                 return BaseResponseDto(
                     success=True,
                     code=200,
                     data=True,
                     message="Successfully logged out",
                 )
+            user = user_response.data
             invalidate_tokens_response = await self._invalidate_tokens(user.id)
             if not invalidate_tokens_response.success:
                 return BaseResponseDto(
