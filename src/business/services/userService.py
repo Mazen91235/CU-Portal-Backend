@@ -345,7 +345,7 @@ class UserService(IUserService):
                         data=None,
                         message="You must Upload your Approval Image or use Your University Email to register",
                     )
-                url = data.url
+                url = data.details.get("url")
             if url:
                 file_id = self.helper_service.get_file_id_from_url(url)
                 if not file_id:
