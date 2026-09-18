@@ -1,5 +1,6 @@
 from sqlalchemy import and_
 import re
+import mimetypes
 from datetime import datetime, timezone
 from collections.abc import AsyncGenerator
 from stat import S_IFDIR, S_IFREG
@@ -3133,7 +3134,19 @@ class MaterialService(IMaterialService):
         details = attachment.details or {}
         file_data = details.get("file_data") or {}
         file_name = file_data.get("name") or material.name or f"material-{material.id}"
-        return self._sanitize_zip_name(file_name)
+        file_name = self._sanitize_zip_name(file_name)
+
+        mime_type = (file_data.get("mime_type") or "").split(";", 1)[0].strip().lower()
+        extension = {
+            "application/vnd.google-apps.document": ".docx",
+            "application/vnd.google-apps.spreadsheet": ".xlsx",
+            "application/vnd.google-apps.presentation": ".pptx",
+        }.get(mime_type) or mimetypes.guess_extension(mime_type, strict=False)
+
+        if extension and not file_name.lower().endswith(extension.lower()):
+            file_name = f"{file_name}{extension}"
+
+        return file_name
 
     @staticmethod
     def _sanitize_zip_name(name: str) -> str:
