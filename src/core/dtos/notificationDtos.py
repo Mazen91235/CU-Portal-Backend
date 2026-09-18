@@ -49,3 +49,8 @@ class NotificationResponseDto(BaseModel):
     model_config = {
         "from_attributes": True,
     }
+
+class NotificationMarkManyAsSeenDto(BaseModel):
+    notification_ids: list[int] = Field(
+        ..., min_length=1, description="List of notification IDs to mark as seen"
+    )

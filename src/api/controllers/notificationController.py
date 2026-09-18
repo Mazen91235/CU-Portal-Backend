@@ -122,10 +122,10 @@ class NotificationController(INotificationController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def mark_notification_as_seen(self, request, id):
+    async def mark_notifications_as_seen(self, request, data):
         try:
             await self.notification_service.begin_transaction()
-            response = await self.notification_service.mark_notification_as_seen(id)
+            response = await self.notification_service.mark_notifications_as_seen(data)
 
             if not response.success:
                 await self.notification_service.rollback_transaction()

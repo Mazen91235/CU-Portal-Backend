@@ -3,7 +3,11 @@ from api.routes.customRoute import CustomRoute, set_timeout
 from core.iControllers.iNotificationController import INotificationController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
-from core.dtos.notificationDtos import NotificationCreateDto, NotificationResponseDto
+from core.dtos.notificationDtos import (
+    NotificationCreateDto,
+    NotificationResponseDto,
+    NotificationMarkManyAsSeenDto,
+)
 from core.dtos.userNotificationDtos import UserNotificationSearchDto
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.queryModel import QueryModel
@@ -114,17 +118,17 @@ def create_notification_user_router(controller_provider, auth_middleware_provide
         return await controller.find(request, query=query)
 
     @router.patch(
-        "/{notification_id}",
+        "/seen",
         dependencies=[Depends(_is_logged_in)],
-        response_model=BaseResponseDto[bool],
-        summary="Mark Notification as Seen",
-        description="Marks a specific notification as seen for the logged-in user.",
+        response_model=BaseResponseDto,
+        summary="Mark Notifications as Seen",
+        description="Marks multiple notifications as seen for the logged-in user.",
     )
-    async def mark_notification_as_seen(
-        notification_id: int,
+    async def mark_notifications_as_seen(
+        data: NotificationMarkManyAsSeenDto,
         request: Request,
         controller: INotificationController = Depends(_get_controller),
     ):
-        return await controller.mark_notification_as_seen(request, id=notification_id)
+        return await controller.mark_notifications_as_seen(request, data=data)
 
     return router

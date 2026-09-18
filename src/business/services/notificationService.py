@@ -240,12 +240,12 @@ class NotificationService(INotificationService):
             )
 
     # Notification Specific Methods
-    async def mark_notification_as_seen(self, notification_id):
+    async def mark_notifications_as_seen(self, data):
         try:
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
-                    action="MarkNotificationAsSeen",
+                    action="MarkNotificationsAsSeen",
                     entity="Notification",
                     level="error",
                     code=401,
@@ -262,7 +262,7 @@ class NotificationService(INotificationService):
             logged_in_user = logged_in_user_response.data
             if not logged_in_user:
                 await self.logger.log(
-                    action="MarkNotificationAsSeen",
+                    action="MarkNotificationsAsSeen",
                     entity="Notification",
                     level="error",
                     code=401,
@@ -276,64 +276,59 @@ class NotificationService(INotificationService):
                     data=None,
                     message="User is not logged in",
                 )
-            user_notification_response = (
-                await self.user_notification_repository.find_one(
-                    and_(
-                        UserNotification.user_id == logged_in_user.id,
-                        UserNotification.notification_id == notification_id,
+            for notification_id in data.notification_ids:
+                user_notification_response = (
+                    await self.user_notification_repository.find_one(
+                        and_(
+                            UserNotification.user_id == logged_in_user.id,
+                            UserNotification.notification_id == notification_id,
+                        )
                     )
                 )
-            )
-            if not user_notification_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=user_notification_response.code,
-                    data=None,
-                    message=user_notification_response.message,
-                )
-            user_notification = user_notification_response.data
-            if not user_notification:
-                await self.logger.log(
-                    action="MarkNotificationAsSeen",
-                    entity="Notification",
-                    level="error",
-                    code=404,
-                    message=f"User notification not found",
-                    details={
-                        "error": f"No user notification found for user_id {logged_in_user.id} and notification_id {notification_id}"
-                    },
-                    source="NotificationService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="Notification not found",
-                )
-            if user_notification.seen:
-                return BaseResponseDto(
-                    success=True,
-                    code=200,
-                    data=True,
-                    message="Notification already marked as seen",
-                )
-            user_notification.seen = True
-            update_response = await self.user_notification_repository.update(
-                user_notification, ["seen"]
-            )
-            if not update_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=update_response.code,
-                    data=None,
-                    message=update_response.message,
-                )
+                if not user_notification_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=user_notification_response.code,
+                        data=None,
+                        message=user_notification_response.message,
+                    )
+                user_notification = user_notification_response.data
+                if not user_notification:
+                    await self.logger.log(
+                        action="MarkNotificationsAsSeen",
+                        entity="Notification",
+                        level="error",
+                        code=404,
+                        message=f"User notification not found",
+                        details={
+                            "error": f"No user notification found for user_id {logged_in_user.id} and notification_id {notification_id}"
+                        },
+                        source="NotificationService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message="Notification not found",
+                    )
+                if not user_notification.seen:
+                    user_notification.seen = True
+                    update_response = await self.user_notification_repository.update(
+                        user_notification, ["seen"]
+                    )
+                    if not update_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=update_response.code,
+                            data=None,
+                            message=update_response.message,
+                        )
             await self.logger.log(
-                action="MarkNotificationAsSeen",
+                action="MarkNotificationsAsSeen",
                 entity="Notification",
                 level="info",
                 code=200,
-                message=f"Notification marked as seen for user_id {logged_in_user.id} and notification_id {notification_id}",
+                message=f"{len(data.notification_ids)} Notifications marked as seen for user_id {logged_in_user.id} successfully",
                 details={},
                 source="NotificationService",
             )
@@ -341,11 +336,11 @@ class NotificationService(INotificationService):
                 success=True,
                 code=200,
                 data=True,
-                message="Notification marked as seen",
+                message="Notification marked as seen successfully",
             )
         except Exception as ex:
             await self.logger.log(
-                action="MarkNotificationAsSeen",
+                action="MarkNotificationsAsSeen",
                 entity="Notification",
                 level="error",
                 code=500,
