@@ -154,7 +154,7 @@ def create_event_organizer_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Add EventOrganizers")),
-            Depends(_validate("name", "details")),
+            Depends(_validate("name")),
         ],
         response_model=BaseResponseDto[EventOrganizerResponseDto],
         status_code=201,
@@ -173,7 +173,7 @@ def create_event_organizer_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Edit EventOrganizers")),
-            Depends(_validate("name", "details")),
+            Depends(_validate("name")),
         ],
         response_model=BaseResponseDto[EventOrganizerResponseDto],
         status_code=200,

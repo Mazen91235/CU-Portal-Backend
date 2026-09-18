@@ -230,21 +230,6 @@ class EventOrganizerService(IEventOrganizerService):
             data.details.pop("url", None)
             data.details.pop("urls", None)
             data.details.pop("links", None)
-            if not url:
-                await self.logger.log(
-                    action="Create",
-                    entity="EventOrganizer",
-                    level="warning",
-                    code=400,
-                    message="No valid Logo provided for the event organizer.",
-                    details={"details": data.details},
-                    source="EventOrganizerService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    message="No valid Logo provided for the event organizer.",
-                )
             create_response = await self.event_organizer_repository.create(data)
             if not create_response.success:
                 return BaseResponseDto(
@@ -269,73 +254,75 @@ class EventOrganizerService(IEventOrganizerService):
                     data=None,
                     message="An error occurred while creating event organizer.",
                 )
-            attachment_response = await self.helper_service.create_attachment(
-                is_file=True,
-                url=url,
-                author_id=logged_in_user.id,
-                source_name="event_organizer_logo_id",
-                source_id=created_event_organizer.id,
-            )
-            if not attachment_response.success:
-                await self.logger.log(
-                    action="Create",
-                    entity="EventOrganizer",
-                    level="warning",
-                    code=attachment_response.code or 500,
-                    message="Failed to create attachment for event organizer logo.",
-                    details={"url": url},
-                    source="EventOrganizerService",
+            updated_event_organizer = created_event_organizer
+            if url:
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=True,
+                    url=url,
+                    author_id=logged_in_user.id,
+                    source_name="event_organizer_logo_id",
+                    source_id=created_event_organizer.id,
                 )
-                return BaseResponseDto(
-                    success=False,
-                    code=attachment_response.code or 500,
-                    data=None,
-                    message=attachment_response.message,
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Create",
+                        entity="EventOrganizer",
+                        level="warning",
+                        code=attachment_response.code or 500,
+                        message="Failed to create attachment for event organizer logo.",
+                        details={"url": url},
+                        source="EventOrganizerService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code or 500,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Create",
+                        entity="EventOrganizer",
+                        level="error",
+                        code=500,
+                        message="Failed to create attachment for event organizer logo without a specific error.",
+                        details={"url": url},
+                        source="EventOrganizerService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while creating event organizer logo attachment.",
+                    )
+                created_event_organizer.logo_id = attachment.id
+                update_response = await self.event_organizer_repository.update(
+                    created_event_organizer, ["logo_id"]
                 )
-            attachment = attachment_response.data
-            if not attachment:
-                await self.logger.log(
-                    action="Create",
-                    entity="EventOrganizer",
-                    level="error",
-                    code=500,
-                    message="Failed to create attachment for event organizer logo without a specific error.",
-                    details={"url": url},
-                    source="EventOrganizerService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=500,
-                    data=None,
-                    message="An error occurred while creating event organizer logo attachment.",
-                )
-            created_event_organizer.logo_id = attachment.id
-            update_response = await self.event_organizer_repository.update(
-                created_event_organizer, ["logo_id"]
-            )
-            if not update_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=update_response.code,
-                    data=None,
-                    message=update_response.message,
-                )
-            updated_event_organizer = update_response.data
-            if not updated_event_organizer:
-                await self.logger.log(
-                    action="Create",
-                    entity="EventOrganizer",
-                    level="error",
-                    code=500,
-                    message="Failed to update event organizer with logo_id.",
-                    source="EventOrganizerService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=500,
-                    data=None,
-                    message="An error occurred while creating event organizer logo attachment.",
-                )
+                if not update_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=update_response.code,
+                        data=None,
+                        message=update_response.message,
+                    )
+                updated_event_organizer = update_response.data
+                if not updated_event_organizer:
+                    await self.logger.log(
+                        action="Create",
+                        entity="EventOrganizer",
+                        level="error",
+                        code=500,
+                        message="Failed to update event organizer with logo_id.",
+                        source="EventOrganizerService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while creating event organizer logo attachment.",
+                    )
             for url in urls:
                 attachment_response = await self.helper_service.create_attachment(
                     is_file=True,
@@ -588,23 +575,11 @@ class EventOrganizerService(IEventOrganizerService):
                     data=None,
                     message="An error occurred while updating event organizer",
                 )
-            if not url:
-                await self.logger.log(
-                    action="Update",
-                    entity="EventOrganizer",
-                    level="warning",
-                    code=400,
-                    message="No valid Logo provided for the event organizer update.",
-                    details={"details": data.details},
-                    source="EventOrganizerService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    message="No valid Logo provided for the event organizer update.",
-                )
-            if url != old_logo.url:
+            if not url and old_logo:
                 await self.helper_service.delete_attachment(attachment=old_logo)
+            elif url and (not old_logo or old_logo.url != url):
+                if old_logo:
+                    await self.helper_service.delete_attachment(attachment=old_logo)
                 attachment_response = await self.helper_service.create_attachment(
                     is_file=True,
                     url=url,
@@ -811,9 +786,12 @@ class EventOrganizerService(IEventOrganizerService):
 
     async def delete(self, data):
         try:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                EventOrganizer, ["logo", "attachments"]
+            )
             target_event_organizer_response = (
                 await self.event_organizer_repository.find_one(
-                    EventOrganizer.id == data.id
+                    EventOrganizer.id == data.id, dynamic_includes
                 )
             )
             if not target_event_organizer_response.success:
@@ -839,6 +817,9 @@ class EventOrganizerService(IEventOrganizerService):
                     data=None,
                     message="Event organizer not found",
                 )
+            to_be_removed_attachments = target_event_organizer.attachments or []
+            if target_event_organizer.logo:
+                to_be_removed_attachments.append(target_event_organizer.logo)
             delete_response = await self.event_organizer_repository.delete(
                 target_event_organizer
             )
@@ -849,6 +830,8 @@ class EventOrganizerService(IEventOrganizerService):
                     data=None,
                     message=delete_response.message,
                 )
+            for attachment in to_be_removed_attachments:
+                await self.helper_service.delete_attachment(attachment=attachment)
             await self.logger.log(
                 action="Delete",
                 entity="EventOrganizer",

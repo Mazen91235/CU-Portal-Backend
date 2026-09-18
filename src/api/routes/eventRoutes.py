@@ -227,8 +227,7 @@ def create_event_admin_router(
                     "price",
                     "location_type",
                     "location",
-                    "event_organizer_id",
-                    "details",
+                    "event_organizer_id"
                 )
             ),
         ],
@@ -257,8 +256,7 @@ def create_event_admin_router(
                     "price",
                     "location_type",
                     "location",
-                    "event_organizer_id",
-                    "details",
+                    "event_organizer_id"
                 )
             ),
         ],

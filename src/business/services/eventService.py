@@ -9,6 +9,7 @@ from core.entities.eventOrganizer import EventOrganizer
 from core.entities.notification import Notification
 from core.dtos.baseDtos import BaseResponseDto
 from core.utils.validator import Validator
+from core.utils.timezoneHandler import TimezoneHandler
 
 
 class EventService(IEventService):
@@ -316,21 +317,6 @@ class EventService(IEventService):
             data.details.pop("url", None)
             data.details.pop("urls", None)
             data.details.pop("links", None)
-            if not url:
-                await self.logger.log(
-                    action="Create",
-                    entity="Event",
-                    level="warning",
-                    code=400,
-                    message="No valid Logo provided for the event.",
-                    details={"details": data.details},
-                    source="EventService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    message="No valid Logo provided for the event.",
-                )
             create_response = await self.event_repository.create(data)
             if not create_response.success:
                 return BaseResponseDto(
@@ -355,73 +341,75 @@ class EventService(IEventService):
                     data=None,
                     message="An error occurred while creating event",
                 )
-            attachment_response = await self.helper_service.create_attachment(
-                is_file=True,
-                url=url,
-                author_id=logged_in_user.id,
-                source_name="event_logo_id",
-                source_id=created_event.id,
-            )
-            if not attachment_response.success:
-                await self.logger.log(
-                    action="Create",
-                    entity="Event",
-                    level="warning",
-                    code=attachment_response.code or 500,
-                    message="Failed to create attachment for event logo.",
-                    details={"url": url},
-                    source="EventService",
+            updated_event = created_event
+            if url:
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=True,
+                    url=url,
+                    author_id=logged_in_user.id,
+                    source_name="event_logo_id",
+                    source_id=created_event.id,
                 )
-                return BaseResponseDto(
-                    success=False,
-                    code=attachment_response.code or 500,
-                    data=None,
-                    message=attachment_response.message,
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Event",
+                        level="warning",
+                        code=attachment_response.code or 500,
+                        message="Failed to create attachment for event logo.",
+                        details={"url": url},
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code or 500,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Event",
+                        level="error",
+                        code=500,
+                        message="Failed to create attachment for event logo without a specific error.",
+                        details={"url": url},
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while creating event",
+                    )
+                created_event.logo_id = attachment.id
+                update_response = await self.event_repository.update(
+                    created_event, ["logo_id"]
                 )
-            attachment = attachment_response.data
-            if not attachment:
-                await self.logger.log(
-                    action="Create",
-                    entity="Event",
-                    level="error",
-                    code=500,
-                    message="Failed to create attachment for event logo without a specific error.",
-                    details={"url": url},
-                    source="EventService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=500,
-                    data=None,
-                    message="An error occurred while creating event",
-                )
-            created_event.logo_id = attachment.id
-            update_response = await self.event_repository.update(
-                created_event, ["logo_id"]
-            )
-            if not update_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=update_response.code,
-                    data=None,
-                    message=update_response.message,
-                )
-            updated_event = update_response.data
-            if not updated_event:
-                await self.logger.log(
-                    action="Create",
-                    entity="Event",
-                    level="error",
-                    code=500,
-                    message="Failed to update event with logo_id.",
-                    source="EventService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=500,
-                    data=None,
-                    message="An error occurred while creating event",
-                )
+                if not update_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=update_response.code,
+                        data=None,
+                        message=update_response.message,
+                    )
+                updated_event = update_response.data
+                if not updated_event:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Event",
+                        level="error",
+                        code=500,
+                        message="Failed to update event with logo_id.",
+                        source="EventService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="An error occurred while creating event",
+                    )
             for url in urls:
                 attachment_response = await self.helper_service.create_attachment(
                     is_file=True,
@@ -860,23 +848,11 @@ class EventService(IEventService):
                     data=None,
                     message="An error occurred while updating event",
                 )
-            if not url:
-                await self.logger.log(
-                    action="Update",
-                    entity="Event",
-                    level="warning",
-                    code=400,
-                    message="No valid Logo provided for the event update.",
-                    details={"details": data.details},
-                    source="EventService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    message="No valid Logo provided for the event update.",
-                )
-            if url != old_logo.url:
+            if not url and old_logo:
                 await self.helper_service.delete_attachment(attachment=old_logo)
+            elif url and (not old_logo or old_logo.url != url):
+                if old_logo:
+                    await self.helper_service.delete_attachment(attachment=old_logo)
                 attachment_response = await self.helper_service.create_attachment(
                     is_file=True,
                     url=url,
@@ -1232,9 +1208,9 @@ class EventService(IEventService):
                     data=None,
                     message="User does not have permission to delete this event.",
                 )
-            to_be_removed_attachments = [target_event.logo] + (
-                target_event.attachments or []
-            )
+            to_be_removed_attachments = target_event.attachments or []
+            if target_event.logo:
+                to_be_removed_attachments.append(target_event.logo)
             delete_response = await self.event_repository.delete(target_event)
             if not delete_response.success:
                 return BaseResponseDto(
@@ -1331,6 +1307,28 @@ class EventService(IEventService):
                 )
                 return BaseResponseDto(
                     success=False, code=404, data=None, message="Event not found"
+                )
+            if event.start_date <= TimezoneHandler.now():
+                await self.logger.log(
+                    action="Register",
+                    entity="Event",
+                    level="warning",
+                    code=400,
+                    message="Cannot register for an event that has already started.",
+                    details={
+                        "user_id": logged_in_user.id,
+                        "event_id": event.id,
+                        "event_start_date": TimezoneHandler.to_isoformat(
+                            event.start_date
+                        ),
+                    },
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Cannot register for an event that has already started.",
                 )
             existing_registration_response = await self.user_event_repository.find_one(
                 and_(
@@ -1478,6 +1476,28 @@ class EventService(IEventService):
                 )
                 return BaseResponseDto(
                     success=False, code=404, data=None, message="Event not found"
+                )
+            if event.start_date <= TimezoneHandler.now():
+                await self.logger.log(
+                    action="Unregister",
+                    entity="Event",
+                    level="warning",
+                    code=400,
+                    message="Cannot unregister from an event that has already started.",
+                    details={
+                        "user_id": logged_in_user.id,
+                        "event_id": event.id,
+                        "event_start_date": TimezoneHandler.to_isoformat(
+                            event.start_date
+                        ),
+                    },
+                    source="EventService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Cannot unregister from an event that has already started.",
                 )
             existing_registration_response = await self.user_event_repository.find_one(
                 and_(
