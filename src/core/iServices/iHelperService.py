@@ -233,6 +233,13 @@ class IHelperService(ABC, Generic[U]):
         pass
 
     @abstractmethod
+    async def update_attachment(
+        self,
+        attachment: Attachment,
+    ) -> BaseResponseDto[Attachment]:
+        pass
+
+    @abstractmethod
     async def delete_attachment(
         self,
         attachment_id: int | None = None,

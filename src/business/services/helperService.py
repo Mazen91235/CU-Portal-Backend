@@ -2675,6 +2675,52 @@ class HelperService(IHelperService[U]):
                 message="An error occurred while creating the attachment, please try again later",
                 error=repr(ex),
             )
+            
+    async def update_attachment(
+        self,
+        attachment,
+    ):
+        try:
+            if not attachment:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Attachment object with valid ID is required for update",
+                    error="No valid attachment object provided for update",
+                )
+            update_response = await self.attachment_repository.update(attachment)
+            if not update_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_response.code,
+                    data=None,
+                    message=update_response.message,
+                    error=update_response.error,
+                )
+            updated_attachment = update_response.data
+            if not updated_attachment:
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="Failed to update attachment",
+                    error=f"Attachment update returned no data for ID: {attachment.id}",
+                )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=updated_attachment,
+                message="Attachment updated successfully",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while updating the attachment, please try again later",
+                error=repr(ex),
+            )
 
     async def delete_attachment(
         self,

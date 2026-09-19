@@ -365,7 +365,7 @@ class EventOrganizerService(IEventOrganizerService):
                         message="An error occurred while creating event organizer logo attachment.",
                     )
             for link in links:
-                link_name = link.get("name", link.get("title", ""))
+                link_name = link.get("name") or link.get("title") or "Untitled Link"
                 link_url = link.get("url", "")
                 attachment_response = await self.helper_service.create_attachment(
                     is_file=False,
@@ -652,12 +652,6 @@ class EventOrganizerService(IEventOrganizerService):
                 for u in urls
                 if u not in [a.url for a in old_attachments if a.is_file]
             ]
-            new_links = [
-                l
-                for l in links
-                if l.get("url", "")
-                not in [a.url for a in old_attachments if not a.is_file]
-            ]
             to_be_removed_attachments = []
             for attachment in old_attachments:
                 if attachment.is_file and attachment.url not in urls:
@@ -709,9 +703,26 @@ class EventOrganizerService(IEventOrganizerService):
                         data=None,
                         message="An error occurred while updating event organizer logo attachment",
                     )
-            for link in new_links:
-                link_name = link.get("name", link.get("title", ""))
+            for link in links:
+                link_name = link.get("name") or link.get("title") or "Untitled Link"
                 link_url = link.get("url", "")
+                attachment = next(
+                    (a for a in old_attachments if a.url == link_url and not a.is_file),
+                    None,
+                )
+                if attachment:
+                    attachment.details["link_title"] = link_name
+                    attachment_response = await self.helper_service.update_attachment(
+                        attachment=attachment
+                    )
+                    if not attachment_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=attachment_response.code,
+                            data=None,
+                            message=attachment_response.message,
+                        )
+                    continue
                 attachment_response = await self.helper_service.create_attachment(
                     is_file=False,
                     url=link_url,

@@ -73,7 +73,7 @@ class AttachmentService(IAttachmentService):
                         source_id=announcement.id,
                     )
                 for link in announcement.links:
-                    link_name = link.get("name", link.get("title", ""))
+                    link_name = link.get("name") or link.get("title") or "Untitled Link"
                     link_url = link.get("url", "")
                     await self.helper_service.create_attachment(
                         is_file=False,
@@ -155,7 +155,7 @@ class AttachmentService(IAttachmentService):
                         source_id=task.id,
                     )
                 for link in task.links:
-                    link_name = link.get("name", link.get("title", ""))
+                    link_name = link.get("name") or link.get("title") or "Untitled Link"
                     link_url = link.get("url", "")
                     await self.helper_service.create_attachment(
                         is_file=False,
@@ -313,7 +313,7 @@ class AttachmentService(IAttachmentService):
                 data=None,
                 message="An error occurred while validating attachments, please try again later",
             )
-            
+
     # Helper Functions
     async def _validate(self):
         async with self.session_factory() as session:
@@ -323,7 +323,10 @@ class AttachmentService(IAttachmentService):
                     Attachment, ["material", "pending_user.user"]
                 )
                 attachments_response = await self.attachment_repository.find(
-                    Attachment.is_file == True, dynamic_includes, limit=int(1e6), session=session
+                    Attachment.is_file == True,
+                    dynamic_includes,
+                    limit=int(1e6),
+                    session=session,
                 )
                 if not attachments_response.success:
                     await session.rollback()
@@ -341,12 +344,17 @@ class AttachmentService(IAttachmentService):
                             attachment.url
                         )
                     )
-                    if not file_exists_response.success or not file_exists_response.data:
+                    if (
+                        not file_exists_response.success
+                        or not file_exists_response.data
+                    ):
                         await self.logger.log(
                             action="BackgroundValidate",
                             entity="Attachment",
                             level=(
-                                "error" if not file_exists_response.success else "warning"
+                                "error"
+                                if not file_exists_response.success
+                                else "warning"
                             ),
                             code=(
                                 (file_exists_response.code or 500)
@@ -373,7 +381,9 @@ class AttachmentService(IAttachmentService):
                                 message=f"File for attachment with ID {attachment.id} does not exist on Google Drive. Deleting Material with ID {attachment.material.id} as well.",
                                 source="AttachmentService",
                             )
-                            await self.material_repository.delete(attachment.material, session=session)
+                            await self.material_repository.delete(
+                                attachment.material, session=session
+                            )
                         elif (
                             attachment.pending_user is not None
                             and attachment.pending_user.user is not None
@@ -386,8 +396,12 @@ class AttachmentService(IAttachmentService):
                                 message=f"File for attachment with ID {attachment.id} does not exist on Google Drive. Deleting User with ID {attachment.pending_user.user.id} and PendingUser with ID {attachment.pending_user.id} as well.",
                                 source="AttachmentService",
                             )
-                            await self.user_repository.delete(attachment.pending_user.user, session=session)
-                        await self.helper_service.delete_attachment(attachment=attachment, session=session)
+                            await self.user_repository.delete(
+                                attachment.pending_user.user, session=session
+                            )
+                        await self.helper_service.delete_attachment(
+                            attachment=attachment, session=session
+                        )
                         deleted += 1
                 await session.commit()
                 await self.logger.log(
