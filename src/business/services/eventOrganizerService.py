@@ -787,7 +787,7 @@ class EventOrganizerService(IEventOrganizerService):
     async def delete(self, data):
         try:
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                EventOrganizer, ["logo", "attachments"]
+                EventOrganizer, ["logo", "attachments", "events"]
             )
             target_event_organizer_response = (
                 await self.event_organizer_repository.find_one(
@@ -816,6 +816,21 @@ class EventOrganizerService(IEventOrganizerService):
                     code=404,
                     data=None,
                     message="Event organizer not found",
+                )
+            if len(target_event_organizer.events) > 0:
+                await self.logger.log(
+                    action="Delete",
+                    entity="EventOrganizer",
+                    level="warning",
+                    code=400,
+                    message="Cannot delete event organizer with associated events.",
+                    source="EventOrganizerService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Cannot delete event organizer with associated events.",
                 )
             to_be_removed_attachments = target_event_organizer.attachments or []
             if target_event_organizer.logo:
