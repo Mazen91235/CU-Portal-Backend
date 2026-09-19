@@ -36,6 +36,8 @@ class CachingHandler:
             await self.invalidate_module_cache("user")
         if any([x in module for x in ["material"]]):
             await self.invalidate_module_cache("week")
+        if any([x in module for x in ["event"]]):
+            await self.invalidate_module_cache("event")
 
     async def acquire_lock(self, lock_key: str, expire: int = 60) -> bool:
         acquired = await self.redis_client.set(lock_key, "1", nx=True, ex=expire)
