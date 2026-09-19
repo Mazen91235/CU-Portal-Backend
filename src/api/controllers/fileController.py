@@ -14,14 +14,7 @@ class FileController(IFileController):
     async def download(self, request, id):
         try:
             if not Validator.validate_hostname_is_background_worker(request.url.hostname or ""):
-                background_url = self._generate_background_download_url(request)
-                if not background_url:
-                    return ResponseHandler.generate_response(
-                        success=False,
-                        code=500,
-                        message="Background download server is not configured",
-                    )
-                return ResponseHandler.generate_redirect_response(background_url)
+                return ResponseHandler.generate_redirect_response()
 
             download_response = await self.helper_service.download_file_from_drive(id)
             if not download_response.success:
@@ -67,11 +60,3 @@ class FileController(IFileController):
             raise Exception(
                 "An error occurred while processing the request, please try again later"
             )
-
-    # Helper Functions
-    def _generate_background_download_url(self, request):
-        background_url = os.environ.get("BACKGROUND_WORKER_URL")
-        if not background_url:
-            return None
-        query = f"?{request.url.query}" if request.url.query else ""
-        return f"{background_url.rstrip('/')}{request.url.path}{query}"

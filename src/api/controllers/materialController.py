@@ -402,14 +402,7 @@ class MaterialController(IMaterialController):
     async def download_many(self, request, data):
         try:
             if not Validator.validate_hostname_is_background_worker(request.url.hostname or ""):
-                background_url = self._generate_background_download_url(request)
-                if not background_url:
-                    return ResponseHandler.generate_response(
-                        success=False,
-                        code=500,
-                        message="Background download server is not configured",
-                    )
-                return ResponseHandler.generate_redirect_response(background_url)
+                return ResponseHandler.generate_redirect_response()
 
             response = await self.material_service.download_many(data)
             if not response.success:
@@ -489,11 +482,3 @@ class MaterialController(IMaterialController):
                 code=500,
                 message="An error occurred while processing the request, please try again later",
             )
-
-    # Helper Functions
-    def _generate_background_download_url(self, request):
-        background_url = os.environ.get("BACKGROUND_WORKER_URL")
-        if not background_url:
-            return None
-        query = f"?{request.url.query}" if request.url.query else ""
-        return f"{background_url.rstrip('/')}{request.url.path}{query}"

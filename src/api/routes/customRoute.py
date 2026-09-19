@@ -209,23 +209,18 @@ async def _check_for_redirect(request: Request):
     if not request.cookies.get("token"):
         return None
     token = StringHandler.generate_random_string(32)
+    response = ResponseHandler.generate_redirect_response(token=token)
     await caching_handler.set(token, {"token": request.cookies.get("token", "")})
-    query = (
-        f"?token={token}"
-        if request.url.query == ""
-        else f"?{request.url.query}&token={token}"
-    )
-    redirect_url = f"{os.environ.get('BACKGROUND_WORKER_URL', 'http://localhost:8001')}{request.url.path}{query}"
     modules_to_redirect = ["material", "file", "attachment"]
     if any(module in request.url.path for module in modules_to_redirect):
-        return ResponseHandler.generate_redirect_response(redirect_url)
+        return response
     body_bytes = await request.body()
     try:
         body_json = json.loads(body_bytes) if body_bytes else {}
     except Exception:
         body_json = {}
     if "url" in body_json and Validator.is_valid_drive_url(body_json["url"]):
-        return ResponseHandler.generate_redirect_response(redirect_url)
+        return response
     if "details" in body_json and isinstance(body_json["details"], dict):
         details = body_json["details"]
         if (
@@ -233,19 +228,19 @@ async def _check_for_redirect(request: Request):
             and details["url"]
             and Validator.is_valid_drive_url(details["url"])
         ):
-            return ResponseHandler.generate_redirect_response(redirect_url)
+            return response
         if (
             "avatar" in details
             and details["avatar"]
             and Validator.is_valid_drive_url(details["avatar"])
         ):
-            return ResponseHandler.generate_redirect_response(redirect_url)
+            return response
         if (
             "urls" in details
             and isinstance(details["urls"], list)
             and any(Validator.is_valid_drive_url(url) for url in details["urls"])
         ):
-            return ResponseHandler.generate_redirect_response(redirect_url)
+            return response
     return None
 
 

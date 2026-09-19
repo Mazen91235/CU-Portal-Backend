@@ -5,7 +5,7 @@ from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
 from core.utils.cookieHandler import CookieHandler
-from core.utils.parser import Parser
+from core.utils.validator import Validator
 from core.utils.oauthHandler import OAuthHandler
 from core.utils.timezoneHandler import TimezoneHandler
 from core.utils.jsonHandler import JSONHandler
@@ -552,19 +552,24 @@ class UserController(IUserController):
         try:
             token_details_stringified = CookieHandler.get_cookie(request, "saved_token")
             if not token_details_stringified:
-                await self.logger.log(
-                    action="GetTokenDetails",
-                    entity="User",
-                    level="warning",
-                    code=400,
-                    message="No saved token found in cookies for retrieving token details",
-                    source="UserController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="No saved token found in cookies for retrieving token details",
-                )
+                if Validator.validate_hostname_is_background_worker(
+                    request.url.hostname or ""
+                ):
+                    await self.logger.log(
+                        action="GetTokenDetails",
+                        entity="User",
+                        level="warning",
+                        code=400,
+                        message="No saved token found in cookies for retrieving token details",
+                        source="UserController",
+                    )
+                    return ResponseHandler.generate_response(
+                        success=False,
+                        code=400,
+                        message="No saved token found in cookies for retrieving token details",
+                    )
+                else:
+                    return ResponseHandler.generate_redirect_response()
             token_details = JSONHandler.parse(token_details_stringified)
             if not token_details:
                 await self.logger.log(
@@ -638,19 +643,24 @@ class UserController(IUserController):
             token_details_stringified = CookieHandler.get_cookie(request, "saved_token")
             if not token_details_stringified:
                 await self.user_service.rollback_transaction()
-                await self.logger.log(
-                    action="ResendToken",
-                    entity="User",
-                    level="warning",
-                    code=400,
-                    message="No saved token found in cookies for resending token",
-                    source="UserController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="No saved token found in cookies for resending token",
-                )
+                if Validator.validate_hostname_is_background_worker(
+                    request.url.hostname or ""
+                ):
+                    await self.logger.log(
+                        action="ResendToken",
+                        entity="User",
+                        level="warning",
+                        code=400,
+                        message="No saved token found in cookies for resending token",
+                        source="UserController",
+                    )
+                    return ResponseHandler.generate_response(
+                        success=False,
+                        code=400,
+                        message="No saved token found in cookies for resending token",
+                    )
+                else:
+                    return ResponseHandler.generate_redirect_response()
             token_details = JSONHandler.parse(token_details_stringified)
             if not token_details:
                 await self.user_service.rollback_transaction()

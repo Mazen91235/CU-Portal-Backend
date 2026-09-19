@@ -1,3 +1,4 @@
+import os
 import asyncio
 import urllib.parse
 from collections.abc import AsyncIterable, Iterable
@@ -38,8 +39,23 @@ class ResponseHandler:
         return response
 
     @staticmethod
-    def generate_redirect_response(redirect_url: str):
+    def generate_redirect_response(
+        redirect_url: str | None = None, token: str | None = None
+    ):
         request = request_context.get(None)
+        if not redirect_url:
+            if not request:
+                raise ValueError("Either redirect_url or request must be provided.")
+            else:
+                if token:
+                    query = (
+                        f"?token={token}"
+                        if request.url.query == ""
+                        else f"?{request.url.query}&token={token}"
+                    )
+                else:
+                    query = f"?{request.url.query}" if request.url.query else ""
+                redirect_url = f"{os.environ.get('BACKGROUND_WORKER_URL', 'http://localhost:8001')}{request.url.path}{query}"
         response = RedirectResponse(redirect_url)
         if request and hasattr(request.state, "background"):
             task = asyncio.create_task(request.state.background)
