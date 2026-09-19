@@ -2,6 +2,7 @@ import os
 from fastapi import HTTPException
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
 from core.iLoggers.iBaseLogger import IBaseLogger
+from core.utils.validator import Validator
 
 
 class ValidationMiddleware(IValidationMiddleware):
@@ -26,7 +27,35 @@ class ValidationMiddleware(IValidationMiddleware):
             raise
         except Exception as ex:
             await self.logger.log(
-                action="ValidationError",
+                action="Validate",
+                entity="Request",
+                level="error",
+                code=400,
+                message="An error occurred during request validation.",
+                details={"error": repr(ex)},
+                source="ValidationMiddleware",
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="An error occurred during request validation. Please try again later.",
+            )
+
+    async def validate_details_numbers(self, request, *keys):
+        try:
+            data = await request.json()
+            details = data.get("details", {})
+            for key in keys:
+                if key in details and not Validator.is_number(details[key]):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Invalid value for {key}: must be a number",
+                    )
+            return
+        except HTTPException:
+            raise
+        except Exception as ex:
+            await self.logger.log(
+                action="ValidateDetailsNumbers",
                 entity="Request",
                 level="error",
                 code=400,
@@ -52,7 +81,7 @@ class ValidationMiddleware(IValidationMiddleware):
             raise
         except Exception as ex:
             await self.logger.log(
-                action="APIKeyValidationError",
+                action="ValidateAPIKey",
                 entity="Request",
                 level="error",
                 code=400,
