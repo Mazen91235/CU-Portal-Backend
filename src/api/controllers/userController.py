@@ -301,6 +301,14 @@ class UserController(IUserController):
     async def login_with_google(self, request):
         try:
             await self.user_service.begin_transaction()
+            logout_response = await self.user_service.logout()
+            if not logout_response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=logout_response.code,
+                    message=logout_response.message,
+                )
             response = await self.user_service.login_with_google()
             if not response.success:
                 await self.user_service.rollback_transaction()

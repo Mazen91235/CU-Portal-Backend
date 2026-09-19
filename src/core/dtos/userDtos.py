@@ -157,15 +157,6 @@ class UserSearchDto(BaseSearchDto):
     )
     year_id: int | None = Field(default=None, description="ID of Year to filter by")
     status: bool | None = Field(default=None, description="Whether the user is active")
-    refresh_token: str | None = Field(
-        default=None, description="Refresh token to filter by"
-    )
-    refresh_expire_at_from: datetime | None = Field(
-        default=None, description="Refresh token expiration date to filter by (>=)"
-    )
-    refresh_expire_at_to: datetime | None = Field(
-        default=None, description="Refresh token expiration date to filter by (<=)"
-    )
 
 
 # User-Specific DTOs

@@ -177,7 +177,7 @@ def create_auth_router(
 
     @router.get(
         "/login-with-google",
-        dependencies=[Depends(allow_inactive())],
+        dependencies=[Depends(_is_logged_in(False)), Depends(allow_inactive())],
         summary="Login with Google",
         description="Initiates the Google login process and redirects the user to the Google authentication page.",
     )

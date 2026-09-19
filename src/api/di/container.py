@@ -511,6 +511,7 @@ class Container(containers.DeclarativeContainer):
     auth_middleware = providers.Factory(
         AuthMiddleware,
         user_service=user_service,
+        token_repository=token_repository,
         logger=logger,
     )
 

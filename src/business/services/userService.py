@@ -792,52 +792,44 @@ class UserService(IUserService):
             )
 
     # User Specific Functions
-    async def _invalidate_tokens(self, user_id: int):
+    async def _invalidate_current_token(self, refresh_token: str | None):
         try:
-            user_response = await self.user_repository.find_one(User.id == user_id)
-            if not user_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=user_response.code,
-                    data=False,
-                    message=user_response.message,
+            if not refresh_token:
+                return BaseResponseDto(success=True, data=True)
+
+            token_response = await self.token_repository.find_one(
+                and_(
+                    Token.token == refresh_token,
+                    Token.token_type == Token.TokenType.REFRESH_TOKEN["value"],
                 )
-            user = user_response.data
-            if not user:
-                await self.logger.log(
-                    action="InvalidateTokens",
-                    entity="User",
-                    level="warning",
-                    code=404,
-                    message="User not found with this ID",
-                    source="UserService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=False,
-                    message="User not found",
-                )
-            user.refresh_token = None
-            user.refresh_expire_at = TimezoneHandler.add_minutes(-1)
-            update_user_response = await self.user_repository.update(
-                user, ["refresh_token", "refresh_expire_at"]
             )
-            if not update_user_response.success:
+            if not token_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=update_user_response.code,
+                    code=token_response.code,
                     data=False,
-                    message=update_user_response.message,
+                    message=token_response.message,
                 )
+
+            token_record = token_response.data
+            if token_record:
+                delete_response = await self.token_repository.delete(token_record)
+                if not delete_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=delete_response.code,
+                        data=False,
+                        message=delete_response.message,
+                    )
+
             return BaseResponseDto(success=True, data=True)
         except Exception as ex:
             await self.logger.log(
-                action="InvalidateTokens",
+                action="InvalidateCurrentToken",
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while invalidating tokens",
+                message="An error occurred while invalidating current refresh token",
                 details={"error": repr(ex)},
                 source="UserService",
             )
@@ -845,7 +837,7 @@ class UserService(IUserService):
                 success=False,
                 code=500,
                 data=False,
-                message="An error occurred while invalidating tokens",
+                message="An error occurred while invalidating current refresh token",
             )
 
     async def _login(
@@ -878,31 +870,36 @@ class UserService(IUserService):
                     data=None,
                     message="User not found",
                 )
-            user.refresh_token = StringHandler.generate_random_string(
+
+            refresh_token = StringHandler.generate_random_string(
                 Token.STANDARD_LENGTH
             )
-            user.refresh_expire_at = TimezoneHandler.add_days(
-                User.RefreshToken.EXPIRE_DAYS
+            expires_at = TimezoneHandler.add_days(User.RefreshToken.EXPIRE_DAYS)
+            refresh_token_record = Token(
+                user_id=user.id,
+                token=refresh_token,
+                token_type=Token.TokenType.REFRESH_TOKEN["value"],
+                expires_at=expires_at,
+                is_valid=True,
             )
-            user.google_refresh_token = google_refresh_token
-            update_user_response = await self.user_repository.update(
-                user, ["refresh_token", "refresh_expire_at", "google_refresh_token"]
+            create_token_response = await self.token_repository.create(
+                refresh_token_record
             )
-            if not update_user_response.success:
+            if not create_token_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=update_user_response.code,
+                    code=create_token_response.code,
                     data=None,
-                    message=update_user_response.message,
+                    message=create_token_response.message,
                 )
-            updated_user = update_user_response.data
-            if not updated_user:
+            created_token = create_token_response.data
+            if not created_token:
                 await self.logger.log(
                     action="Login",
                     entity="User",
                     level="error",
                     code=500,
-                    message="Failed to update user with new refresh token",
+                    message="Failed to create refresh token",
                     source="UserService",
                 )
                 return BaseResponseDto(
@@ -911,6 +908,20 @@ class UserService(IUserService):
                     data=None,
                     message="An error occurred while logging in user, please try again.",
                 )
+
+            user.google_refresh_token = google_refresh_token
+            update_user_response = await self.user_repository.update(
+                user, ["google_refresh_token"]
+            )
+            if not update_user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_user_response.code,
+                    data=None,
+                    message=update_user_response.message,
+                )
+            updated_user = update_user_response.data or user
+
             await self.logger.log(
                 action="Login",
                 entity="User",
@@ -921,7 +932,7 @@ class UserService(IUserService):
             )
             response = UserLoginResponseDto(
                 user=updated_user,
-                token=updated_user.refresh_token or "",
+                token=refresh_token,
                 redirect_url=redirect_url,
                 token_expiration=User.RefreshToken.EXPIRE_DAYS
                 * 24
@@ -935,7 +946,7 @@ class UserService(IUserService):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while logging in user",
+                message="An error occurred while logging in user",
                 details={"error": repr(ex)},
                 source="UserService",
             )
@@ -1375,10 +1386,11 @@ class UserService(IUserService):
             state = StringHandler.generate_random_string(User.GoogleToken.TOKEN_LENGTH)
             nonce = StringHandler.generate_random_string(User.GoogleToken.TOKEN_LENGTH)
             state_token = Token(
+                user_id=logged_in_user.id,
                 token=state,
                 token_type=Token.TokenType.GOOGLE_TOKEN["value"],
                 expires_at=TimezoneHandler.add_hours(User.GoogleToken.EXPIRE_HOURS),
-                details={"nonce": nonce, "user_id": logged_in_user.id},
+                details={"nonce": nonce},
                 is_valid=True,
             )
             create_token_response = await self.token_repository.create(state_token)
@@ -1484,9 +1496,7 @@ class UserService(IUserService):
             details["nonce"] = (
                 state_token.details.get("nonce") if state_token.details else None
             )
-            user_id = (
-                state_token.details.get("user_id") if state_token.details else None
-            )
+            user_id = state_token.user_id
             token = await OAuthHandler.authorize_google_access_token(
                 request,
                 nonce=details.get("nonce"),
@@ -1735,15 +1745,20 @@ class UserService(IUserService):
                     data=True,
                     message="Successfully logged out",
                 )
+
             user = user_response.data
-            invalidate_tokens_response = await self._invalidate_tokens(user.id)
-            if not invalidate_tokens_response.success:
+            invalidate_token_response = await self._invalidate_current_token(
+                user.refresh_token
+            )
+            if not invalidate_token_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=invalidate_tokens_response.code,
+                    code=invalidate_token_response.code,
                     data=False,
-                    message=invalidate_tokens_response.message,
+                    message=invalidate_token_response.message,
                 )
+
+            user.refresh_token = None
             await self.logger.log(
                 action="Logout",
                 entity="User",
@@ -2105,46 +2120,70 @@ class UserService(IUserService):
                     message=user_response.message,
                 )
             user = user_response.data
-            if not user:
+            if not user or not user.refresh_token:
                 await self.logger.log(
                     action="RefreshToken",
                     entity="User",
                     level="warning",
                     code=404,
-                    message="Logged in user not found for token refresh",
+                    message="Logged in user or refresh token not found for token refresh",
                     source="UserService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=404,
                     data=None,
-                    message="Logged in user not found, please log in again.",
+                    message="Refresh token not found, please log in again.",
                 )
-            new_refresh_token = StringHandler.generate_random_string(
-                Token.STANDARD_LENGTH
+
+            token_response = await self.token_repository.find_one(
+                and_(
+                    Token.token == user.refresh_token,
+                    Token.token_type == Token.TokenType.REFRESH_TOKEN["value"],
+                    Token.expires_at > TimezoneHandler.now("UTC"),
+                    Token.is_valid.is_(True),
+                )
             )
-            new_expires_at = TimezoneHandler.add_days(User.RefreshToken.EXPIRE_DAYS)
-            user.refresh_token = new_refresh_token
-            user.refresh_expire_at = new_expires_at
-            update_user_response = await self.user_repository.update(
-                user, ["refresh_token", "refresh_expire_at"]
-            )
-            if not update_user_response.success:
+            if not token_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=update_user_response.code,
+                    code=token_response.code,
                     data=None,
-                    message=update_user_response.message,
+                    message=token_response.message,
                 )
+
+            token_record = token_response.data
+            if not token_record:
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message="Refresh token not found or expired, please log in again.",
+                )
+
+            token_record.expires_at = TimezoneHandler.add_days(User.RefreshToken.EXPIRE_DAYS)
+            update_token_response = await self.token_repository.update(
+                token_record, ["expires_at"]
+            )
+            if not update_token_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_token_response.code,
+                    data=None,
+                    message=update_token_response.message,
+                )
+
             await self.logger.log(
                 action="RefreshToken",
                 entity="User",
                 level="info",
                 code=200,
-                message="User refresh token updated successfully",
+                message="User refresh token expiration extended successfully",
                 source="UserService",
             )
-            response_data = UserLoginResponseDto(user=user, token=new_refresh_token)
+            response_data = UserLoginResponseDto(
+                user=user, token=user.refresh_token
+            )
             return BaseResponseDto(
                 success=True,
                 code=200,
