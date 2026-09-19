@@ -880,6 +880,20 @@ class HelperService(IHelperService[U]):
                         getattr(cls, "year_id").is_(None),
                         getattr(cls, "year_id") == user.year_id,
                     )
+            if cls.__name__.lower() == "note" and "/user" in request.url.path.lower():
+                if result is not None:
+                    result = and_(
+                        result,
+                        or_(
+                            getattr(cls, "author_id").is_(None),
+                            getattr(cls, "author_id") == user.id,
+                        ),
+                    )
+                else:
+                    result = or_(
+                        getattr(cls, "author_id").is_(None),
+                        getattr(cls, "author_id") == user.id,
+                    )
 
         return result
 
@@ -942,7 +956,9 @@ class HelperService(IHelperService[U]):
                                 Faculty, ["users"]
                             )
                             faculty_response = await self.faculty_repository.find_one(
-                                Faculty.id == faculty_id, dynamic_includes, session=session
+                                Faculty.id == faculty_id,
+                                dynamic_includes,
+                                session=session,
                             )
                             if not faculty_response.success:
                                 await session.rollback()
@@ -962,7 +978,9 @@ class HelperService(IHelperService[U]):
                                 )
                                 return return_response
                             if len(user_ids) < 1:
-                                user_ids.update([user.id for user in (faculty.users or [])])
+                                user_ids.update(
+                                    [user.id for user in (faculty.users or [])]
+                                )
                             else:
                                 user_ids.intersection_update(
                                     [user.id for user in (faculty.users or [])]
@@ -971,10 +989,12 @@ class HelperService(IHelperService[U]):
                             dynamic_includes = self.generate_dynamic_includes(
                                 Department, ["users"]
                             )
-                            department_response = await self.department_repository.find_one(
-                                Department.id == department_id,
-                                dynamic_includes,
-                                session=session,
+                            department_response = (
+                                await self.department_repository.find_one(
+                                    Department.id == department_id,
+                                    dynamic_includes,
+                                    session=session,
+                                )
                             )
                             if not department_response.success:
                                 await session.rollback()
@@ -1026,7 +1046,9 @@ class HelperService(IHelperService[U]):
                                 )
                                 return return_response
                             if len(user_ids) < 1:
-                                user_ids.update([user.id for user in (year.users or [])])
+                                user_ids.update(
+                                    [user.id for user in (year.users or [])]
+                                )
                             else:
                                 user_ids.intersection_update(
                                     [user.id for user in (year.users or [])]
@@ -1036,7 +1058,9 @@ class HelperService(IHelperService[U]):
                                 Subject, ["user_subject_links.user"]
                             )
                             subject_response = await self.subject_repository.find_one(
-                                Subject.id == subject_id, dynamic_includes, session=session
+                                Subject.id == subject_id,
+                                dynamic_includes,
+                                session=session,
                             )
                             if not subject_response.success:
                                 await session.rollback()
@@ -1056,7 +1080,9 @@ class HelperService(IHelperService[U]):
                                 )
                                 return return_response
                             if len(user_ids) < 1:
-                                user_ids.update([user.id for user in (subject.users or [])])
+                                user_ids.update(
+                                    [user.id for user in (subject.users or [])]
+                                )
                             else:
                                 user_ids.intersection_update(
                                     [user.id for user in (subject.users or [])]
@@ -1366,7 +1392,7 @@ class HelperService(IHelperService[U]):
                 message="An error occurred while sending notification to background worker",
                 error=repr(ex),
             )
-            
+
     async def send_notification(
         self,
         notification_type,
@@ -2675,7 +2701,7 @@ class HelperService(IHelperService[U]):
                 message="An error occurred while creating the attachment, please try again later",
                 error=repr(ex),
             )
-            
+
     async def update_attachment(
         self,
         attachment,
