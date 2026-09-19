@@ -63,6 +63,7 @@ ALLOWED_ORIGINS = {
     "http://localhost:3000",
     "http://localhost:5173",
     "https://cu-portal-dev.vercel.app",
+    "https://n1j6xg2q-5173.uks1.devtunnels.ms",
     "https://api-cu-portal-dev.vercel.app",
     "https://cu-portal-backend-dev.onrender.com",
     "https://cu-portal.com",
