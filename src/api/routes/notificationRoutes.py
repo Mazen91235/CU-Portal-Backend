@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute, set_timeout
+from api.routes.customRoute import CustomRoute, set_timeout, allow_inactive
 from core.iControllers.iNotificationController import INotificationController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -103,7 +103,7 @@ def create_notification_user_router(controller_provider, auth_middleware_provide
 
     @router.get(
         "/",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto[list[NotificationResponseDto]],
         summary="Get Notifications (User)",
         description="Retrieves a paginated list of notifications for the logged-in user.",
@@ -119,7 +119,7 @@ def create_notification_user_router(controller_provider, auth_middleware_provide
 
     @router.patch(
         "/seen",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto,
         summary="Mark Notifications as Seen",
         description="Marks multiple notifications as seen for the logged-in user.",

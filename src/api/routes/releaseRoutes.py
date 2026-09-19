@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, allow_inactive
 from core.iControllers.iReleaseController import IReleaseController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -36,9 +36,7 @@ def create_release_user_router(controller_provider, auth_middleware_provider):
 
     @router.get(
         "/versions",
-        dependencies=[
-            Depends(_is_logged_in),
-        ],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto[list[VersionResponseDto]],
         status_code=200,
         summary="Find Release Versions",
@@ -52,9 +50,7 @@ def create_release_user_router(controller_provider, auth_middleware_provider):
 
     @router.get(
         "/{release_id}",
-        dependencies=[
-            Depends(_is_logged_in),
-        ],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto[ReleaseResponseDto],
         status_code=200,
         summary="Find Release",
@@ -69,9 +65,7 @@ def create_release_user_router(controller_provider, auth_middleware_provider):
 
     @router.get(
         "/",
-        dependencies=[
-            Depends(_is_logged_in),
-        ],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto[list[ReleaseResponseDto]],
         status_code=200,
         summary="Find Releases",
