@@ -602,7 +602,7 @@ class UserService(IUserService):
                 message="User created successfully",
                 source="UserService",
             )
-            response = UserSignUpResponseDto(token=token_str)
+            response = UserSignUpResponseDto(token=FernetHandler.encrypt(token_str))
             return BaseResponseDto(success=True, code=201, data=response)
         except Exception as ex:
             await self.logger.log(
@@ -1794,7 +1794,7 @@ class UserService(IUserService):
         try:
             token_response = await self.token_repository.find_one(
                 and_(
-                    Token.token == token,
+                    Token.token == FernetHandler.decrypt(token),
                     Token.expires_at > TimezoneHandler.now("UTC"),
                 )
             )
@@ -1916,7 +1916,7 @@ class UserService(IUserService):
         try:
             token_response = await self.token_repository.find_one(
                 and_(
-                    Token.token == token,
+                    Token.token == FernetHandler.decrypt(token),
                     Token.expires_at > TimezoneHandler.now("UTC"),
                 )
             )
@@ -2089,7 +2089,7 @@ class UserService(IUserService):
             return BaseResponseDto(
                 success=True,
                 code=200,
-                data=UserResendTokenResponseDto(token=updated_token.token),
+                data=UserResendTokenResponseDto(token=FernetHandler.encrypt(updated_token.token)),
                 message="Verification email sent successfully.",
             )
         except Exception as ex:
