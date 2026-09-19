@@ -21,7 +21,11 @@ class TimezoneHandler:
             return iso_datetime
         if " " in iso_datetime:
             return iso_datetime.replace(" ", "T")
-        return iso_datetime + "T00:00:00.000Z"
+
+        cairo_offset = datetime.now(cls.CAIRO_TZ).strftime("%z")
+        formatted_offset = f"{cairo_offset[:3]}:{cairo_offset[3:]}"
+
+        return iso_datetime + f"T00:00:00.000{formatted_offset}"
 
     @classmethod
     def to_isoformat(cls, dt: datetime, timezone: str = "UTC") -> str:
