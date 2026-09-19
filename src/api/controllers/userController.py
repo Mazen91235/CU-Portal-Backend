@@ -1096,21 +1096,7 @@ class UserController(IUserController):
                     code=response.code,
                     message=response.message,
                 )
-            permissions = response.data
-            if not permissions:
-                await self.logger.log(
-                    action="GetUserPermissions",
-                    entity="User",
-                    level="error",
-                    code=500,
-                    message="Failed to retrieve user permissions",
-                    source="UserController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=500,
-                    message="An error occurred while processing the request, please try again later",
-                )
+            permissions = response.data or []
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
