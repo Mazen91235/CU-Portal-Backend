@@ -122,10 +122,10 @@ class NotificationController(INotificationController):
                 message="An error occurred while processing the request, please try again later",
             )
 
-    async def mark_notification_as_seen(self, request, id):
+    async def mark_notifications_as_seen(self, request, data):
         try:
             await self.notification_service.begin_transaction()
-            response = await self.notification_service.mark_notification_as_seen(id)
+            response = await self.notification_service.mark_notifications_as_seen(data)
 
             if not response.success:
                 await self.notification_service.rollback_transaction()
@@ -144,6 +144,36 @@ class NotificationController(INotificationController):
             await self.notification_service.rollback_transaction()
             await self.logger.log(
                 action="MarkNotificationAsSeen",
+                entity="Notification",
+                level="error",
+                code=500,
+                message=f"An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="NotificationController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
+    async def send_reminders(self, request):
+        try:
+            response = await self.notification_service.send_reminders()
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                message="Reminders sent successfully",
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="SendReminders",
                 entity="Notification",
                 level="error",
                 code=500,

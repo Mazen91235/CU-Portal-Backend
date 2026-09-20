@@ -21,15 +21,6 @@ class ExamCreateDto(BaseModel):
     subject_id: int = Field(
         ..., gt=0, description="ID of the subject this exam belongs to"
     )
-    faculty_id: int | None = Field(
-        default=None, description="ID of the faculty this task belongs to"
-    )
-    department_id: int | None = Field(
-        default=None, gt=0, description="ID of the department this task belongs to"
-    )
-    year_id: int | None = Field(
-        default=None, description="ID of the year this task belongs to"
-    )
     details: dict = Field(
         default_factory=dict,
         description="Additional details about the exam",
@@ -63,13 +54,6 @@ class ExamResponseDto(BaseModel):
     author: UserResponseDto | None = Field(
         default=None, description="Author of the exam"
     )
-    faculty: FacultyResponseDto | None = Field(
-        default=None, description="Faculty of the exam"
-    )
-    department: DepartmentResponseDto | None = Field(
-        default=None, description="Department of the exam"
-    )
-    year: YearResponseDto | None = Field(default=None, description="Year of the exam")
 
     model_config = {
         "from_attributes": True,
@@ -104,7 +88,7 @@ class ExamSearchDto(BaseSearchDto):
         default=None, gt=0, description="ID of Department to filter by"
     )
     year_id: int | None = Field(
-        default=None, gt=0, description="ID of Year to filter by"
+        default=None, gt=0, description="ID of Academic Year to filter by"
     )
     author_id: int | None = Field(
         default=None, gt=0, description="ID of Author to filter by"

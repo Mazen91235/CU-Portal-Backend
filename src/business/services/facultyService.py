@@ -51,14 +51,13 @@ class FacultyService(IFacultyService):
                 "Faculty", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Faculty", order_by
+                "Faculty", order_by, descending
             )
             result = await self.faculty_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
             )
             if not result.success:
                 return BaseResponseDto(
@@ -110,14 +109,13 @@ class FacultyService(IFacultyService):
                 "Faculty", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Faculty", order_by
+                "Faculty", order_by, descending
             )
             result = await self.faculty_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )

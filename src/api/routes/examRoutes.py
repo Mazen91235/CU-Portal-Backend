@@ -146,6 +146,17 @@ def create_exam_admin_router(
 
         return validate_request
 
+    def _validate_details_numbers(*keys):
+        async def validate_request(
+            request: Request,
+            validation_middleware: IValidationMiddleware = Depends(
+                _get_validation_middleware
+            ),
+        ):
+            return await validation_middleware.validate_details_numbers(request, *keys)
+
+        return validate_request
+
     @router.get(
         "/{exam_id}",
         dependencies=[
@@ -196,6 +207,7 @@ def create_exam_admin_router(
             Depends(_is_ready),
             Depends(_has_registered_subjects),
             Depends(_validate("name", "deadline", "subject_id")),
+            Depends(_validate_details_numbers("duration")),
         ],
         response_model=BaseResponseDto[ExamResponseDto],
         status_code=201,
@@ -217,6 +229,7 @@ def create_exam_admin_router(
             Depends(_is_ready),
             Depends(_has_registered_subjects),
             Depends(_validate("name", "deadline", "subject_id")),
+            Depends(_validate_details_numbers("duration"))
         ],
         response_model=BaseResponseDto[ExamResponseDto],
         status_code=200,

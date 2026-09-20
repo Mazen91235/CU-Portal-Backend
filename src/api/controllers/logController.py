@@ -66,7 +66,16 @@ class LogController(ILogController):
             entity_search_dto = Generator[LogSearchDto].generate(
                 LogSearchDto, {"id": id}
             )
-            response = await self.log_service.find_one(entity_search_dto, ["user"])
+            response = await self.log_service.find_one(
+                entity_search_dto,
+                [
+                    "user.avatar",
+                    "user.faculty",
+                    "user.department",
+                    "user.year",
+                    "user.role",
+                ],
+            )
             if not response.success:
                 return ResponseHandler.generate_response(
                     success=False,

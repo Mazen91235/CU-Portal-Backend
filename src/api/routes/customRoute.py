@@ -2,16 +2,18 @@ import os
 import hashlib
 import asyncio
 import json
+from contextlib import suppress
 from dotenv import load_dotenv
 from typing import Callable
 from fastapi import Request, Response, Depends, HTTPException
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
 from business.contextVars.userContext import user_context
-from business.contextVars.sessionContext import session_context
 from core.iMiddlewares.iRequestLimitMiddleware import IRequestLimitMiddleware
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.cachingHandler import CachingHandler
+from core.utils.stringHandler import StringHandler
+from core.utils.validator import Validator
 from core.utils.responseHandler import ResponseHandler
 
 load_dotenv()  # Load environment variables from .env file
@@ -199,6 +201,56 @@ async def _generate_inflight_key(request: Request) -> str:
     return lock_key
 
 
+async def _check_for_redirect(request: Request):
+    if request.method.upper() not in ["POST", "PATCH", "PUT", "DELETE"]:
+        return None
+    if Validator.validate_hostname_is_background_worker(request.url.hostname or ""):
+        return None
+    if not request.cookies.get("token"):
+        return None
+    token = StringHandler.generate_random_string(32)
+    response = ResponseHandler.generate_redirect_response(token=token)
+    await caching_handler.set(token, {"token": request.cookies.get("token", "")})
+    modules_to_redirect = ["material", "file", "attachment"]
+    if any(module in request.url.path for module in modules_to_redirect):
+        return response
+    body_bytes = await request.body()
+    try:
+        body_json = json.loads(body_bytes) if body_bytes else {}
+    except Exception:
+        body_json = {}
+    if "url" in body_json and Validator.is_valid_drive_url(body_json["url"]):
+        return response
+    if "details" in body_json and isinstance(body_json["details"], dict):
+        details = body_json["details"]
+        if (
+            "url" in details
+            and details["url"]
+            and Validator.is_valid_drive_url(details["url"])
+        ):
+            return response
+        if (
+            "avatar" in details
+            and details["avatar"]
+            and Validator.is_valid_drive_url(details["avatar"])
+        ):
+            return response
+        if (
+            "urls" in details
+            and isinstance(details["urls"], list)
+            and any(Validator.is_valid_drive_url(url) for url in details["urls"])
+        ):
+            return response
+    return None
+
+
+async def _poll_for_disconnect(request: Request):
+    while True:
+        if await request.is_disconnected():
+            return True
+        await asyncio.sleep(0.5)
+
+
 class CustomRoute(APIRoute):
     def __init__(self, *args, dependencies=None, **kwargs):
         dependencies = list(dependencies) if dependencies else []
@@ -219,6 +271,8 @@ class CustomRoute(APIRoute):
         dependencies.append(Depends(_check_cache))
 
         self.timeout_seconds = timeout_seconds
+        
+        self._background_tasks: set[asyncio.Task] = set()
 
         super().__init__(*args, dependencies=dependencies, **kwargs)
 
@@ -235,8 +289,13 @@ class CustomRoute(APIRoute):
             ):
                 return await _get_rate_limit_middleware().throttle(request)
 
+            redirect_response = await _check_for_redirect(request)
+            if redirect_response is not None:
+                return redirect_response
+
             lock_key = await _generate_inflight_key(request)
             acquired = False
+            tasks = set()
             try:
                 await _rate_limit(request)
                 if lock_key:
@@ -256,13 +315,37 @@ class CustomRoute(APIRoute):
                             code=409,
                             message="A similar request is already being processed. Please wait for it to complete.",
                         )
-                if timeout_seconds == 0:
-                    response = await original_route_handler(request)
-                else:
-                    response = await asyncio.wait_for(
-                        original_route_handler(request), timeout=timeout_seconds
+                handler_task = asyncio.create_task(original_route_handler(request))
+                response_task = (
+                    handler_task
+                    if timeout_seconds == 0
+                    else asyncio.create_task(
+                        asyncio.wait_for(handler_task, timeout=timeout_seconds)
                     )
-                asyncio.create_task(_update_cache(request, response))
+                )
+                disconnect_task = asyncio.create_task(_poll_for_disconnect(request))
+                tasks = {response_task, disconnect_task}
+                done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+                if response_task in done:
+                    response = response_task.result()
+                else:
+                    await _log(
+                        request,
+                        action="ClientDisconnect",
+                        entity="Request",
+                        level="warning",
+                        code=499,
+                        message="Client disconnected before the request could complete.",
+                        details={},
+                    )
+                    raise HTTPException(
+                        status_code=499,
+                        detail="Client disconnected before the request could complete.",
+                    )
+                cache_update_task = asyncio.create_task(_update_cache(request, response))
+                self._background_tasks.add(cache_update_task)
+                cache_update_task.add_done_callback(self._background_tasks.discard)
                 return response
             except CacheHitException as ex:
                 return ex.response
@@ -283,7 +366,15 @@ class CustomRoute(APIRoute):
             except Exception:
                 raise
             finally:
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                if tasks:
+                    with suppress(Exception):
+                        await asyncio.gather(*tasks, return_exceptions=True)
                 if lock_key and acquired:
-                    asyncio.create_task(caching_handler.release_lock(lock_key))
+                    release_lock_task = asyncio.create_task(caching_handler.release_lock(lock_key))
+                    self._background_tasks.add(release_lock_task)
+                    release_lock_task.add_done_callback(self._background_tasks.discard)
 
         return custom_route_handler

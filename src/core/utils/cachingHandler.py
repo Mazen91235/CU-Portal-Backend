@@ -5,6 +5,8 @@ from redis.asyncio import Redis
 
 load_dotenv()  # Load environment variables from .env file
 
+CACHE_TTL = int(os.environ.get("CACHE_TTL", 120))  # Default cache TTL in seconds
+
 
 class CachingHandler:
     def __init__(self):
@@ -16,7 +18,7 @@ class CachingHandler:
         result = await self.redis_client.get(key)
         return json.loads(result) if result and type(result) == str else None
 
-    async def set(self, key: str, value: dict, expire: int | None = None) -> None:
+    async def set(self, key: str, value: dict, expire: int = CACHE_TTL) -> None:
         await self.redis_client.set(key, json.dumps(value), ex=expire)
 
     async def delete(self, *keys: str) -> None:
@@ -32,6 +34,10 @@ class CachingHandler:
             await self.invalidate_module_cache("calendar")
         if any([x in module for x in ["auth"]]):
             await self.invalidate_module_cache("user")
+        if any([x in module for x in ["material"]]):
+            await self.invalidate_module_cache("week")
+        if any([x in module for x in ["event"]]):
+            await self.invalidate_module_cache("event")
 
     async def acquire_lock(self, lock_key: str, expire: int = 60) -> bool:
         acquired = await self.redis_client.set(lock_key, "1", nx=True, ex=expire)

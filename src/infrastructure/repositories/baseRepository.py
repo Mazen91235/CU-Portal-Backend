@@ -89,7 +89,6 @@ class BaseRepository(IBaseRepository):
         includes=None,
         selects=None,
         order_by=None,
-        descending=False,
         session=None,
     ):
         try:
@@ -113,10 +112,7 @@ class BaseRepository(IBaseRepository):
             # Ordering
             if order_by:
                 for ob in order_by:
-                    if descending:
-                        query = query.order_by(desc(ob))
-                    else:
-                        query = query.order_by(ob)
+                    query = query.order_by(ob)
 
             result = await session.execute(query)
             entity = result.scalars().first()
@@ -150,7 +146,6 @@ class BaseRepository(IBaseRepository):
         includes=None,
         selects=None,
         order_by=None,
-        descending=False,
         page=1,
         limit=50,
         session=None,
@@ -176,10 +171,7 @@ class BaseRepository(IBaseRepository):
             # Ordering
             if order_by:
                 for ob in order_by:
-                    if descending:
-                        query = query.order_by(desc(ob))
-                    else:
-                        query = query.order_by(ob)
+                    query = query.order_by(ob)
 
             # Pagination
             query = query.offset((page - 1) * limit).limit(limit + 1)

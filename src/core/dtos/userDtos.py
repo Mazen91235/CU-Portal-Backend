@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import TypedDict, TYPE_CHECKING
+from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field
 
 if TYPE_CHECKING:
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
     from core.dtos.noteDtos import NoteResponseDto
     from core.dtos.logDtos import LogResponseDto
     from core.dtos.subjectDtos import SubjectResponseDto
+    from core.dtos.eventDtos import EventResponseDto
     from core.dtos.attachmentDtos import AttachmentResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
@@ -122,6 +124,9 @@ class UserResponseDto(BaseModel):
     subjects: list[SubjectResponseDto] | None = Field(
         default=None, description="Subjects associated with the user"
     )
+    events: list[EventResponseDto] | None = Field(
+        default=None, description="Events associated with the user"
+    )
     avatar: AttachmentResponseDto | None = Field(
         default=None, description="Avatar attachment associated with the user"
     )
@@ -152,15 +157,6 @@ class UserSearchDto(BaseSearchDto):
     )
     year_id: int | None = Field(default=None, description="ID of Year to filter by")
     status: bool | None = Field(default=None, description="Whether the user is active")
-    refresh_token: str | None = Field(
-        default=None, description="Refresh token to filter by"
-    )
-    refresh_expire_at_from: datetime | None = Field(
-        default=None, description="Refresh token expiration date to filter by (>=)"
-    )
-    refresh_expire_at_to: datetime | None = Field(
-        default=None, description="Refresh token expiration date to filter by (<=)"
-    )
 
 
 # User-Specific DTOs
@@ -231,8 +227,14 @@ class UserGetUserWithDetailsDto(BaseModel):
     subjects: list[SubjectResponseDto] | None = Field(
         default=None, description="Subjects associated with the user"
     )
+    events: list[EventResponseDto] | None = Field(
+        default=None, description="Events associated with the user"
+    )
     logs: list[LogResponseDto] | None = Field(
         default=None, description="Logs associated with the user"
+    )
+    avatar: AttachmentResponseDto | None = Field(
+        default=None, description="Avatar attachment associated with the user"
     )
 
 
@@ -348,4 +350,7 @@ class UserStatisticsResponseDto(BaseModel):
 
 
 class UserDeviceActionDto(BaseModel):
-    device_token: str = Field(..., description="Unique key of the device")
+    device_id: UUID = Field(
+        ..., description="Persistent unique identifier of the client device"
+    )
+    device_token: str = Field(..., min_length=1, description="Current FCM device token")

@@ -8,6 +8,7 @@ from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.user import User
+from core.entities.device import Device
 from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
 from core.entities.token import Token
@@ -34,6 +35,7 @@ class UserService(IUserService):
     def __init__(
         self,
         user_repository: IBaseRepository[User],
+        device_repository: IBaseRepository[Device],
         token_repository: IBaseRepository[Token],
         role_repository: IBaseRepository[Role],
         pending_user_repository: IBaseRepository[PendingUser],
@@ -41,6 +43,7 @@ class UserService(IUserService):
         helper_service: IHelperService,
     ):
         self.user_repository = user_repository
+        self.device_repository = device_repository
         self.token_repository = token_repository
         self.role_repository = role_repository
         self.pending_user_repository = pending_user_repository
@@ -80,14 +83,13 @@ class UserService(IUserService):
                 "User", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "User", order_by
+                "User", order_by, descending
             )
             result = await self.user_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
             )
             if not result.success:
                 return BaseResponseDto(
@@ -139,14 +141,13 @@ class UserService(IUserService):
                 "User", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "User", order_by
+                "User", order_by, descending
             )
             result = await self.user_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )
@@ -342,7 +343,7 @@ class UserService(IUserService):
                         data=None,
                         message="You must Upload your Approval Image or use Your University Email to register",
                     )
-                url = data.url
+                url = data.details.get("url")
             if url:
                 file_id = self.helper_service.get_file_id_from_url(url)
                 if not file_id:
@@ -599,7 +600,7 @@ class UserService(IUserService):
                 message="User created successfully",
                 source="UserService",
             )
-            response = UserSignUpResponseDto(token=token_str)
+            response = UserSignUpResponseDto(token=FernetHandler.encrypt(token_str))
             return BaseResponseDto(success=True, code=201, data=response)
         except Exception as ex:
             await self.logger.log(
@@ -789,52 +790,44 @@ class UserService(IUserService):
             )
 
     # User Specific Functions
-    async def _invalidate_tokens(self, user_id: int):
+    async def _invalidate_current_token(self, refresh_token: str | None):
         try:
-            user_response = await self.user_repository.find_one(User.id == user_id)
-            if not user_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=user_response.code,
-                    data=False,
-                    message=user_response.message,
+            if not refresh_token:
+                return BaseResponseDto(success=True, data=True)
+
+            token_response = await self.token_repository.find_one(
+                and_(
+                    Token.token == refresh_token,
+                    Token.token_type == Token.TokenType.REFRESH_TOKEN["value"],
                 )
-            user = user_response.data
-            if not user:
-                await self.logger.log(
-                    action="InvalidateTokens",
-                    entity="User",
-                    level="warning",
-                    code=404,
-                    message="User not found with this ID",
-                    source="UserService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=False,
-                    message="User not found",
-                )
-            user.refresh_token = None
-            user.refresh_expire_at = TimezoneHandler.add_minutes(-1)
-            update_user_response = await self.user_repository.update(
-                user, ["refresh_token", "refresh_expire_at"]
             )
-            if not update_user_response.success:
+            if not token_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=update_user_response.code,
+                    code=token_response.code,
                     data=False,
-                    message=update_user_response.message,
+                    message=token_response.message,
                 )
+
+            token_record = token_response.data
+            if token_record:
+                delete_response = await self.token_repository.delete(token_record)
+                if not delete_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=delete_response.code,
+                        data=False,
+                        message=delete_response.message,
+                    )
+
             return BaseResponseDto(success=True, data=True)
         except Exception as ex:
             await self.logger.log(
-                action="InvalidateTokens",
+                action="InvalidateCurrentToken",
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while invalidating tokens",
+                message="An error occurred while invalidating current refresh token",
                 details={"error": repr(ex)},
                 source="UserService",
             )
@@ -842,7 +835,7 @@ class UserService(IUserService):
                 success=False,
                 code=500,
                 data=False,
-                message="An error occurred while invalidating tokens",
+                message="An error occurred while invalidating current refresh token",
             )
 
     async def _login(
@@ -875,31 +868,36 @@ class UserService(IUserService):
                     data=None,
                     message="User not found",
                 )
-            user.refresh_token = StringHandler.generate_random_string(
+
+            refresh_token = StringHandler.generate_random_string(
                 Token.STANDARD_LENGTH
             )
-            user.refresh_expire_at = TimezoneHandler.add_days(
-                User.RefreshToken.EXPIRE_DAYS
+            expires_at = TimezoneHandler.add_days(User.RefreshToken.EXPIRE_DAYS)
+            refresh_token_record = Token(
+                user_id=user.id,
+                token=refresh_token,
+                token_type=Token.TokenType.REFRESH_TOKEN["value"],
+                expires_at=expires_at,
+                is_valid=True,
             )
-            user.google_refresh_token = google_refresh_token
-            update_user_response = await self.user_repository.update(
-                user, ["refresh_token", "refresh_expire_at", "google_refresh_token"]
+            create_token_response = await self.token_repository.create(
+                refresh_token_record
             )
-            if not update_user_response.success:
+            if not create_token_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=update_user_response.code,
+                    code=create_token_response.code,
                     data=None,
-                    message=update_user_response.message,
+                    message=create_token_response.message,
                 )
-            updated_user = update_user_response.data
-            if not updated_user:
+            created_token = create_token_response.data
+            if not created_token:
                 await self.logger.log(
                     action="Login",
                     entity="User",
                     level="error",
                     code=500,
-                    message="Failed to update user with new refresh token",
+                    message="Failed to create refresh token",
                     source="UserService",
                 )
                 return BaseResponseDto(
@@ -908,6 +906,20 @@ class UserService(IUserService):
                     data=None,
                     message="An error occurred while logging in user, please try again.",
                 )
+
+            user.google_refresh_token = google_refresh_token
+            update_user_response = await self.user_repository.update(
+                user, ["google_refresh_token"]
+            )
+            if not update_user_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_user_response.code,
+                    data=None,
+                    message=update_user_response.message,
+                )
+            updated_user = update_user_response.data or user
+
             await self.logger.log(
                 action="Login",
                 entity="User",
@@ -918,7 +930,7 @@ class UserService(IUserService):
             )
             response = UserLoginResponseDto(
                 user=updated_user,
-                token=updated_user.refresh_token or "",
+                token=refresh_token,
                 redirect_url=redirect_url,
                 token_expiration=User.RefreshToken.EXPIRE_DAYS
                 * 24
@@ -932,7 +944,7 @@ class UserService(IUserService):
                 entity="User",
                 level="error",
                 code=500,
-                message=f"An error occurred while logging in user",
+                message="An error occurred while logging in user",
                 details={"error": repr(ex)},
                 source="UserService",
             )
@@ -1253,6 +1265,7 @@ class UserService(IUserService):
 
     async def login_with_google(self):
         try:
+            await self.logout()
             request = request_context.get()
             is_localhost = "localhost" in (request.url.hostname or "")
             redirect_response_url = (
@@ -1371,10 +1384,11 @@ class UserService(IUserService):
             state = StringHandler.generate_random_string(User.GoogleToken.TOKEN_LENGTH)
             nonce = StringHandler.generate_random_string(User.GoogleToken.TOKEN_LENGTH)
             state_token = Token(
+                user_id=logged_in_user.id,
                 token=state,
                 token_type=Token.TokenType.GOOGLE_TOKEN["value"],
                 expires_at=TimezoneHandler.add_hours(User.GoogleToken.EXPIRE_HOURS),
-                details={"nonce": nonce, "user_id": logged_in_user.id},
+                details={"nonce": nonce},
                 is_valid=True,
             )
             create_token_response = await self.token_repository.create(state_token)
@@ -1480,9 +1494,7 @@ class UserService(IUserService):
             details["nonce"] = (
                 state_token.details.get("nonce") if state_token.details else None
             )
-            user_id = (
-                state_token.details.get("user_id") if state_token.details else None
-            )
+            user_id = state_token.user_id
             token = await OAuthHandler.authorize_google_access_token(
                 request,
                 nonce=details.get("nonce"),
@@ -1724,37 +1736,27 @@ class UserService(IUserService):
     async def logout(self):
         try:
             user_response = await self.helper_service.get_logged_in_user()
-            if not user_response.success:
+            if not user_response.success or not user_response.data:
                 return BaseResponseDto(
-                    success=False,
-                    code=user_response.code,
-                    data=False,
-                    message=user_response.message,
+                    success=True,
+                    code=200,
+                    data=True,
+                    message="Successfully logged out",
                 )
+
             user = user_response.data
-            if not user:
-                await self.logger.log(
-                    action="Logout",
-                    entity="User",
-                    level="warning",
-                    code=404,
-                    message="Logged in user not found",
-                    source="UserService",
-                )
+            invalidate_token_response = await self._invalidate_current_token(
+                user.refresh_token
+            )
+            if not invalidate_token_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=404,
+                    code=invalidate_token_response.code,
                     data=False,
-                    message="Logged in user not found",
+                    message=invalidate_token_response.message,
                 )
-            invalidate_tokens_response = await self._invalidate_tokens(user.id)
-            if not invalidate_tokens_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=invalidate_tokens_response.code,
-                    data=False,
-                    message=invalidate_tokens_response.message,
-                )
+
+            user.refresh_token = None
             await self.logger.log(
                 action="Logout",
                 entity="User",
@@ -1767,7 +1769,7 @@ class UserService(IUserService):
                 success=True,
                 code=200,
                 data=True,
-                message="Logout successful",
+                message="Successfully logged out",
             )
         except Exception as ex:
             await self.logger.log(
@@ -1790,7 +1792,7 @@ class UserService(IUserService):
         try:
             token_response = await self.token_repository.find_one(
                 and_(
-                    Token.token == token,
+                    Token.token == FernetHandler.decrypt(token),
                     Token.expires_at > TimezoneHandler.now("UTC"),
                 )
             )
@@ -1912,7 +1914,7 @@ class UserService(IUserService):
         try:
             token_response = await self.token_repository.find_one(
                 and_(
-                    Token.token == token,
+                    Token.token == FernetHandler.decrypt(token),
                     Token.expires_at > TimezoneHandler.now("UTC"),
                 )
             )
@@ -2085,7 +2087,7 @@ class UserService(IUserService):
             return BaseResponseDto(
                 success=True,
                 code=200,
-                data=UserResendTokenResponseDto(token=updated_token.token),
+                data=UserResendTokenResponseDto(token=FernetHandler.encrypt(updated_token.token)),
                 message="Verification email sent successfully.",
             )
         except Exception as ex:
@@ -2116,46 +2118,70 @@ class UserService(IUserService):
                     message=user_response.message,
                 )
             user = user_response.data
-            if not user:
+            if not user or not user.refresh_token:
                 await self.logger.log(
                     action="RefreshToken",
                     entity="User",
                     level="warning",
                     code=404,
-                    message="Logged in user not found for token refresh",
+                    message="Logged in user or refresh token not found for token refresh",
                     source="UserService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=404,
                     data=None,
-                    message="Logged in user not found, please log in again.",
+                    message="Refresh token not found, please log in again.",
                 )
-            new_refresh_token = StringHandler.generate_random_string(
-                Token.STANDARD_LENGTH
+
+            token_response = await self.token_repository.find_one(
+                and_(
+                    Token.token == user.refresh_token,
+                    Token.token_type == Token.TokenType.REFRESH_TOKEN["value"],
+                    Token.expires_at > TimezoneHandler.now("UTC"),
+                    Token.is_valid.is_(True),
+                )
             )
-            new_expires_at = TimezoneHandler.add_days(User.RefreshToken.EXPIRE_DAYS)
-            user.refresh_token = new_refresh_token
-            user.refresh_expire_at = new_expires_at
-            update_user_response = await self.user_repository.update(
-                user, ["refresh_token", "refresh_expire_at"]
-            )
-            if not update_user_response.success:
+            if not token_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=update_user_response.code,
+                    code=token_response.code,
                     data=None,
-                    message=update_user_response.message,
+                    message=token_response.message,
                 )
+
+            token_record = token_response.data
+            if not token_record:
+                return BaseResponseDto(
+                    success=False,
+                    code=401,
+                    data=None,
+                    message="Refresh token not found or expired, please log in again.",
+                )
+
+            token_record.expires_at = TimezoneHandler.add_days(User.RefreshToken.EXPIRE_DAYS)
+            update_token_response = await self.token_repository.update(
+                token_record, ["expires_at"]
+            )
+            if not update_token_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_token_response.code,
+                    data=None,
+                    message=update_token_response.message,
+                )
+
             await self.logger.log(
                 action="RefreshToken",
                 entity="User",
                 level="info",
                 code=200,
-                message="User refresh token updated successfully",
+                message="User refresh token expiration extended successfully",
                 source="UserService",
             )
-            response_data = UserLoginResponseDto(user=user, token=new_refresh_token)
+            response_data = UserLoginResponseDto(
+                user=user, token=user.refresh_token
+            )
             return BaseResponseDto(
                 success=True,
                 code=200,
@@ -3501,13 +3527,13 @@ class UserService(IUserService):
                 message="An error occurred while checking permissions, please try again.",
             )
 
-    async def register_device(self, device_token):
+    async def register_device(self, device_id, device_token):
         try:
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
                     action="RegisterDevice",
-                    entity="User",
+                    entity="Device",
                     level="error",
                     code=logged_in_user_response.code or 500,
                     message="Failed to retrieve logged in user for registering device",
@@ -3520,11 +3546,12 @@ class UserService(IUserService):
                     data=None,
                     message=logged_in_user_response.message,
                 )
+
             logged_in_user = logged_in_user_response.data
             if not logged_in_user:
                 await self.logger.log(
                     action="RegisterDevice",
-                    entity="User",
+                    entity="Device",
                     level="warning",
                     code=404,
                     message="Logged in user not found for registering device",
@@ -3536,22 +3563,51 @@ class UserService(IUserService):
                     data=None,
                     message="Logged in user not found, please log in again.",
                 )
-            logged_in_user.devices = logged_in_user.devices or []
-            if device_token not in logged_in_user.devices:
-                logged_in_user.devices.append(device_token)
-            update_user_response = await self.user_repository.update(
-                logged_in_user, ["devices"]
+
+            device_response = await self.device_repository.find_one(
+                Device.device_id == device_id
             )
-            if not update_user_response.success:
+            if not device_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=update_user_response.code,
+                    code=device_response.code,
                     data=None,
-                    message=update_user_response.message,
+                    message=device_response.message,
                 )
+
+            device = device_response.data
+            if device:
+                device.user_id = logged_in_user.id
+                device.device_token = device_token
+                update_response = await self.device_repository.update(
+                    device, ["user_id", "device_token"]
+                )
+                if not update_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=update_response.code,
+                        data=None,
+                        message=update_response.message,
+                    )
+            else:
+                create_response = await self.device_repository.create(
+                    Device(
+                        device_id=device_id,
+                        user_id=logged_in_user.id,
+                        device_token=device_token,
+                    )
+                )
+                if not create_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=create_response.code,
+                        data=None,
+                        message=create_response.message,
+                    )
+
             await self.logger.log(
                 action="RegisterDevice",
-                entity="User",
+                entity="Device",
                 level="info",
                 code=200,
                 message="Device registered successfully",
@@ -3566,10 +3622,10 @@ class UserService(IUserService):
         except Exception as ex:
             await self.logger.log(
                 action="RegisterDevice",
-                entity="User",
+                entity="Device",
                 level="error",
                 code=500,
-                message=f"An error occurred while registering device",
+                message="An error occurred while registering device",
                 details={"error": repr(ex)},
                 source="UserService",
             )
@@ -3580,13 +3636,13 @@ class UserService(IUserService):
                 message="An error occurred while registering device, please try again.",
             )
 
-    async def unregister_device(self, device_token):
+    async def unregister_device(self, device_id):
         try:
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
                     action="UnregisterDevice",
-                    entity="User",
+                    entity="Device",
                     level="error",
                     code=logged_in_user_response.code or 500,
                     message="Failed to retrieve logged in user for unregistering device",
@@ -3599,38 +3655,62 @@ class UserService(IUserService):
                     data=None,
                     message=logged_in_user_response.message,
                 )
+
             logged_in_user = logged_in_user_response.data
             if not logged_in_user:
-                await self.logger.log(
-                    action="UnregisterDevice",
-                    entity="User",
-                    level="warning",
-                    code=404,
-                    message="Logged in user not found for unregistering device",
-                    source="UserService",
-                )
                 return BaseResponseDto(
                     success=False,
                     code=404,
                     data=None,
                     message="Logged in user not found, please log in again.",
                 )
-            logged_in_user.devices = logged_in_user.devices or []
-            if device_token in logged_in_user.devices:
-                logged_in_user.devices.remove(device_token)
-                update_user_response = await self.user_repository.update(
-                    logged_in_user, ["devices"]
+
+            device_response = await self.device_repository.find_one(
+                (Device.device_id == device_id)
+            )
+            if not device_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=device_response.code,
+                    data=None,
+                    message=device_response.message,
                 )
-                if not update_user_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=update_user_response.code,
-                        data=None,
-                        message=update_user_response.message,
-                    )
+
+            device = device_response.data
+            if not device:
+                return BaseResponseDto(
+                    success=True,
+                    code=200,
+                    data=True,
+                    message="Device unregistered successfully.",
+                )
+            if device.user_id != logged_in_user.id:
+                await self.logger.log(
+                    action="UnregisterDevice",
+                    entity="Device",
+                    level="warning",
+                    code=403,
+                    message=f"Logged in user does not own device with ID {device_id} and cannot unregister it",
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message=f"You do not have permission to unregister this device.",
+                )
+            delete_response = await self.device_repository.delete(device)
+            if not delete_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=delete_response.code,
+                    data=None,
+                    message=delete_response.message,
+                )
+
             await self.logger.log(
                 action="UnregisterDevice",
-                entity="User",
+                entity="Device",
                 level="info",
                 code=200,
                 message="Device unregistered successfully",
@@ -3645,10 +3725,10 @@ class UserService(IUserService):
         except Exception as ex:
             await self.logger.log(
                 action="UnregisterDevice",
-                entity="User",
+                entity="Device",
                 level="error",
                 code=500,
-                message=f"An error occurred while unregistering device",
+                message="An error occurred while unregistering device",
                 details={"error": repr(ex)},
                 source="UserService",
             )
@@ -3658,3 +3738,4 @@ class UserService(IUserService):
                 data=None,
                 message="An error occurred while unregistering device, please try again.",
             )
+

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, allow_inactive
 from core.iControllers.iYearController import IYearController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -61,7 +61,7 @@ def create_year_user_router(
 
     @router.get(
         "/{year_id}",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto[YearResponseDto],
         status_code=200,
         summary="Find Year",
@@ -76,7 +76,7 @@ def create_year_user_router(
 
     @router.get(
         "/",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto[list[YearResponseDto]],
         status_code=200,
         summary="Find Years",

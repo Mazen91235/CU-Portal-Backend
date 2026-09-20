@@ -114,6 +114,9 @@ class MaterialSearchDto(BaseSearchDto):
     week_id: int | None = Field(
         default=None, description="ID of the associated week to filter by"
     )
+    author_id: int | None = Field(
+        default=None, description="ID of the author to filter by"
+    )
     created_at_from: datetime | None = Field(
         default=None, description="Filter materials created after this date"
     )
@@ -132,6 +135,7 @@ class MaterialsCopyOrMoveDto(BaseModel):
     material_ids: list[int] = Field(
         ..., min_length=1, description="List of material IDs"
     )
+    subject_id: int = Field(..., description="ID of the subject for the operation")
     destination_id: int | None = Field(None, description="Destination parent ID")
 
 

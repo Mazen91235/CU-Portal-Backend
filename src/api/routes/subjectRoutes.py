@@ -58,7 +58,7 @@ def create_subject_user_router(
         return validate_request
 
     @router.get(
-        "/",
+        "/available",
         dependencies=[Depends(_is_logged_in), Depends(_is_ready)],
         response_model=BaseResponseDto[list[SubjectResponseDto]],
         status_code=200,
@@ -101,6 +101,38 @@ def create_subject_user_router(
         controller: ISubjectController = Depends(_get_controller),
     ):
         return await controller.get_enrolled_one(request, id=subject_id)
+
+    @router.get(
+        "/{subject_id}",
+        dependencies=[Depends(_is_logged_in), Depends(_is_ready)],
+        response_model=BaseResponseDto[list[SubjectResponseDto]],
+        status_code=200,
+        summary="Find Course",
+        description="Get a single course by its ID",
+    )
+    async def find_subject(
+        subject_id: int,
+        request: Request,
+        controller: ISubjectController = Depends(_get_controller),
+    ):
+        return await controller.find_one(request, id=subject_id)
+
+    @router.get(
+        "/",
+        dependencies=[Depends(_is_logged_in), Depends(_is_ready)],
+        response_model=BaseResponseDto[list[SubjectResponseDto]],
+        status_code=200,
+        summary="Find Courses",
+        description="Find courses by query parameters",
+    )
+    async def find_subjects(
+        request: Request,
+        query: QueryModel[SubjectSearchDto] = Depends(
+            Parser.parse_query(QueryModel[SubjectSearchDto])
+        ),
+        controller: ISubjectController = Depends(_get_controller),
+    ):
+        return await controller.find(request, query=query)
 
     @router.post(
         "/register",

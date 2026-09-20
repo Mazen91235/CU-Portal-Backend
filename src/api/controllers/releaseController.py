@@ -8,6 +8,8 @@ from core.utils.responseHandler import ResponseHandler
 
 # Entities & DTOs
 from core.entities.release import Release
+from core.entities.version import Version
+from core.dtos.versionDtos import VersionResponseDto
 from core.dtos.releaseDtos import (
     ReleaseCreateDto,
     ReleaseResponseDto,
@@ -22,13 +24,49 @@ class ReleaseController(IReleaseController):
         self.release_service = release_service
         self.logger = logger
 
+    async def find_versions(self, request):
+        try:
+            response = await self.release_service.find_versions()
+            if not response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=response.code,
+                    message=response.message,
+                )
+            versions_mapped = Mapper[Version, VersionResponseDto].map_list(
+                response.data or [], VersionResponseDto, True
+            )
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                data=versions_mapped,
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="FindVersions",
+                entity="Version",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="ReleaseController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                message="An error occurred while processing the request, please try again later",
+            )
+
     # CRUD Functions
     async def find_one(self, request, id):
         try:
             entity_search_dto = Generator[ReleaseSearchDto].generate(
                 ReleaseSearchDto, {"id": id}
             )
-            response = await self.release_service.find_one(entity_search_dto)
+            response = await self.release_service.find_one(
+                entity_search_dto,
+                ["release_version", "release_items"],
+            )
             if not response.success:
                 return ResponseHandler.generate_response(
                     success=False,

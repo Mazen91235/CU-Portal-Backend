@@ -7,23 +7,37 @@ from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iServices.iUserService import IUserService
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.entities.user import User
+from core.entities.token import Token
 from core.dtos.userDtos import UserSearchDto
 from core.utils.timezoneHandler import TimezoneHandler
+from core.utils.cachingHandler import CachingHandler
 
 cookie_scheme = APIKeyCookie(name="token", auto_error=False)
+caching_handler = CachingHandler()
 
 
 class AuthMiddleware(IAuthMiddleware):
     def __init__(
         self,
         user_service: IUserService,
+        token_repository,
         logger: IBaseLogger,
     ):
         self.user_service = user_service
+        self.token_repository = token_repository
         self.logger = logger
 
-    async def is_logged_in(self, request: Request, refresh_token: str | None = None):
+    async def is_logged_in(
+        self, request: Request, refresh_token: str | None = None, throw_error: bool = True
+    ):
         try:
+            if not refresh_token:
+                token = request.query_params.get("token")
+                if token:
+                    token_data = await caching_handler.get(token)
+                    if token_data and "token" in token_data:
+                        refresh_token = token_data["token"]
+                        await caching_handler.delete(token)
             if not refresh_token:
                 await self.logger.log(
                     action="AuthCheck",
@@ -33,23 +47,55 @@ class AuthMiddleware(IAuthMiddleware):
                     message="No refresh token provided in request cookies",
                     source="AuthMiddleware",
                 )
+                if not throw_error:
+                    return None
                 raise HTTPException(
                     status_code=401,
                     detail="Unauthorized: No refresh token provided",
                 )
 
-            user_search_dto = UserSearchDto(
-                refresh_token=refresh_token,
-                # refresh_expire_at_from=TimezoneHandler.now("UTC"),
+            token_response = await self.token_repository.find_one(
+                (
+                    (Token.token == refresh_token)
+                    & (Token.token_type == Token.TokenType.REFRESH_TOKEN["value"])
+                    & (Token.expires_at > TimezoneHandler.now("UTC"))
+                    & (Token.is_valid.is_(True))
+                )
             )
+            if not token_response.success:
+                if not throw_error:
+                    return None
+                raise HTTPException(
+                    status_code=token_response.code or 500,
+                    detail=token_response.message,
+                )
+
+            token_record = token_response.data
+            user_id = token_record.user_id if token_record else None
+            if not token_record or not user_id:
+                await self.logger.log(
+                    action="AuthCheck",
+                    entity="User",
+                    level="warning",
+                    code=401,
+                    message="Invalid or expired refresh token provided in request cookies",
+                    source="AuthMiddleware",
+                )
+                if not throw_error:
+                    return None
+                raise HTTPException(
+                    status_code=401,
+                    detail="Unauthorized: Invalid or Expired refresh token",
+                )
 
             user_response = await self.user_service.find_one(
-                user_search_dto,
+                UserSearchDto(id=user_id),
                 ["role.role_links.exact_role", "avatar"],
                 is_and=True,
             )
-
             if not user_response.success:
+                if not throw_error:
+                    return None
                 raise HTTPException(
                     status_code=user_response.code or 500, detail=user_response.message
                 )
@@ -60,21 +106,21 @@ class AuthMiddleware(IAuthMiddleware):
                     entity="User",
                     level="warning",
                     code=401,
-                    message="Invalid or Expired refresh token provided in request cookies",
+                    message="User associated with refresh token was not found",
                     source="AuthMiddleware",
                 )
+                if not throw_error:
+                    return None
                 raise HTTPException(
                     status_code=401,
-                    detail="Unauthorized: Invalid or Expired refresh token",
+                    detail="Unauthorized: User associated with refresh token was not found",
                 )
 
+            user.refresh_token = refresh_token
             user_context.set(user)
 
-            if not user.refresh_token or not user.refresh_expire_at:
-                return None
-
             if (
-                TimezoneHandler.get_abs_diff_in_days(user.refresh_expire_at)
+                TimezoneHandler.get_abs_diff_in_days(token_record.expires_at)
                 < User.RefreshToken.MINIMUM_DAYS
             ):
                 update_refresh_token_response = await self.user_service.refresh_token()
@@ -99,44 +145,55 @@ class AuthMiddleware(IAuthMiddleware):
 
             permissions_context.set(user_permissions)
 
+            request.state.restrict_faculties = False
+            request.state.restrict_departments = False
+            request.state.restrict_years = False
+            request.state.restrict_courses = False
+
+            if any(
+                [
+                    x in request.url.path
+                    for x in [
+                        "/faculties",
+                        "/departments",
+                        "/years",
+                        "/courses",
+                        "/materials",
+                    ]
+                ]
+            ):
+                request_context.set(request)
+                return None
+
             if (
                 "/admin" not in request.url.path
                 or "Access All Faculties" not in user_permissions
             ):
                 request.state.restrict_faculties = True
-            else:
-                request.state.restrict_faculties = False
 
             if (
                 "/admin" not in request.url.path
                 or "Access All Departments" not in user_permissions
             ):
                 request.state.restrict_departments = True
-            else:
-                request.state.restrict_departments = False
 
             if (
                 "/admin" not in request.url.path
                 or "Access All Years" not in user_permissions
             ):
                 request.state.restrict_years = True
-            else:
-                request.state.restrict_years = False
 
             if (
                 "/admin" not in request.url.path
                 or "Access All Courses" not in user_permissions
             ):
                 request.state.restrict_courses = True
-            else:
-                request.state.restrict_courses = False
 
             request_context.set(request)
 
             return None
 
         except HTTPException:
-            # Let expected HTTP exceptions pass through to the client
             raise
         except Exception as ex:
             await self.logger.log(
@@ -155,21 +212,20 @@ class AuthMiddleware(IAuthMiddleware):
     async def is_logged_out(self, request: Request, refresh_token: str | None = None):
         try:
             if refresh_token:
-                user_search_entity_dto = UserSearchDto(
-                    refresh_token=refresh_token,
-                    refresh_expire_at_from=TimezoneHandler.now("UTC"),
-                )
-                user_response = await self.user_service.find_one(
-                    user_search_entity_dto,
-                    is_and=True,
-                )
-                if not user_response.success:
-                    raise HTTPException(
-                        status_code=user_response.code or 500,
-                        detail=user_response.message,
+                token_response = await self.token_repository.find_one(
+                    (
+                        (Token.token == refresh_token)
+                        & (Token.token_type == Token.TokenType.REFRESH_TOKEN["value"])
+                        & (Token.expires_at > TimezoneHandler.now("UTC"))
+                        & (Token.is_valid.is_(True))
                     )
-                user = user_response.data
-                if user:
+                )
+                if not token_response.success:
+                    raise HTTPException(
+                        status_code=token_response.code or 500,
+                        detail=token_response.message,
+                    )
+                if token_response.data:
                     await self.logger.log(
                         action="AuthCheck",
                         entity="User",
@@ -183,7 +239,6 @@ class AuthMiddleware(IAuthMiddleware):
                         detail="Bad Request: User is already logged in",
                     )
 
-            # Dependency passes successfully
             return None
 
         except HTTPException:

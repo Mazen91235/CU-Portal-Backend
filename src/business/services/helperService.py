@@ -4,8 +4,8 @@ from aiohttp import FormData
 import asyncio
 import json
 from collections.abc import AsyncIterable
-from typing import TypeVar, cast
-from sqlalchemy import and_, func, or_
+from typing import Coroutine, TypeVar, Any, cast
+from sqlalchemy import and_, func, or_, desc, asc, case
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -39,6 +39,7 @@ from core.utils.fernetHandler import FernetHandler
 from core.utils.timezoneHandler import TimezoneHandler
 from core.utils.validator import Validator
 from core.utils.firebaseHandler import FirebaseHandler
+from core.entities.device import Device
 
 U = TypeVar("U")  # EntitySearchDto Type
 
@@ -49,6 +50,7 @@ class HelperService(IHelperService[U]):
         notification_repository: IBaseRepository[Notification],
         user_notification_repository: IBaseRepository[UserNotification],
         user_repository: IBaseRepository[User],
+        device_repository: IBaseRepository[Device],
         role_repository: IBaseRepository[Role],
         faculty_repository: IBaseRepository[Faculty],
         department_repository: IBaseRepository[Department],
@@ -61,6 +63,7 @@ class HelperService(IHelperService[U]):
         self.notification_repository = notification_repository
         self.user_notification_repository = user_notification_repository
         self.user_repository = user_repository
+        self.device_repository = device_repository
         self.role_repository = role_repository
         self.faculty_repository = faculty_repository
         self.department_repository = department_repository
@@ -168,16 +171,16 @@ class HelperService(IHelperService[U]):
         try:
             user = user_context.get(None)
             if user:
-                return BaseResponseDto[User | None](success=True, data=user)
+                return BaseResponseDto(success=True, data=user)
             else:
-                return BaseResponseDto[User | None](
+                return BaseResponseDto(
                     success=False,
                     code=401,
                     data=None,
                     message="No logged-in user found",
                 )
         except Exception as ex:
-            return BaseResponseDto[User | None](
+            return BaseResponseDto(
                 success=False,
                 code=500,
                 data=None,
@@ -640,7 +643,7 @@ class HelperService(IHelperService[U]):
                 selects_arr.append(select_item)
         return selects_arr
 
-    def generate_dynamic_order_by(self, entity_name, order_by):
+    def generate_dynamic_order_by(self, entity_name, order_by, descending=False):
         if not order_by:
             return []
 
@@ -651,9 +654,31 @@ class HelperService(IHelperService[U]):
 
             entity = entity_name if "." not in order else order.split(".")[0]
             property_name = order if "." not in order else order.split(".")[1]
+
+            if property_name.endswith("_nearest"):
+                property_name = property_name.split("_nearest")[0]
+                order_item = EntitiesHandler.get_property(entity, property_name)
+                if order_item:
+                    now = func.now()
+
+                    is_past = case(
+                        (order_item.is_(None), 2), (order_item < now, 1), else_=0
+                    )
+
+                    seconds_diff = func.extract("epoch", order_item) - func.extract(
+                        "epoch", now
+                    )
+                    distance = func.abs(seconds_diff)
+
+                    order_by_arr.extend([asc(is_past), asc(distance)])
+                continue
+
             order_item = EntitiesHandler.get_property(entity, property_name)
             if order_item:
-                order_by_arr.append(order_item)
+                if descending:
+                    order_by_arr.append(desc(order_item))
+                else:
+                    order_by_arr.append(asc(order_item))
         return order_by_arr
 
     def generate_dynamic_predicate(
@@ -710,6 +735,32 @@ class HelperService(IHelperService[U]):
             column = getattr(cls, field_name, None)
 
             if not column:
+                if field_name not in [
+                    "faculty_id",
+                    "department_id",
+                    "year_id",
+                ] or not hasattr(cls, "subject_id"):
+                    continue
+                sub_condition = {
+                    "faculty_id": lambda: Subject.faculty_id == value,
+                    "department_id": lambda: Subject.department_id == value,
+                    "year_id": lambda: Subject.year_id == value,
+                }
+                subject_subquery = (
+                    select(Subject.id)
+                    .where(sub_condition[field_name]())
+                    .scalar_subquery()
+                )
+                if allow_nulls:
+                    conditions.append(
+                        (getattr(cls, "subject_id").is_(None))
+                        | (getattr(cls, "subject_id").in_(subject_subquery))
+                    )
+                else:
+                    conditions.append(
+                        getattr(cls, "subject_id").isnot(None)
+                        & (getattr(cls, "subject_id").in_(subject_subquery))
+                    )
                 continue
 
             if key.endswith("_from"):
@@ -736,17 +787,46 @@ class HelperService(IHelperService[U]):
                     )
             elif isinstance(value, str):
                 if not self._is_string_column(column):
-                    conditions.append(column == value)
+                    if not allow_nulls:
+                        conditions.append(column.isnot(None) & (column == value))
+                    else:
+                        conditions.append(column.is_(None) | (column == value))
                 elif starts_with:
-                    conditions.append(func.lower(column).ilike(func.lower(f"{value}%")))
+                    if not allow_nulls:
+                        conditions.append(
+                            column.isnot(None)
+                            & func.lower(column).ilike(func.lower(f"{value}%"))
+                        )
+                    else:
+                        conditions.append(
+                            column.is_(None)
+                            | func.lower(column).ilike(func.lower(f"{value}%"))
+                        )
                 elif is_exact:
-                    conditions.append(column == value)
+                    if not allow_nulls:
+                        conditions.append(
+                            column.isnot(None) & (column == value),
+                        )
+                    else:
+                        conditions.append(
+                            column.is_(None) | (column == value),
+                        )
                 else:
-                    conditions.append(
-                        func.lower(column).ilike(func.lower(f"%{value}%"))
-                    )
+                    if not allow_nulls:
+                        conditions.append(
+                            column.isnot(None)
+                            & func.lower(column).ilike(func.lower(f"%{value}%"))
+                        )
+                    else:
+                        conditions.append(
+                            column.is_(None)
+                            | func.lower(column).ilike(func.lower(f"%{value}%"))
+                        )
             else:
-                conditions.append(column == value)
+                if not allow_nulls:
+                    conditions.append(column.isnot(None) & (column == value))
+                else:
+                    conditions.append(column.is_(None) | (column == value))
 
         result = None
 
@@ -822,6 +902,20 @@ class HelperService(IHelperService[U]):
                         getattr(cls, "year_id").is_(None),
                         getattr(cls, "year_id") == user.year_id,
                     )
+            if cls.__name__.lower() == "note" and "/user" in request.url.path.lower():
+                if result is not None:
+                    result = and_(
+                        result,
+                        or_(
+                            getattr(cls, "author_id").is_(None),
+                            getattr(cls, "author_id") == user.id,
+                        ),
+                    )
+                else:
+                    result = or_(
+                        getattr(cls, "author_id").is_(None),
+                        getattr(cls, "author_id") == user.id,
+                    )
 
         return result
 
@@ -836,7 +930,8 @@ class HelperService(IHelperService[U]):
         department_id=None,
         year_id=None,
         subject_id=None,
-    ):
+        user_ids=None,
+    ) -> BaseResponseDto:
         if not self.session_factory:
             await self._log(
                 action="SendNotification",
@@ -849,163 +944,176 @@ class HelperService(IHelperService[U]):
             return BaseResponseDto(
                 success=False,
                 code=500,
-                data=False,
                 message="Session factory is not initialized",
             )
         return_response = None
-        user_ids = set()
+        if user_ids is None or len(user_ids) < 1:
+            user_ids = set()
         async with self.session_factory() as session:
             try:
                 await session.begin()  # Start a transaction
-                if (
-                    not faculty_id
-                    and not department_id
-                    and not year_id
-                    and not subject_id
-                ):
-                    users_response = await self.user_repository.find(
-                        limit=int(1e6), session=session
-                    )
-                    if not users_response.success:
-                        return_response = BaseResponseDto(
-                            success=False,
-                            code=users_response.code,
-                            data=False,
-                            message=users_response.message,
-                        )
-                        return return_response
-                    users = users_response.data
-                    user_ids.update([user.id for user in (users or [])])
-                else:
-                    if faculty_id:
-                        dynamic_includes = self.generate_dynamic_includes(
-                            Faculty, ["users"]
-                        )
-                        faculty_response = await self.faculty_repository.find_one(
-                            Faculty.id == faculty_id, dynamic_includes, session=session
-                        )
-                        if not faculty_response.success:
-                            return_response = BaseResponseDto(
-                                success=False,
-                                code=faculty_response.code,
-                                data=False,
-                                message=faculty_response.message,
-                            )
-                            return return_response
-                        faculty = faculty_response.data
-                        if not faculty:
-                            return_response = BaseResponseDto(
-                                success=False,
-                                code=404,
-                                data=False,
-                                message=f"Faculty with ID {faculty_id} not found",
-                            )
-                            return return_response
-                        if len(user_ids) < 1:
-                            user_ids.update([user.id for user in (faculty.users or [])])
-                        else:
-                            user_ids.intersection_update(
-                                [user.id for user in (faculty.users or [])]
-                            )
-                    if department_id:
-                        dynamic_includes = self.generate_dynamic_includes(
-                            Department, ["users"]
-                        )
-                        department_response = await self.department_repository.find_one(
-                            Department.id == department_id,
-                            dynamic_includes,
-                            session=session,
-                        )
-                        if not department_response.success:
-                            return_response = BaseResponseDto(
-                                success=False,
-                                code=department_response.code,
-                                data=False,
-                                message=department_response.message,
-                            )
-                            return return_response
-                        department = department_response.data
-                        if not department:
-                            return_response = BaseResponseDto(
-                                success=False,
-                                code=404,
-                                data=False,
-                                message=f"Department with ID {department_id} not found",
-                            )
-                            return return_response
-                        if len(user_ids) < 1:
-                            user_ids.update(
-                                [user.id for user in (department.users or [])]
-                            )
-                        else:
-                            user_ids.intersection_update(
-                                [user.id for user in (department.users or [])]
-                            )
-                    if year_id:
-                        dynamic_includes = self.generate_dynamic_includes(
-                            Year, ["users"]
-                        )
-                        year_response = await self.year_repository.find_one(
-                            Year.id == year_id, dynamic_includes, session=session
-                        )
-                        if not year_response.success:
-                            return_response = BaseResponseDto(
-                                success=False,
-                                code=year_response.code,
-                                data=False,
-                                message=year_response.message,
-                            )
-                            return return_response
-                        year = year_response.data
-                        if not year:
-                            return_response = BaseResponseDto(
-                                success=False,
-                                code=404,
-                                data=False,
-                                message=f"Year with ID {year_id} not found",
-                            )
-                            return return_response
-                        if len(user_ids) < 1:
-                            user_ids.update([user.id for user in (year.users or [])])
-                        else:
-                            user_ids.intersection_update(
-                                [user.id for user in (year.users or [])]
-                            )
-                    if subject_id:
-                        dynamic_includes = self.generate_dynamic_includes(
-                            Subject, ["user_subject_links.user"]
-                        )
-                        subject_response = await self.subject_repository.find_one(
-                            Subject.id == subject_id, dynamic_includes, session=session
-                        )
-                        if not subject_response.success:
-                            return_response = BaseResponseDto(
-                                success=False,
-                                code=subject_response.code,
-                                data=False,
-                                message=subject_response.message,
-                            )
-                            return return_response
-                        subject = subject_response.data
-                        if not subject:
-                            return_response = BaseResponseDto(
-                                success=False,
-                                code=404,
-                                data=False,
-                                message=f"Subject with ID {subject_id} not found",
-                            )
-                            return return_response
-                        if len(user_ids) < 1:
-                            user_ids.update([user.id for user in (subject.users or [])])
-                        else:
-                            user_ids.intersection_update(
-                                [user.id for user in (subject.users or [])]
-                            )
                 if len(user_ids) < 1:
+                    if (
+                        not faculty_id
+                        and not department_id
+                        and not year_id
+                        and not subject_id
+                    ):
+                        users_response = await self.user_repository.find(
+                            limit=int(1e6), session=session
+                        )
+                        if not users_response.success:
+                            await session.rollback()
+                            return_response = BaseResponseDto(
+                                success=False,
+                                code=users_response.code,
+                                message=users_response.message,
+                            )
+                            return return_response
+                        users = users_response.data
+                        user_ids.update([user.id for user in (users or [])])
+                    else:
+                        if faculty_id:
+                            dynamic_includes = self.generate_dynamic_includes(
+                                Faculty, ["users"]
+                            )
+                            faculty_response = await self.faculty_repository.find_one(
+                                Faculty.id == faculty_id,
+                                dynamic_includes,
+                                session=session,
+                            )
+                            if not faculty_response.success:
+                                await session.rollback()
+                                return_response = BaseResponseDto(
+                                    success=False,
+                                    code=faculty_response.code,
+                                    message=faculty_response.message,
+                                )
+                                return return_response
+                            faculty = faculty_response.data
+                            if not faculty:
+                                await session.rollback()
+                                return_response = BaseResponseDto(
+                                    success=False,
+                                    code=404,
+                                    message=f"Faculty with ID {faculty_id} not found",
+                                )
+                                return return_response
+                            if len(user_ids) < 1:
+                                user_ids.update(
+                                    [user.id for user in (faculty.users or [])]
+                                )
+                            else:
+                                user_ids.intersection_update(
+                                    [user.id for user in (faculty.users or [])]
+                                )
+                        if department_id:
+                            dynamic_includes = self.generate_dynamic_includes(
+                                Department, ["users"]
+                            )
+                            department_response = (
+                                await self.department_repository.find_one(
+                                    Department.id == department_id,
+                                    dynamic_includes,
+                                    session=session,
+                                )
+                            )
+                            if not department_response.success:
+                                await session.rollback()
+                                return_response = BaseResponseDto(
+                                    success=False,
+                                    code=department_response.code,
+                                    message=department_response.message,
+                                )
+                                return return_response
+                            department = department_response.data
+                            if not department:
+                                await session.rollback()
+                                return_response = BaseResponseDto(
+                                    success=False,
+                                    code=404,
+                                    message=f"Department with ID {department_id} not found",
+                                )
+                                return return_response
+                            if len(user_ids) < 1:
+                                user_ids.update(
+                                    [user.id for user in (department.users or [])]
+                                )
+                            else:
+                                user_ids.intersection_update(
+                                    [user.id for user in (department.users or [])]
+                                )
+                        if year_id:
+                            dynamic_includes = self.generate_dynamic_includes(
+                                Year, ["users"]
+                            )
+                            year_response = await self.year_repository.find_one(
+                                Year.id == year_id, dynamic_includes, session=session
+                            )
+                            if not year_response.success:
+                                await session.rollback()
+                                return_response = BaseResponseDto(
+                                    success=False,
+                                    code=year_response.code,
+                                    message=year_response.message,
+                                )
+                                return return_response
+                            year = year_response.data
+                            if not year:
+                                await session.rollback()
+                                return_response = BaseResponseDto(
+                                    success=False,
+                                    code=404,
+                                    message=f"Year with ID {year_id} not found",
+                                )
+                                return return_response
+                            if len(user_ids) < 1:
+                                user_ids.update(
+                                    [user.id for user in (year.users or [])]
+                                )
+                            else:
+                                user_ids.intersection_update(
+                                    [user.id for user in (year.users or [])]
+                                )
+                        if subject_id:
+                            dynamic_includes = self.generate_dynamic_includes(
+                                Subject, ["user_subject_links.user"]
+                            )
+                            subject_response = await self.subject_repository.find_one(
+                                Subject.id == subject_id,
+                                dynamic_includes,
+                                session=session,
+                            )
+                            if not subject_response.success:
+                                await session.rollback()
+                                return_response = BaseResponseDto(
+                                    success=False,
+                                    code=subject_response.code,
+                                    message=subject_response.message,
+                                )
+                                return return_response
+                            subject = subject_response.data
+                            if not subject:
+                                await session.rollback()
+                                return_response = BaseResponseDto(
+                                    success=False,
+                                    code=404,
+                                    message=f"Subject with ID {subject_id} not found",
+                                )
+                                return return_response
+                            if len(user_ids) < 1:
+                                user_ids.update(
+                                    [user.id for user in (subject.users or [])]
+                                )
+                            else:
+                                user_ids.intersection_update(
+                                    [user.id for user in (subject.users or [])]
+                                )
+                if len(user_ids) < 1:
+                    await session.rollback()
                     return_response = BaseResponseDto(
                         success=False,
                         code=404,
-                        data=False,
                         message="No users found for the specified criteria",
                     )
                     return return_response
@@ -1025,19 +1133,19 @@ class HelperService(IHelperService[U]):
                     )
                 )
                 if not create_notification_response.success:
+                    await session.rollback()
                     return_response = BaseResponseDto(
                         success=False,
                         code=create_notification_response.code,
-                        data=False,
                         message=create_notification_response.message,
                     )
                     return return_response
                 created_notification = create_notification_response.data
                 if not created_notification:
+                    await session.rollback()
                     return_response = BaseResponseDto(
                         success=False,
                         code=500,
-                        data=False,
                         message="Failed to create notification",
                     )
                     return return_response
@@ -1053,7 +1161,6 @@ class HelperService(IHelperService[U]):
                 return_response = BaseResponseDto(
                     success=True,
                     code=200,
-                    data=True,
                     message="Notification sent successfully",
                 )
                 return return_response
@@ -1070,7 +1177,6 @@ class HelperService(IHelperService[U]):
                 return BaseResponseDto(
                     success=False,
                     code=500,
-                    data=False,
                     message="An error occurred while sending the notification",
                     error=repr(ex),
                 )
@@ -1146,10 +1252,24 @@ class HelperService(IHelperService[U]):
                         data=False,
                         message=f"User with ID {user_id} not found",
                     )
-                should_update_devices = False
-                for device_token in user.devices or []:
+                devices_response = await self.device_repository.find(
+                    Device.user_id == user_id,
+                    limit=int(1e6),
+                    session=session,
+                )
+                if not devices_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=devices_response.code,
+                        data=False,
+                        message=devices_response.message,
+                    )
+
+                for device in devices_response.data or []:
+                    device_token = device.device_token
                     if not device_token or not device_token.strip():
                         continue
+
                     send_response = FirebaseHandler.send_notification(
                         device_token=device_token,
                         title=title,
@@ -1157,22 +1277,31 @@ class HelperService(IHelperService[U]):
                         url=url,
                         notification_id=notification_id,
                     )
+
                     if not send_response.success and send_response.code == 404:
-                        user.devices.remove(device_token)
-                        should_update_devices = True
+                        delete_response = await self.device_repository.delete(
+                            device, session=session
+                        )
+                        if not delete_response.success:
+                            await self._log(
+                                action="RemoveInvalidDevice",
+                                entity="Device",
+                                level="error",
+                                code=delete_response.code or 500,
+                                message=f"Failed to remove invalid device {device.id} for user {user_id}",
+                                details={"error": delete_response.error},
+                            )
+
                     if not send_response.success:
                         await self._log(
                             action="SendPushNotifications",
                             entity="Notification",
                             level="error",
                             code=send_response.code or 500,
-                            message=f"Failed to send push notification to user {user_id} for device token {device_token}",
+                            message=f"Failed to send push notification to user {user_id} for device {device.id}",
                             details={"error": send_response.error},
                         )
-                if should_update_devices:
-                    await self.user_repository.update(
-                        user, ["devices"], session=session
-                    )
+
             await self._log(
                 action="SendPushNotifications",
                 entity="Notification",
@@ -1207,6 +1336,7 @@ class HelperService(IHelperService[U]):
         department_id=None,
         year_id=None,
         subject_id=None,
+        user_ids=None,
     ):
         try:
             if not os.environ.get("BACKGROUND_WORKER_URL") or not os.environ.get(
@@ -1228,7 +1358,6 @@ class HelperService(IHelperService[U]):
                 return BaseResponseDto(
                     success=False,
                     code=500,
-                    data=False,
                     message="Background worker URL or API key is not configured",
                 )
             response = await self._request_with_retries(
@@ -1247,6 +1376,7 @@ class HelperService(IHelperService[U]):
                     "department_id": department_id,
                     "year_id": year_id,
                     "subject_id": subject_id,
+                    "user_ids": user_ids,
                 },
             )
             if not response.success:
@@ -1258,6 +1388,17 @@ class HelperService(IHelperService[U]):
                     message=f"Failed to send notification to background worker: {response.message}",
                     details={"error": response.error},
                 )
+                return BaseResponseDto(
+                    success=False,
+                    code=response.code or 500,
+                    message=f"Failed to send notification to background worker: {response.message}",
+                    error=response.error,
+                )
+            return BaseResponseDto(
+                success=True,
+                code=response.code or 200,
+                message="Notification sent to background worker successfully",
+            )
         except Exception as ex:
             await self._log(
                 action="SendNotificationToBackgroundWorker",
@@ -1266,6 +1407,12 @@ class HelperService(IHelperService[U]):
                 code=500,
                 message="An error occurred while sending notification to background worker",
                 details={"error": repr(ex)},
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                message="An error occurred while sending notification to background worker",
+                error=repr(ex),
             )
 
     async def send_notification(
@@ -1278,7 +1425,8 @@ class HelperService(IHelperService[U]):
         department_id=None,
         year_id=None,
         subject_id=None,
-    ):
+        user_ids=None,
+    ) -> BaseResponseDto[Coroutine[Any, Any, BaseResponseDto]]:
         request = request_context.get(None)
         if not request:
             await self._log(
@@ -1292,9 +1440,9 @@ class HelperService(IHelperService[U]):
             return BaseResponseDto(
                 success=False,
                 code=500,
-                data=False,
                 message="Request context is not available",
             )
+        response = None
         hostname = request.url.hostname
         if not hostname:
             await self._log(
@@ -1308,39 +1456,38 @@ class HelperService(IHelperService[U]):
             return BaseResponseDto(
                 success=False,
                 code=500,
-                data=False,
                 message="Hostname is not available in the request context",
             )
         if Validator.validate_hostname_is_background_worker(hostname):
-            asyncio.create_task(
-                self._send_notification(
-                    notification_type,
-                    parent_id,
-                    content,
-                    url,
-                    faculty_id,
-                    department_id,
-                    year_id,
-                    subject_id,
-                )
+            response = self._send_notification(
+                notification_type,
+                parent_id,
+                content,
+                url,
+                faculty_id,
+                department_id,
+                year_id,
+                subject_id,
+                user_ids,
             )
         else:
-            asyncio.create_task(
-                self._send_notification_to_background_worker(
-                    notification_type=notification_type,
-                    parent_id=parent_id,
-                    content=content,
-                    url=url,
-                    faculty_id=faculty_id,
-                    department_id=department_id,
-                    year_id=year_id,
-                    subject_id=subject_id,
-                )
+            response = self._send_notification_to_background_worker(
+                notification_type=notification_type,
+                parent_id=parent_id,
+                content=content,
+                url=url,
+                faculty_id=faculty_id,
+                department_id=department_id,
+                year_id=year_id,
+                subject_id=subject_id,
+                user_ids=user_ids,
             )
+        request.state.background = response
+        request_context.set(request)
         return BaseResponseDto(
             success=True,
             code=200,
-            data=True,
+            data=response,
             message="Notification sent successfully",
         )
 
@@ -2577,10 +2724,57 @@ class HelperService(IHelperService[U]):
                 error=repr(ex),
             )
 
+    async def update_attachment(
+        self,
+        attachment,
+    ):
+        try:
+            if not attachment:
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Attachment object with valid ID is required for update",
+                    error="No valid attachment object provided for update",
+                )
+            update_response = await self.attachment_repository.update(attachment)
+            if not update_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_response.code,
+                    data=None,
+                    message=update_response.message,
+                    error=update_response.error,
+                )
+            updated_attachment = update_response.data
+            if not updated_attachment:
+                return BaseResponseDto(
+                    success=False,
+                    code=500,
+                    data=None,
+                    message="Failed to update attachment",
+                    error=f"Attachment update returned no data for ID: {attachment.id}",
+                )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=updated_attachment,
+                message="Attachment updated successfully",
+            )
+        except Exception as ex:
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while updating the attachment, please try again later",
+                error=repr(ex),
+            )
+
     async def delete_attachment(
         self,
         attachment_id=None,
         attachment=None,
+        session=None,
     ):
         try:
             if not attachment_id and not attachment:
@@ -2603,7 +2797,7 @@ class HelperService(IHelperService[U]):
                 )
             if not attachment:
                 attachment_response = await self.attachment_repository.find_one(
-                    Attachment.id == attachment_id
+                    Attachment.id == attachment_id, session=session
                 )
                 if not attachment_response.success:
                     return BaseResponseDto(
@@ -2637,7 +2831,9 @@ class HelperService(IHelperService[U]):
                 if attachment.is_file and not attachment.details.get("fetched", False)
                 else None
             )
-            delete_response = await self.attachment_repository.delete(attachment)
+            delete_response = await self.attachment_repository.delete(
+                attachment, session=session
+            )
             if not delete_response.success:
                 return BaseResponseDto(
                     success=False,

@@ -44,6 +44,8 @@ if TYPE_CHECKING:
     from .userEvent import UserEvent
     from .note import Note
     from .attachment import Attachment
+    from .device import Device
+    from .token import Token
 
 
 class User(Base):
@@ -78,13 +80,6 @@ class User(Base):
     ips: Mapped[list[str]] = mapped_column(
         MutableList.as_mutable(JSON), nullable=True, default=list
     )
-    devices: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(JSON), nullable=True, default=list
-    )
-    refresh_token: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    refresh_expire_at: Mapped[Optional[datetime]] = mapped_column(
-        TIMESTAMP(timezone=True), nullable=True
-    )
 
     # Timestamps
     created_at: Mapped[Optional[datetime]] = mapped_column(
@@ -107,6 +102,14 @@ class User(Base):
     @google_details_token.setter
     def google_details_token(self, value: Optional[str]) -> None:
         setattr(self, "_google_details_token", value)
+
+    @property
+    def refresh_token(self) -> Optional[str]:
+        return getattr(self, "_refresh_token", None)
+
+    @refresh_token.setter
+    def refresh_token(self, value: Optional[str]) -> None:
+        setattr(self, "_refresh_token", value)
 
     # Relationships
     avatar_id: Mapped[Optional[int]] = mapped_column(
@@ -240,6 +243,18 @@ class User(Base):
         back_populates="author",
         cascade="all, delete-orphan",
         foreign_keys="Attachment.author_id",
+        collection_class=set,
+    )
+    devices: Mapped[set["Device"]] = relationship(
+        "Device",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        collection_class=set,
+    )
+    tokens: Mapped[set["Token"]] = relationship(
+        "Token",
+        back_populates="user",
+        cascade="all, delete-orphan",
         collection_class=set,
     )
 

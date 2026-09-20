@@ -42,7 +42,7 @@ class Attachment(Base):
         MutableDict.as_mutable(JSON), nullable=True, default=dict
     )  # includes file_data, fetched, link_title
     author_google_refresh_token: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True
+        String(500), nullable=True
     )
 
     # Timestamps
@@ -59,7 +59,9 @@ class Attachment(Base):
     )
 
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Relationships
     author_id: Mapped[int] = mapped_column(

@@ -1,4 +1,5 @@
-from sqlalchemy import and_, func
+from sqlalchemy import and_, func, between
+from datetime import timedelta
 from core.iServices.iWeekService import IWeekService
 from core.iServices.iHelperService import IHelperService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -42,8 +43,17 @@ class WeekService(IWeekService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Week, data, ["week_number"], is_and, starts_with, is_exact
+                Week, data, [], is_and, starts_with, is_exact
             )
+            if data and data.start_date_includes is not None:
+                condition = between(
+                    data.start_date_includes,
+                    Week.start_date,
+                    Week.start_date + timedelta(days=7),
+                )
+                predicate = (
+                    and_(predicate, condition) if predicate is not None else condition
+                )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Week, includes
             )
@@ -51,14 +61,13 @@ class WeekService(IWeekService):
                 "Week", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Week", order_by
+                "Week", order_by, descending
             )
             result = await self.week_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
             )
             if not result.success:
                 return BaseResponseDto(
@@ -100,8 +109,17 @@ class WeekService(IWeekService):
     ):
         try:
             predicate = self.helper_service.generate_dynamic_predicate(
-                Week, data, ["week_number"], is_and, starts_with, is_exact
+                Week, data, [], is_and, starts_with, is_exact
             )
+            if data and data.start_date_includes is not None:
+                condition = between(
+                    data.start_date_includes,
+                    Week.start_date,
+                    Week.start_date + timedelta(days=7),
+                )
+                predicate = (
+                    and_(predicate, condition) if predicate is not None else condition
+                )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Week, includes
             )
@@ -109,14 +127,13 @@ class WeekService(IWeekService):
                 "Week", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Week", order_by
+                "Week", order_by, descending
             )
             result = await self.week_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )
@@ -356,28 +373,32 @@ class WeekService(IWeekService):
                     data=None,
                     message=verify_restricted_access_response.message,
                 )
-            verify_restricted_access_response = (
-                await self.helper_service.verify_restricted_access(
-                    faculty_id=data.faculty_id,
-                    department_id=data.department_id,
-                    year_id=data.year_id,
-                )
-            )
-            if not verify_restricted_access_response.success:
+            if (
+                data.faculty_id != target_week.faculty_id
+                or data.department_id != target_week.department_id
+                or data.year_id != target_week.year_id
+            ):
                 await self.logger.log(
                     action="Update",
                     entity="Week",
                     level="error",
-                    code=verify_restricted_access_response.code or 500,
-                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
-                    details={"error": verify_restricted_access_response.error},
+                    code=400,
+                    message="Faculty, Department, and Year cannot be changed during update",
+                    details={
+                        "original_faculty_id": target_week.faculty_id,
+                        "original_department_id": target_week.department_id,
+                        "original_year_id": target_week.year_id,
+                        "new_faculty_id": data.faculty_id,
+                        "new_department_id": data.department_id,
+                        "new_year_id": data.year_id,
+                    },
                     source="WeekService",
                 )
                 return BaseResponseDto(
                     success=False,
-                    code=verify_restricted_access_response.code,
+                    code=400,
                     data=None,
-                    message=verify_restricted_access_response.message,
+                    message="Faculty, Department, and Year cannot be changed during update",
                 )
             existing_week_response = await self.week_repository.find_one(
                 and_(
@@ -469,9 +490,6 @@ class WeekService(IWeekService):
                 )
             target_week.week_number = data.week_number
             target_week.start_date = data.start_date
-            target_week.faculty_id = data.faculty_id
-            target_week.department_id = data.department_id
-            target_week.year_id = data.year_id
             update_response = await self.week_repository.update(target_week)
             if not update_response.success:
                 return BaseResponseDto(
@@ -526,8 +544,11 @@ class WeekService(IWeekService):
 
     async def delete(self, data):
         try:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Week, ["materials"]
+            )
             target_week_response = await self.week_repository.find_one(
-                Week.id == data.id
+                Week.id == data.id, dynamic_includes
             )
             if not target_week_response.success:
                 return BaseResponseDto(
@@ -552,6 +573,25 @@ class WeekService(IWeekService):
                     code=404,
                     data=None,
                     message="Week not found",
+                )
+            if target_week.materials and len(target_week.materials) > 0:
+                await self.logger.log(
+                    action="Delete",
+                    entity="Week",
+                    level="warning",
+                    code=400,
+                    message="Cannot delete week with associated materials",
+                    details={
+                        "week_id": data.id,
+                        "material_count": len(target_week.materials),
+                    },
+                    source="WeekService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Cannot delete week with associated materials",
                 )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(

@@ -2,6 +2,7 @@ from core.entities.announcement import Announcement
 from core.entities.attachment import Attachment
 from core.entities.base import Base
 from core.entities.department import Department
+from core.entities.device import Device
 from core.entities.event import Event
 from core.entities.eventOrganizer import EventOrganizer
 from core.entities.exactRole import ExactRole

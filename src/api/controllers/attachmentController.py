@@ -46,5 +46,34 @@ class AttachmentController(IAttachmentController):
                 message="An error occurred while processing the request",
             )
 
-    async def validate(self, request, start_idx: int):
-        raise NotImplementedError("The 'validate' method is not implemented yet.")
+    async def validate(self, request):
+        try:
+            validate_response = await self.attachment_service.validate()
+            if not validate_response.success:
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=validate_response.code,
+                    data=None,
+                    message=validate_response.message,
+                )
+            return ResponseHandler.generate_response(
+                success=True,
+                code=200,
+                message="Attachment validation completed successfully",
+            )
+        except Exception as e:
+            await self.logger.log(
+                action="Validate",
+                entity="Attachment",
+                level="error",
+                code=500,
+                message="An error occurred while processing the request",
+                details={"error": repr(e)},
+                source="AttachmentController",
+            )
+            return ResponseHandler.generate_response(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while processing the request",
+            )

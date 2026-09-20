@@ -118,6 +118,7 @@ DECLARE
     v_announcements JSON;
     v_materials JSON;
     v_subjects JSON;
+    v_events JSON;
     v_logs JSON;
     
     v_result JSON;
@@ -269,6 +270,36 @@ BEGIN
         LIMIT 5
     ) s_reg;
 
+    -- 11. Events Published (author_id = p_user_id)
+    SELECT COALESCE(JSON_AGG(e_pub), '[]'::json) INTO v_events
+    FROM (
+        SELECT e.id, e.title, e.start_date, e.end_date, e.price, e.location_type, e.location, e.details, e.created_at, e.updated_at, 
+        JSON_BUILD_OBJECT(
+            'id', eo.id, 
+            'name', eo.name, 
+            'details', eo.details, 
+            'logo', JSON_BUILD_OBJECT('id', eo_logo.id, 'url', eo_logo.url, 'details', eo_logo.details)
+        ) AS event_organizer,
+        JSON_BUILD_OBJECT(
+            'id', e_logo.id, 
+            'url', e_logo.url,
+            'details', e_logo.details
+        ) AS logo,
+        JSON_BUILD_OBJECT(
+            'id', ue.id,
+            'user', JSON_BUILD_OBJECT('id', u.id, 'name', u.name, 'email', u.email)
+        ) AS user_events
+        FROM events e
+        LEFT JOIN event_organizers eo ON eo.id = e.event_organizer_id
+        LEFT JOIN attachments eo_logo ON eo_logo.id = eo.logo_id
+        LEFT JOIN attachments e_logo ON e_logo.id = e.logo_id
+        LEFT JOIN user_events ue ON ue.event_id = e.id
+        LEFT JOIN users u ON u.id = ue.user_id
+        WHERE e.author_id = p_user_id
+        ORDER BY e.created_at DESC, e.id DESC
+        LIMIT 5
+    ) e_pub;
+
     -- 11. User Logs
     SELECT COALESCE(JSON_AGG(l_user), '[]'::json) INTO v_logs
     FROM (
@@ -289,6 +320,7 @@ BEGIN
         'announcements', v_announcements,
         'materials', v_materials,
         'subjects', v_subjects,
+        'events', v_events,
         'logs', v_logs
     )::jsonb;
 

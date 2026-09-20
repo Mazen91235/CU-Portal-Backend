@@ -1,5 +1,6 @@
 from sqlalchemy import and_
 import re
+import mimetypes
 from datetime import datetime, timezone
 from collections.abc import AsyncGenerator
 from stat import S_IFDIR, S_IFREG
@@ -75,14 +76,13 @@ class MaterialService(IMaterialService):
                 "Material", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Material", order_by
+                "Material", order_by, descending
             )
             result = await self.material_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
             )
             if not result.success:
                 return BaseResponseDto(
@@ -139,14 +139,13 @@ class MaterialService(IMaterialService):
                 "Material", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Material", order_by
+                "Material", order_by, descending
             )
             result = await self.material_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )
@@ -263,8 +262,8 @@ class MaterialService(IMaterialService):
                         message=f"Parent material with ID {data.parent_id} not found",
                     )
                 parent_id = parent_material.id
-            subject_id = None
-            if not data.subject_id:
+            subject_id = data.subject_id
+            if not subject_id:
                 await self.logger.log(
                     action="Create",
                     entity="Material",
@@ -281,7 +280,7 @@ class MaterialService(IMaterialService):
                     message=f"Subject ID is required for material creation",
                 )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id,
+                Subject.id == subject_id,
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -297,7 +296,7 @@ class MaterialService(IMaterialService):
                     entity="Material",
                     level="error",
                     code=404,
-                    message=f"Subject with ID {data.subject_id} not found",
+                    message=f"Subject with ID {subject_id} not found",
                     details={"error": "Subject not found"},
                     source="MaterialService",
                 )
@@ -305,7 +304,7 @@ class MaterialService(IMaterialService):
                     success=False,
                     code=404,
                     data=None,
-                    message=f"Subject with ID {data.subject_id} not found",
+                    message=f"Subject with ID {subject_id} not found",
                 )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
@@ -363,6 +362,22 @@ class MaterialService(IMaterialService):
                     message=verify_restricted_access_response.message,
                 )
             if data.week_id:
+                if data.material_type == "folder":
+                    await self.logger.log(
+                        action="Create",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Week ID should not be provided for folder type materials",
+                        details={"error": "Week ID is not applicable for folders"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Week ID should not be provided for folder type materials",
+                    )
                 week_response = await self.week_repository.find_one(
                     Week.id == data.week_id
                 )
@@ -505,11 +520,11 @@ class MaterialService(IMaterialService):
                         message=f"Failed to create attachment for material, please try again later.",
                     )
                 created_material.attachment = attachment
-            share_link = f"/user/materials/{subject_id}"
+            share_link = f"/user/materials?subject_id={subject_id}"
             if parent_id:
-                share_link += f"/{parent_id}"
+                share_link += f"&parent_id={parent_id}"
             if data.material_type == "file":
-                share_link += f"?material_id={created_material.id}"
+                share_link += f"&material_id={created_material.id}"
             elif data.material_type != "folder":
                 share_link = created_material.attachment.url
             await self.helper_service.send_notification(
@@ -637,7 +652,7 @@ class MaterialService(IMaterialService):
                     message=f"Material with ID {data.id} not found",
                 )
             subject_response = await self.subject_repository.find_one(
-                Subject.id == existing_material.subject_id, dynamic_includes
+                Subject.id == existing_material.subject_id
             )
             if not subject_response.success:
                 return BaseResponseDto(
@@ -719,6 +734,25 @@ class MaterialService(IMaterialService):
                     message=verify_restricted_access_response.message,
                 )
             if data.week_id:
+                if (
+                    data.material_type == "folder"
+                    or existing_material.material_type == "folder"
+                ):
+                    await self.logger.log(
+                        action="Update",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Week ID should not be provided for folder type materials",
+                        details={"error": "Week ID is not applicable for folders"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Week ID should not be provided for folder type materials",
+                    )
                 week_response = await self.week_repository.find_one(
                     Week.id == data.week_id
                 )
@@ -926,11 +960,11 @@ class MaterialService(IMaterialService):
                     )
                 updated_material.attachment = attachment
             user_ids = [user.id for user in subject.users] if subject.users else []
-            share_link = f"/user/materials/{updated_material.subject_id}"
+            share_link = f"/user/materials?subject_id={updated_material.subject_id}"
             if updated_material.parent_id:
-                share_link += f"/{updated_material.parent_id}"
+                share_link += f"&parent_id={updated_material.parent_id}"
             if updated_material.material_type == "file":
-                share_link += f"?material_id={updated_material.id}"
+                share_link += f"&material_id={updated_material.id}"
             elif updated_material.material_type != "folder":
                 share_link = updated_material.attachment.url
             await self.helper_service.send_notification(
@@ -1187,50 +1221,69 @@ class MaterialService(IMaterialService):
     async def move_many(self, data):
         try:
             material_ids = data.material_ids
+            subject_id = data.subject_id
             destination_id = data.destination_id
-            destination_material_response = await self.material_repository.find_one(
-                Material.id == destination_id
-            )
-            if not destination_material_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=destination_material_response.code,
-                    data=None,
-                    message=destination_material_response.message,
+            destination_material = None
+            if destination_id is not None:
+                destination_material_response = await self.material_repository.find_one(
+                    Material.id == destination_id
                 )
-            destination_material = destination_material_response.data
-            if not destination_material:
-                await self.logger.log(
-                    action="MoveMany",
-                    entity="Material",
-                    level="error",
-                    code=404,
-                    message=f"Destination material with ID {destination_id} not found",
-                    details={"error": "Destination material not found"},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message=f"Destination material with ID {destination_id} not found",
-                )
-            if destination_material.material_type != "folder":
-                await self.logger.log(
-                    action="MoveMany",
-                    entity="Material",
-                    level="error",
-                    code=400,
-                    message=f"Destination material with ID {destination_id} is not a folder",
-                    details={"error": "Destination material is not a folder"},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message=f"Destination must be a folder. Material with ID {destination_id} is not a folder.",
-                )
+                if not destination_material_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=destination_material_response.code,
+                        data=None,
+                        message=destination_material_response.message,
+                    )
+                destination_material = destination_material_response.data
+                if not destination_material:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Destination material with ID {destination_id} not found",
+                        details={"error": "Destination material not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Destination material with ID {destination_id} not found",
+                    )
+                if destination_material.subject_id != subject_id:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message="Destination material does not belong to the provided subject",
+                        details={"error": "Destination subject mismatch"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message="Destination material must belong to the provided subject",
+                    )
+                if destination_material.material_type != "folder":
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Destination material with ID {destination_id} is not a folder",
+                        details={"error": "Destination material is not a folder"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Destination must be a folder. Material with ID {destination_id} is not a folder.",
+                    )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -1267,7 +1320,7 @@ class MaterialService(IMaterialService):
                 )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(
-                    subject_id=destination_material.subject_id
+                    subject_id=subject_id
                 )
             )
             if not verify_restricted_access_response.success:
@@ -1314,28 +1367,26 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"Material with ID {material_id} not found",
                     )
-                verify_restricted_access_response = (
-                    await self.helper_service.verify_restricted_access(
-                        subject_id=existing_material.subject_id
-                    )
-                )
-                if not verify_restricted_access_response.success:
+                if existing_material.subject_id != subject_id:
                     await self.logger.log(
                         action="MoveMany",
                         entity="Material",
                         level="error",
-                        code=verify_restricted_access_response.code or 500,
-                        message=f"Failed to verify restricted access for material {material_id}: {verify_restricted_access_response.message}",
-                        details={"error": verify_restricted_access_response.error},
+                        code=400,
+                        message=f"Material {material_id} does not belong to the provided subject",
+                        details={"error": "Material subject mismatch"},
                         source="MaterialService",
                     )
                     return BaseResponseDto(
                         success=False,
-                        code=verify_restricted_access_response.code,
+                        code=400,
                         data=None,
-                        message=verify_restricted_access_response.message,
+                        message="All materials must belong to the provided subject",
                     )
-                if existing_material.parent_id == destination_material.id:
+                if (
+                    destination_material
+                    and existing_material.parent_id == destination_material.id
+                ):
                     await self.logger.log(
                         action="MoveMany",
                         entity="Material",
@@ -1353,7 +1404,10 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"Material '{existing_material.name}' is already in the destination folder '{destination_material.name}'.",
                     )
-                if existing_material.id == destination_material.id:
+                if (
+                    destination_material
+                    and existing_material.id == destination_material.id
+                ):
                     await self.logger.log(
                         action="MoveMany",
                         entity="Material",
@@ -1369,7 +1423,7 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"Cannot move material '{existing_material.name}' into itself.",
                     )
-                existing_material.parent_id = destination_material.id
+                existing_material.parent_id = destination_id
                 update_response = await self.material_repository.update(
                     existing_material, ["parent_id"]
                 )
@@ -1406,50 +1460,95 @@ class MaterialService(IMaterialService):
     async def copy_many(self, data):
         try:
             material_ids = data.material_ids
+            subject_id = data.subject_id
             destination_id = data.destination_id
-            destination_material_response = await self.material_repository.find_one(
-                Material.id == destination_id
+            subject_response = await self.subject_repository.find_one(
+                Subject.id == subject_id
             )
-            if not destination_material_response.success:
+            if not subject_response.success:
                 return BaseResponseDto(
                     success=False,
-                    code=destination_material_response.code,
+                    code=subject_response.code,
                     data=None,
-                    message=destination_material_response.message,
+                    message=subject_response.message,
                 )
-            destination_material = destination_material_response.data
-            if not destination_material:
+            if not subject_response.data:
                 await self.logger.log(
                     action="CopyMany",
                     entity="Material",
                     level="error",
                     code=404,
-                    message=f"Destination material with ID {destination_id} not found",
-                    details={"error": "Destination material not found"},
+                    message=f"Subject with ID {subject_id} not found",
+                    details={"error": "Subject not found"},
                     source="MaterialService",
                 )
                 return BaseResponseDto(
                     success=False,
                     code=404,
                     data=None,
-                    message=f"Destination material with ID {destination_id} not found",
+                    message=f"Subject with ID {subject_id} not found",
                 )
-            if destination_material.material_type != "folder":
-                await self.logger.log(
-                    action="CopyMany",
-                    entity="Material",
-                    level="error",
-                    code=400,
-                    message=f"Destination material with ID {destination_id} is not a folder",
-                    details={"error": "Destination material is not a folder"},
-                    source="MaterialService",
+            destination_material = None
+            if destination_id is not None:
+                destination_material_response = await self.material_repository.find_one(
+                    Material.id == destination_id
                 )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message=f"Destination material with ID {destination_id} is not a folder",
-                )
+                if not destination_material_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=destination_material_response.code,
+                        data=None,
+                        message=destination_material_response.message,
+                    )
+                destination_material = destination_material_response.data
+                if not destination_material:
+                    await self.logger.log(
+                        action="CopyMany",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Destination material with ID {destination_id} not found",
+                        details={"error": "Destination material not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Destination material with ID {destination_id} not found",
+                    )
+                if destination_material.subject_id != subject_id:
+                    await self.logger.log(
+                        action="CopyMany",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message="Destination material does not belong to the provided subject",
+                        details={"error": "Destination subject mismatch"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message="Destination material must belong to the provided subject",
+                    )
+                if destination_material.material_type != "folder":
+                    await self.logger.log(
+                        action="CopyMany",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Destination material with ID {destination_id} is not a folder",
+                        details={"error": "Destination material is not a folder"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Destination material with ID {destination_id} is not a folder",
+                    )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -1483,27 +1582,6 @@ class MaterialService(IMaterialService):
                     code=401,
                     data=None,
                     message="Logged-in user not found",
-                )
-            verify_restricted_access_response = (
-                await self.helper_service.verify_restricted_access(
-                    subject_id=destination_material.subject_id
-                )
-            )
-            if not verify_restricted_access_response.success:
-                await self.logger.log(
-                    action="CopyMany",
-                    entity="Material",
-                    level="error",
-                    code=verify_restricted_access_response.code or 500,
-                    message=f"Failed to verify restricted access for user {logged_in_user.id} on subject {destination_material.subject_id}: {verify_restricted_access_response.message}",
-                    details={"error": verify_restricted_access_response.error},
-                    source="MaterialService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=verify_restricted_access_response.code,
-                    data=None,
-                    message=verify_restricted_access_response.message,
                 )
             author_id = logged_in_user.id
             access_token_response = await self.helper_service.get_google_access_token(
@@ -1545,9 +1623,10 @@ class MaterialService(IMaterialService):
             for material_id in material_ids:
                 copy_response = await self._recursive_copy(
                     material_id,
-                    destination_material.id,
+                    destination_id,
                     author_id,
                     access_token,
+                    subject_id,
                 )
                 if not copy_response.success:
                     return BaseResponseDto(
@@ -1600,6 +1679,22 @@ class MaterialService(IMaterialService):
                     code=400,
                     data=None,
                     message=f"Invalid URL format: {url}",
+                )
+            if not subject_id:
+                await self.logger.log(
+                    action="FetchMaterialsFromDrive",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message=f"Subject ID is required for fetching materials from Google Drive",
+                    details={"error": "Subject ID is required"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message=f"Subject ID is required for fetching materials from Google Drive",
                 )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == subject_id
@@ -1808,11 +1903,11 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Failed to create materials from Google Drive data, please try again later.",
                 )
-            share_link = f"/user/materials/{subject_id}"
+            share_link = f"/user/materials?subject_id={subject_id}"
             if parent_id:
-                share_link += f"/{parent_id}"
+                share_link += f"&parent_id={parent_id}"
             if len(fetched_data.children) == 0:
-                share_link += f"?material_id={created_data.id}"
+                share_link += f"&material_id={created_data.id}"
             await self.helper_service.send_notification(
                 notification_type=Notification.NotificationType.MATERIAL,
                 parent_id=created_data.id,
@@ -2154,16 +2249,17 @@ class MaterialService(IMaterialService):
     async def _recursive_copy(
         self,
         material_id: int,
-        destination_id: int,
+        destination_id: int | None,
         author_id: int,
         access_token: str,
+        subject_id: int,
     ) -> BaseResponseDto[bool]:
         try:
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Material, ["attachment"]
             )
             existing_material_response = await self.material_repository.find_one(
-                Material.id == material_id
+                Material.id == material_id, dynamic_includes
             )
             if not existing_material_response.success:
                 return BaseResponseDto(
@@ -2193,7 +2289,7 @@ class MaterialService(IMaterialService):
                 name=existing_material.name,
                 material_type=existing_material.material_type,
                 details=existing_material.details,
-                subject_id=existing_material.subject_id,
+                subject_id=subject_id,
                 parent_id=destination_id,
                 author_id=author_id,
             )
@@ -2363,6 +2459,7 @@ class MaterialService(IMaterialService):
                     created_material.id,
                     author_id,
                     access_token,
+                    subject_id,
                 )
                 if not recursive_copy_response.success:
                     return BaseResponseDto(
@@ -3035,7 +3132,19 @@ class MaterialService(IMaterialService):
         details = attachment.details or {}
         file_data = details.get("file_data") or {}
         file_name = file_data.get("name") or material.name or f"material-{material.id}"
-        return self._sanitize_zip_name(file_name)
+        file_name = self._sanitize_zip_name(file_name)
+
+        mime_type = (file_data.get("mime_type") or "").split(";", 1)[0].strip().lower()
+        extension = {
+            "application/vnd.google-apps.document": ".docx",
+            "application/vnd.google-apps.spreadsheet": ".xlsx",
+            "application/vnd.google-apps.presentation": ".pptx",
+        }.get(mime_type) or mimetypes.guess_extension(mime_type, strict=False)
+
+        if extension and not file_name.lower().endswith(extension.lower()):
+            file_name = f"{file_name}{extension}"
+
+        return file_name
 
     @staticmethod
     def _sanitize_zip_name(name: str) -> str:

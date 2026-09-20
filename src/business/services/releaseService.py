@@ -34,6 +34,39 @@ class ReleaseService(IReleaseService):
     async def rollback_transaction(self):
         await self.release_repository.rollback_transaction()
 
+    async def find_versions(self):
+        try:
+            dynamic_order_by = self.helper_service.generate_dynamic_order_by(
+                "Version", ["version_number"]
+            )
+            result = await self.version_repository.find(
+                order_by=dynamic_order_by, limit=int(1e6)
+            )
+            if not result.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=result.code,
+                    data=None,
+                    message=result.message,
+                )
+            return BaseResponseDto(success=True, data=result.data)
+        except Exception as ex:
+            await self.logger.log(
+                action="FindVersions",
+                entity="Version",
+                level="error",
+                code=500,
+                message="An error occurred while finding versions",
+                details={"error": repr(ex)},
+                source="ReleaseService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while finding versions",
+            )
+
     # CRUD Functions
     async def find_one(
         self,
@@ -62,14 +95,13 @@ class ReleaseService(IReleaseService):
                 "Release", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Release", order_by
+                "Release", order_by, descending
             )
             result = await self.release_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
             )
             if not result.success:
                 return BaseResponseDto(
@@ -126,14 +158,13 @@ class ReleaseService(IReleaseService):
                 "Release", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Release", order_by
+                "Release", order_by, descending
             )
             result = await self.release_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )
@@ -235,6 +266,7 @@ class ReleaseService(IReleaseService):
                 release_number=data.release_number,
                 title=data.title,
                 date=data.date,
+                details=data.details,
                 release_version=version,
                 release_items=set(
                     ReleaseItem(
@@ -393,15 +425,15 @@ class ReleaseService(IReleaseService):
             target_release.release_number = data.release_number
             target_release.title = data.title
             target_release.date = data.date
+            target_release.details = data.details
             target_release.release_version = version
-            target_release.release_items.update(
-                set(
-                    ReleaseItem(
-                        item_type=item.item_type,
-                        content=item.content,
-                    )
-                    for item in data.release_items
+            target_release.release_items.clear()
+            target_release.release_items = set(
+                ReleaseItem(
+                    item_type=item.item_type,
+                    content=item.content,
                 )
+                for item in data.release_items
             )
             update_release_response = await self.release_repository.update(
                 target_release

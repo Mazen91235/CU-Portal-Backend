@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends, Query
-from api.routes.customRoute import CustomRoute, set_timeout
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iMaterialController import IMaterialController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -53,7 +53,6 @@ def create_material_user_router(
     @router.get(
         "/download-many",
         dependencies=[
-            Depends(set_timeout(0)),
         ],
         status_code=200,
         summary="Download Materials",
@@ -236,7 +235,6 @@ def create_material_admin_router(
             Depends(_is_ready),
             Depends(_has_registered_subjects),
             Depends(_validate("url", "subject_id")),
-            Depends(set_timeout(60)),
         ],
         response_model=BaseResponseDto[bool],
         status_code=201,
@@ -253,7 +251,6 @@ def create_material_admin_router(
     @router.get(
         "/download-many",
         dependencies=[
-            Depends(set_timeout(0)),
         ],
         status_code=200,
         summary="Download Materials",
@@ -297,8 +294,7 @@ def create_material_admin_router(
             Depends(_is_authorized("Edit Materials")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
-            Depends(_validate("material_ids", "destination_id")),
-            Depends(set_timeout(60)),
+            Depends(_validate("material_ids", "subject_id")),
         ],
         response_model=BaseResponseDto,
         status_code=201,
@@ -319,8 +315,7 @@ def create_material_admin_router(
             Depends(_is_authorized("Edit Materials")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
-            Depends(_validate("material_ids", "destination_id")),
-            Depends(set_timeout(60)),
+            Depends(_validate("material_ids", "subject_id")),
         ],
         response_model=BaseResponseDto,
         status_code=200,
@@ -363,7 +358,6 @@ def create_material_admin_router(
             Depends(_is_authorized("Delete Materials")),
             Depends(_is_ready),
             Depends(_has_registered_subjects),
-            Depends(set_timeout(60)),
         ],
         response_model=BaseResponseDto,
         status_code=200,

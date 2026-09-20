@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from .base import (
     Base,
     Integer,
@@ -8,14 +9,20 @@ from .base import (
     datetime,
     JSON,
     MutableDict,
+    ForeignKey,
     Index,
     Mapped,
     Optional,
     TimezoneHandler,
     TypedDict,
+    TYPE_CHECKING,
     mapped_column,
+    relationship,
     validates,
 )
+
+if TYPE_CHECKING:
+    from .user import User
 
 
 class Token(Base):
@@ -33,7 +40,7 @@ class Token(Base):
     )
     token_type: Mapped[int] = mapped_column(
         Integer, nullable=False
-    )  # (0: Email Verification, 1: Google Token)
+    )  # (0: Email Verification, 1: Google Token, 2: Refresh Token)
     details: Mapped[Optional[dict]] = mapped_column(
         MutableDict.as_mutable(JSON), nullable=True, default=dict
     )
@@ -52,8 +59,18 @@ class Token(Base):
         nullable=True,
     )
 
+    # Relationships
+    user_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE", name="fk_user_token"),
+        nullable=True,
+    )
+    user: Mapped[Optional["User"]] = relationship("User", back_populates="tokens")
+
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Arguments
     __table_args__ = (
@@ -85,6 +102,10 @@ class Token(Base):
         GOOGLE_TOKEN = {
             "name": "Google Token",
             "value": 1,
+        }
+        REFRESH_TOKEN = {
+            "name": "Refresh Token",
+            "value": 2,
         }
 
     STANDARD_LENGTH = 32

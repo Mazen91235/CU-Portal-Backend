@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, allow_inactive
 from core.iControllers.iReleaseController import IReleaseController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -10,6 +10,7 @@ from core.dtos.releaseDtos import (
     ReleaseUpdateDto,
     ReleaseSearchDto,
 )
+from core.dtos.versionDtos import VersionResponseDto
 from core.models.queryModel import QueryModel
 from core.utils.parser import Parser
 from core.utils.cookieHandler import cookie_scheme
@@ -34,10 +35,22 @@ def create_release_user_router(controller_provider, auth_middleware_provider):
         return await auth_middleware.is_logged_in(request, refresh_token)
 
     @router.get(
+        "/versions",
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
+        response_model=BaseResponseDto[list[VersionResponseDto]],
+        status_code=200,
+        summary="Find Release Versions",
+        description="Get all release versions in the system",
+    )
+    async def find_release_versions(
+        request: Request,
+        controller: IReleaseController = Depends(_get_controller),
+    ):
+        return await controller.find_versions(request)
+
+    @router.get(
         "/{release_id}",
-        dependencies=[
-            Depends(_is_logged_in),
-        ],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto[ReleaseResponseDto],
         status_code=200,
         summary="Find Release",
@@ -52,9 +65,7 @@ def create_release_user_router(controller_provider, auth_middleware_provider):
 
     @router.get(
         "/",
-        dependencies=[
-            Depends(_is_logged_in),
-        ],
+        dependencies=[Depends(_is_logged_in), Depends(allow_inactive())],
         response_model=BaseResponseDto[list[ReleaseResponseDto]],
         status_code=200,
         summary="Find Releases",
@@ -114,6 +125,23 @@ def create_release_admin_router(
             return await validation_middleware.validate(request, *keys)
 
         return validate_request
+
+    @router.get(
+        "/versions",
+        dependencies=[
+            Depends(_is_logged_in),
+            Depends(_is_authorized("View Releases")),
+        ],
+        response_model=BaseResponseDto[list[VersionResponseDto]],
+        status_code=200,
+        summary="Find Release Versions",
+        description="Get all release versions in the system",
+    )
+    async def find_release_versions(
+        request: Request,
+        controller: IReleaseController = Depends(_get_controller),
+    ):
+        return await controller.find_versions(request)
 
     @router.get(
         "/{release_id}",

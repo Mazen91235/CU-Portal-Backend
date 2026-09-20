@@ -5,7 +5,7 @@ from core.utils.mapper import Mapper
 from core.utils.generator import Generator
 from core.utils.responseHandler import ResponseHandler
 from core.utils.cookieHandler import CookieHandler
-from core.utils.parser import Parser
+from core.utils.validator import Validator
 from core.utils.oauthHandler import OAuthHandler
 from core.utils.timezoneHandler import TimezoneHandler
 from core.utils.jsonHandler import JSONHandler
@@ -301,6 +301,14 @@ class UserController(IUserController):
     async def login_with_google(self, request):
         try:
             await self.user_service.begin_transaction()
+            logout_response = await self.user_service.logout()
+            if not logout_response.success:
+                await self.user_service.rollback_transaction()
+                return ResponseHandler.generate_response(
+                    success=False,
+                    code=logout_response.code,
+                    message=logout_response.message,
+                )
             response = await self.user_service.login_with_google()
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -544,19 +552,24 @@ class UserController(IUserController):
         try:
             token_details_stringified = CookieHandler.get_cookie(request, "saved_token")
             if not token_details_stringified:
-                await self.logger.log(
-                    action="GetTokenDetails",
-                    entity="User",
-                    level="warning",
-                    code=400,
-                    message="No saved token found in cookies for retrieving token details",
-                    source="UserController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="No saved token found in cookies for retrieving token details",
-                )
+                if Validator.validate_hostname_is_background_worker(
+                    request.url.hostname or ""
+                ):
+                    await self.logger.log(
+                        action="GetTokenDetails",
+                        entity="User",
+                        level="warning",
+                        code=400,
+                        message="No saved token found in cookies for retrieving token details",
+                        source="UserController",
+                    )
+                    return ResponseHandler.generate_response(
+                        success=False,
+                        code=400,
+                        message="No saved token found in cookies for retrieving token details",
+                    )
+                else:
+                    return ResponseHandler.generate_redirect_response()
             token_details = JSONHandler.parse(token_details_stringified)
             if not token_details:
                 await self.logger.log(
@@ -630,19 +643,24 @@ class UserController(IUserController):
             token_details_stringified = CookieHandler.get_cookie(request, "saved_token")
             if not token_details_stringified:
                 await self.user_service.rollback_transaction()
-                await self.logger.log(
-                    action="ResendToken",
-                    entity="User",
-                    level="warning",
-                    code=400,
-                    message="No saved token found in cookies for resending token",
-                    source="UserController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=400,
-                    message="No saved token found in cookies for resending token",
-                )
+                if Validator.validate_hostname_is_background_worker(
+                    request.url.hostname or ""
+                ):
+                    await self.logger.log(
+                        action="ResendToken",
+                        entity="User",
+                        level="warning",
+                        code=400,
+                        message="No saved token found in cookies for resending token",
+                        source="UserController",
+                    )
+                    return ResponseHandler.generate_response(
+                        success=False,
+                        code=400,
+                        message="No saved token found in cookies for resending token",
+                    )
+                else:
+                    return ResponseHandler.generate_redirect_response()
             token_details = JSONHandler.parse(token_details_stringified)
             if not token_details:
                 await self.user_service.rollback_transaction()
@@ -1078,21 +1096,7 @@ class UserController(IUserController):
                     code=response.code,
                     message=response.message,
                 )
-            permissions = response.data
-            if not permissions:
-                await self.logger.log(
-                    action="GetUserPermissions",
-                    entity="User",
-                    level="error",
-                    code=500,
-                    message="Failed to retrieve user permissions",
-                    source="UserController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=500,
-                    message="An error occurred while processing the request, please try again later",
-                )
+            permissions = response.data or []
             return ResponseHandler.generate_response(
                 success=True,
                 code=200,
@@ -1148,7 +1152,9 @@ class UserController(IUserController):
     async def register_device(self, request, data):
         try:
             await self.user_service.begin_transaction()
-            response = await self.user_service.register_device(data.device_token)
+            response = await self.user_service.register_device(
+                data.device_id, data.device_token
+            )
             if not response.success:
                 await self.user_service.rollback_transaction()
                 return ResponseHandler.generate_response(
@@ -1181,7 +1187,7 @@ class UserController(IUserController):
     async def unregister_device(self, request, data):
         try:
             await self.user_service.begin_transaction()
-            response = await self.user_service.unregister_device(data.device_token)
+            response = await self.user_service.unregister_device(data.device_id)
             if not response.success:
                 await self.user_service.rollback_transaction()
                 return ResponseHandler.generate_response(

@@ -33,6 +33,9 @@ class Release(Base):
     release_number: Mapped[str] = mapped_column(String(10), nullable=False)
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     date: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    details: Mapped[dict] = mapped_column(
+        MutableDict.as_mutable(JSON), nullable=True, default=dict
+    )  # extra details (e.g., description)
 
     # Timestamps
     created_at: Mapped[Optional[datetime]] = mapped_column(
@@ -46,9 +49,11 @@ class Release(Base):
         onupdate=lambda: TimezoneHandler.now("UTC"),
         nullable=True,
     )
-    
+
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Relationships
     release_version_id: Mapped[int] = mapped_column(
@@ -58,7 +63,10 @@ class Release(Base):
         "Version", back_populates="releases"
     )
     release_items: Mapped[set["ReleaseItem"]] = relationship(
-        "ReleaseItem", back_populates="release", cascade="all, delete-orphan", collection_class=set
+        "ReleaseItem",
+        back_populates="release",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
 
     # Arguments

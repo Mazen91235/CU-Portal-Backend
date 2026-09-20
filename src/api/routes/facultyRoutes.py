@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, allow_inactive
 from core.iControllers.iFacultyController import IFacultyController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -62,6 +62,7 @@ def create_faculty_user_router(
         "/{faculty_id}",
         dependencies=[
             Depends(_is_logged_in),
+            Depends(allow_inactive()),
         ],
         response_model=BaseResponseDto[FacultyResponseDto],
         status_code=200,
@@ -79,6 +80,7 @@ def create_faculty_user_router(
         "/",
         dependencies=[
             Depends(_is_logged_in),
+            Depends(allow_inactive()),
         ],
         response_model=BaseResponseDto[list[FacultyResponseDto]],
         status_code=200,

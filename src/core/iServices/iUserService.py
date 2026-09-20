@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from uuid import UUID
 from core.iServices.bases.iQueryableService import IQueryableService
 from core.iServices.bases.iUpdatableService import IUpdatableService
 from core.entities.user import User
@@ -128,9 +129,11 @@ class IUserService(
         pass
 
     @abstractmethod
-    async def register_device(self, device_token: str) -> BaseResponseDto[bool]:
+    async def register_device(
+        self, device_id: UUID, device_token: str
+    ) -> BaseResponseDto[bool]:
         pass
 
     @abstractmethod
-    async def unregister_device(self, device_token: str) -> BaseResponseDto[bool]:
+    async def unregister_device(self, device_id: UUID) -> BaseResponseDto[bool]:
         pass

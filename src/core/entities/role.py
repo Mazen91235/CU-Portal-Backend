@@ -81,8 +81,8 @@ class Role(Base):
     # Attributes
     class RoleConfig:
         ROLES = [
-            "View Admin Panel",
-            "View Admin Links",
+            "View AdminPanel",
+            "View AdminLinks",
             "Is Admin",
             "View Faculties",
             "Add Faculties",
@@ -155,15 +155,17 @@ class Role(Base):
         EXCLUSIONS = {
             "admin": [],
             "site admin": [
-                "View Admin Panel",
+                "View AdminPanel",
                 "Is Admin",
                 "View Logs",
+                "Delete Logs",
                 "View Messages",
             ],
             "representative": [
-                "View Admin Panel",
+                "View AdminPanel",
                 "Is Admin",
                 "View Logs",
+                "Delete Logs",
                 "View Messages",
                 "View Faculties",
                 "Add Faculties",

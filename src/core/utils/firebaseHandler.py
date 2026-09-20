@@ -48,11 +48,9 @@ class FirebaseHandler:
             if not icon or icon.strip().startswith("/"):
                 icon = f"{os.getenv('FRONTEND_URL', 'http://localhost:5173')}{icon or '/logo.png'}"
             message = messaging.Message(
-                notification=messaging.Notification(
-                    title=title,
-                    body=body,
-                ),
                 data={
+                    "title": title,
+                    "body": body,
                     "url": url,
                     "icon": icon,
                     "notification_id": (
@@ -60,13 +58,6 @@ class FirebaseHandler:
                     ),
                 },
                 token=device_token,
-                # Web push specific overrides
-                webpush=messaging.WebpushConfig(
-                    notification=messaging.WebpushNotification(icon=icon, badge=icon),
-                    fcm_options=messaging.WebpushFCMOptions(
-                        link=url,
-                    ),
-                ),
             )
 
             response = messaging.send(message)

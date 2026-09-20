@@ -28,8 +28,7 @@ def create_attachment_public_router(
     @router.post(
         "/seed",
         dependencies=[
-            # Depends(_validate_api_key),
-            Depends(set_timeout(1800)),
+            Depends(_validate_api_key),
         ],  # Set a timeout of 30 minutes for the seed operation
         summary="Seed Attachments",
         description="Seed the attachments table with initial data",
@@ -44,16 +43,17 @@ def create_attachment_public_router(
         "/validate",
         dependencies=[
             Depends(_validate_api_key),
-            Depends(set_timeout(1800)),
-        ],  # Set a timeout of 30 minutes for the validate operation
+            Depends(
+                set_timeout(3600)
+            ),  # Set a timeout of 1 hour for the validate operation
+        ],
         summary="Validate Attachments",
         description="Validate the attachments in the database",
     )
     async def validate_attachments(
         request: Request,
-        start_idx: int,
         controller: IAttachmentController = Depends(_get_controller),
     ):
-        return await controller.validate(request, start_idx)
+        return await controller.validate(request)
 
     return router

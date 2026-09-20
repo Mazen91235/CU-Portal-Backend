@@ -8,5 +8,5 @@ class IAttachmentController(ABC):
         pass
 
     @abstractmethod
-    async def validate(self, request: Request, start_idx: int) -> Response:
+    async def validate(self, request: Request) -> Response:
         pass

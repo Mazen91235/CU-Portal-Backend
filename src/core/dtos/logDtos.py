@@ -54,6 +54,10 @@ class LogResponseDto(BaseModel):
 
 class LogSearchDto(BaseSearchDto):
     id: int | None = Field(default=None, description="ID of the log")
+    action: str | None = Field(default=None, description="Action performed by the user")
+    entity: str | None = Field(
+        default=None, description="Entity on which the action was performed"
+    )
     level: str | None = Field(default=None, description="Level of the log")
     response_code: int | None = Field(
         default=None, description="Response code associated with the log"

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute, set_timeout
+from api.routes.customRoute import CustomRoute
 from core.iControllers.iLogController import ILogController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -151,7 +151,6 @@ def create_log_admin_router(
         dependencies=[
             Depends(_is_logged_in),
             Depends(_is_authorized("Delete Logs")),
-            Depends(set_timeout(60)),
         ],
         response_model=BaseResponseDto[bool],
         status_code=200,

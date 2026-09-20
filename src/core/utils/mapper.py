@@ -51,7 +51,11 @@ class Mapper(Generic[T, U]):
 
     @classmethod
     def _map_nested_value(
-        cls, value: Any, visited: dict[int, Any], limit_nesting: int | None = None
+        cls,
+        value: Any,
+        visited: dict[int, Any],
+        limit_nesting: int | None = None,
+        active: set[int] | None = None,
     ) -> Any:
         if value is None:
             return None
@@ -65,7 +69,7 @@ class Mapper(Generic[T, U]):
             mapped_items = []
             for item in items:
                 mapped_item = cls._map_nested_value(
-                    item, visited, limit_nesting=limit_nesting
+                    item, visited, limit_nesting=limit_nesting, active=active
                 )
                 if mapped_item is not None:
                     mapped_items.append(mapped_item)
@@ -81,6 +85,11 @@ class Mapper(Generic[T, U]):
         if val_id in visited:
             return visited[val_id]
 
+        # ORM relationships are bidirectional. Do not follow a back-reference
+        # while its parent is still being mapped.
+        if active is not None and val_id in active:
+            return None
+
         dto_cls = cls._resolve_response_dto(type(value))
         if not dto_cls:
             return value
@@ -90,6 +99,7 @@ class Mapper(Generic[T, U]):
             dto_cls,
             to_dict=False,
             visited=visited,
+            active=active,
             limit_nesting=limit_nesting,
         )
 
@@ -100,71 +110,89 @@ class Mapper(Generic[T, U]):
         to_dict: bool = False,
         visited: dict[int, Any] | None = None,
         limit_nesting: int | None = None,
+        active: set[int] | None = None,
     ) -> U | dict:
         mapped_values = {}
-        active_visited = dict(visited) if visited is not None else {}
+        active_visited = visited if visited is not None else {}
+        active_ids = active if active is not None else set()
         src_id = id(src)
 
-        if isinstance(src, BaseModel):
-            source_attrs = list(type(src).model_fields.keys())
-        elif isinstance(src, dict):
-            source_attrs = list(src.keys())
-        else:
-            try:
-                inspected = inspect(src)
-                source_attrs = list(inspected.dict.keys()) if inspected else []
-                if inspected and hasattr(inspected, "mapper"):
-                    for key, descriptor in inspected.mapper.all_orm_descriptors.items():
-                        proxy_key = f"{src.__class__.__name__.lower()}.{key}"
-                        if (
-                            issubclass(type(descriptor), AssociationProxy)
-                            and Mapper.PROXIES.get(proxy_key, "") in source_attrs
-                            and key not in source_attrs
-                        ):
-                            source_attrs.append(key)
+        if src_id in active_ids:
+            return cls()
 
-            except Exception:
-                source_attrs = dir(src)
+        active_ids.add(src_id)
 
-            if (
-                hasattr(src, "google_details_token")
-                and "google_details_token" not in source_attrs
-            ):
-                source_attrs.append("google_details_token")
+        try:
+            if isinstance(src, BaseModel):
+                source_attrs = list(type(src).model_fields.keys())
+            elif isinstance(src, dict):
+                source_attrs = list(src.keys())
+            else:
+                try:
+                    inspected = inspect(src)
+                    source_attrs = list(inspected.dict.keys()) if inspected else []
+                    if inspected and hasattr(inspected, "mapper"):
+                        for (
+                            key,
+                            descriptor,
+                        ) in inspected.mapper.all_orm_descriptors.items():
+                            proxy_key = f"{src.__class__.__name__.lower()}.{key}"
+                            if (
+                                issubclass(type(descriptor), AssociationProxy)
+                                and Mapper.PROXIES.get(proxy_key, "") in source_attrs
+                                and key not in source_attrs
+                            ):
+                                source_attrs.append(key)
 
-            if hasattr(src, "seen") and "seen" not in source_attrs:
-                source_attrs.append("seen")
+                except Exception:
+                    source_attrs = dir(src)
 
-        target_fields = (
-            cls.model_fields.keys() if issubclass(cls, BaseModel) else dir(cls)
-        )
+                if (
+                    hasattr(src, "google_details_token")
+                    and "google_details_token" not in source_attrs
+                ):
+                    source_attrs.append("google_details_token")
 
-        for attr in target_fields:
-            if attr.startswith("_") or attr.startswith("Model"):
-                continue
+                if hasattr(src, "seen") and "seen" not in source_attrs:
+                    source_attrs.append("seen")
 
-            if attr in source_attrs:
-                raw_value = (
-                    getattr(src, attr) if not isinstance(src, dict) else src.get(attr)
-                )
-                mapped_value = Mapper._map_nested_value(
-                    raw_value, active_visited, limit_nesting=limit_nesting
-                )
-                mapped_values[attr] = mapped_value
-
-        dest = cls(**mapped_values)
-
-        # Cache mapped result for this instance ID so shared nested references re-use it
-        active_visited[src_id] = dest
-
-        if to_dict:
-            return (
-                dest.model_dump(mode="json")
-                if isinstance(dest, BaseModel)
-                else dest.__dict__
+            target_fields = (
+                cls.model_fields.keys() if issubclass(cls, BaseModel) else dir(cls)
             )
 
-        return dest
+            for attr in target_fields:
+                if attr.startswith("_") or attr.startswith("Model"):
+                    continue
+
+                if attr in source_attrs:
+                    raw_value = (
+                        getattr(src, attr)
+                        if not isinstance(src, dict)
+                        else src.get(attr)
+                    )
+                    mapped_value = Mapper._map_nested_value(
+                        raw_value,
+                        active_visited,
+                        limit_nesting=limit_nesting,
+                        active=active_ids,
+                    )
+                    mapped_values[attr] = mapped_value
+
+            dest = cls(**mapped_values)
+
+            # Cache mapped result for this instance ID so shared nested references re-use it
+            active_visited[src_id] = dest
+
+            if to_dict:
+                return (
+                    dest.model_dump(mode="json")
+                    if isinstance(dest, BaseModel)
+                    else dest.__dict__
+                )
+
+            return dest
+        finally:
+            active_ids.discard(src_id)
 
     @staticmethod
     def map_list(

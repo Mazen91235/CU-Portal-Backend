@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar, Any, Type
+from typing import Generic, TypeVar, Any, Type, Coroutine
+from sqlalchemy.ext.asyncio import AsyncSession
 from collections.abc import AsyncIterable
 from core.entities.user import User
 from core.entities.notification import Notification
@@ -71,7 +72,7 @@ class IHelperService(ABC, Generic[U]):
 
     @abstractmethod
     def generate_dynamic_order_by(
-        self, entity_name: str, order_by: list[str] | None
+        self, entity_name: str, order_by: list[str] | None, descending: bool = False
     ) -> list[Any]:
         pass
 
@@ -100,7 +101,8 @@ class IHelperService(ABC, Generic[U]):
         department_id: int | None = None,
         year_id: int | None = None,
         subject_id: int | None = None,
-    ) -> BaseResponseDto[bool]:
+        user_ids: set[int] | None = None,
+    ) -> BaseResponseDto[Coroutine[Any, Any, BaseResponseDto]]:
         pass
 
     # File Functions
@@ -231,9 +233,17 @@ class IHelperService(ABC, Generic[U]):
         pass
 
     @abstractmethod
+    async def update_attachment(
+        self,
+        attachment: Attachment,
+    ) -> BaseResponseDto[Attachment]:
+        pass
+
+    @abstractmethod
     async def delete_attachment(
         self,
         attachment_id: int | None = None,
         attachment: Attachment | None = None,
+        session: AsyncSession | None = None,
     ) -> BaseResponseDto:
         pass

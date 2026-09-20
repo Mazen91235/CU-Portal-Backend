@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute
+from api.routes.customRoute import CustomRoute, allow_inactive
 from core.iControllers.iDepartmentController import IDepartmentController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -62,6 +62,7 @@ def create_department_user_router(
         "/{department_id}",
         dependencies=[
             Depends(_is_logged_in),
+            Depends(allow_inactive()),
         ],
         status_code=200,
         summary="Find Department",
@@ -78,6 +79,7 @@ def create_department_user_router(
         "/",
         dependencies=[
             Depends(_is_logged_in),
+            Depends(allow_inactive())
         ],
         response_model=BaseResponseDto[list[DepartmentResponseDto]],
         status_code=200,

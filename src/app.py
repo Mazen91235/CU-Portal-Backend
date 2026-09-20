@@ -3,8 +3,7 @@ import sys
 import uvicorn
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request, Response
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.exc import IllegalStateChangeError
 
@@ -60,6 +59,18 @@ from core.utils.firebaseHandler import FirebaseHandler
 
 load_dotenv()  # Load environment variables from .env file
 
+ALLOWED_ORIGINS = {
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://cu-portal-dev.vercel.app",
+    "https://n1j6xg2q-5173.uks1.devtunnels.ms",
+    "https://api-cu-portal-dev.vercel.app",
+    "https://cu-portal-backend-dev.onrender.com",
+    "https://cu-portal.com",
+    "https://api.cu-portal.com",
+    "https://bg-worker.cu-portal.com",
+}
+
 
 def rebuild_response_dtos() -> None:
     dto_namespace = {
@@ -96,20 +107,34 @@ def create_app() -> FastAPI:
         version="1.0.0",
         lifespan=lifespan,
     )
-    container = Container()
-    app.state.container = container
-    app.router.route_class = CustomRoute
 
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
-        # Create one DB session per request and store it in ContextVar.
+        origin = request.headers.get("origin")
+        real_origin = origin
+        if not real_origin or real_origin == "null":
+            real_origin = request.headers.get("referer", "").rstrip("/")
+        if request.method.upper() == "OPTIONS":
+            response = Response(status_code=204)
+            if real_origin and real_origin in ALLOWED_ORIGINS:
+                req_headers = request.headers.get(
+                    "access-control-request-headers", "content-type, authorization"
+                )
+                response.headers["Access-Control-Allow-Origin"] = origin or real_origin
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                response.headers["Access-Control-Allow-Methods"] = (
+                    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+                )
+                response.headers["Access-Control-Allow-Headers"] = req_headers
+                response.headers["Vary"] = "Origin"
+            return response
+
         session = container.session_factory()()
 
         session_token = session_context.set(session)
         request_token = request_context.set(request)
         try:
             response = await call_next(request)
-            return response
         except Exception:
             if session.in_transaction():
                 try:
@@ -129,6 +154,27 @@ def create_app() -> FastAPI:
                     pass
             except Exception:
                 pass
+        if real_origin and real_origin in ALLOWED_ORIGINS:
+            req_headers = request.headers.get(
+                "access-control-request-headers", "content-type, authorization"
+            )
+            response.headers["Access-Control-Allow-Origin"] = origin or real_origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = (
+                "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+            )
+            response.headers["Access-Control-Allow-Headers"] = req_headers
+            response.headers["Vary"] = "Origin"
+        return response
+
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=os.environ.get("SECRET_KEY", ""),
+    )
+
+    container = Container()
+    app.state.container = container
+    app.router.route_class = CustomRoute
 
     # We resolve the router here at startup.
     # Because we are now using `Depends()` inside `create_user_router`,
@@ -214,29 +260,6 @@ def create_app() -> FastAPI:
     app.include_router(message_public_routes)
     app.include_router(notification_public_routes)
     app.include_router(system_public_routes)
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://localhost:8000",
-            "https://cu-portal-dev.vercel.app",
-            "https://api-cu-portal-dev.vercel.app",
-            "https://cu-portal-backend-dev.onrender.com",
-            "https://cu-portal.com",
-            "https://api.cu-portal.com",
-            "https://bg-worker.cu-portal.com",
-        ],
-        allow_methods=["*"],
-        allow_headers=["*"],
-        allow_credentials=True,
-    )
-
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key=os.environ.get("SECRET_KEY", ""),
-    )
 
     return app
 

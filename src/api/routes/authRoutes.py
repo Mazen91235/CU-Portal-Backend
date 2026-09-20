@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, Depends
-from api.routes.customRoute import CustomRoute, set_timeout
+from api.routes.customRoute import CustomRoute, allow_inactive
 from core.iControllers.iUserController import IUserController
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iMiddlewares.iValidationMiddleware import IValidationMiddleware
@@ -27,12 +27,17 @@ def create_auth_router(
     def _get_validation_middleware() -> IValidationMiddleware:
         return validation_middleware_provider()
 
-    async def _is_logged_in(
-        request: Request,
-        auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
-        refresh_token: str | None = Depends(cookie_scheme),
-    ):
-        return await auth_middleware.is_logged_in(request, refresh_token)
+    def _is_logged_in(throw_error: bool = True):
+        async def is_logged_in_dependency(
+            request: Request,
+            auth_middleware: IAuthMiddleware = Depends(_get_auth_middleware),
+            refresh_token: str | None = Depends(cookie_scheme),
+        ):
+            return await auth_middleware.is_logged_in(
+                request, refresh_token, throw_error
+            )
+
+        return is_logged_in_dependency
 
     async def _is_logged_out(
         request: Request,
@@ -67,7 +72,6 @@ def create_auth_router(
                     "google_details_token",
                 )
             ),
-            Depends(set_timeout(60)),
         ],
         response_model=BaseResponseDto,
         status_code=201,
@@ -103,7 +107,6 @@ def create_auth_router(
         "/resend-token",
         dependencies=[
             Depends(_is_logged_out),
-            Depends(set_timeout(60)),
         ],
         response_model=BaseResponseDto,
         status_code=200,
@@ -148,7 +151,7 @@ def create_auth_router(
 
     @router.get(
         "/google-access-token",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in()), Depends(allow_inactive())],
         response_model=BaseResponseDto[str],
         status_code=200,
         summary="Get Google access token",
@@ -161,7 +164,7 @@ def create_auth_router(
 
     @router.get(
         "/is-logged-in",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in()), Depends(allow_inactive())],
         response_model=BaseResponseDto,
         status_code=200,
         summary="Check if user is logged in",
@@ -174,7 +177,7 @@ def create_auth_router(
 
     @router.get(
         "/login-with-google",
-        dependencies=[Depends(_is_logged_out), Depends(set_timeout(60))],
+        dependencies=[Depends(_is_logged_in(False)), Depends(allow_inactive())],
         summary="Login with Google",
         description="Initiates the Google login process and redirects the user to the Google authentication page.",
     )
@@ -185,7 +188,7 @@ def create_auth_router(
 
     @router.get(
         "/google-authentication-redirect",
-        dependencies=[Depends(set_timeout(60))],
+        dependencies=[Depends(allow_inactive())],
         summary="Handle Google authentication redirect",
         description="Handles the redirect from Google after user authentication and processes the login. User is then redirected to the frontend url with the authentication result and token if logged in.",
     )
@@ -196,7 +199,7 @@ def create_auth_router(
 
     @router.get(
         "/logout",
-        dependencies=[Depends(_is_logged_in)],
+        dependencies=[Depends(_is_logged_in(False)), Depends(allow_inactive())],
         response_model=BaseResponseDto,
         status_code=200,
         summary="Logout user",
