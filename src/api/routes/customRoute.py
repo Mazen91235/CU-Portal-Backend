@@ -179,7 +179,7 @@ async def _update_cache(request: Request, response: Response):
 
 def _extract_module_from_path(path: str) -> str:
     module = path.removeprefix("/user/").removeprefix("/admin/")
-    if not module:
+    if not module or "/" not in module:
         return "user"
     if "auth" in module:
         return "auth"
@@ -271,7 +271,7 @@ class CustomRoute(APIRoute):
         dependencies.append(Depends(_check_cache))
 
         self.timeout_seconds = timeout_seconds
-        
+
         self._background_tasks: set[asyncio.Task] = set()
 
         super().__init__(*args, dependencies=dependencies, **kwargs)
@@ -343,7 +343,9 @@ class CustomRoute(APIRoute):
                         status_code=499,
                         detail="Client disconnected before the request could complete.",
                     )
-                cache_update_task = asyncio.create_task(_update_cache(request, response))
+                cache_update_task = asyncio.create_task(
+                    _update_cache(request, response)
+                )
                 self._background_tasks.add(cache_update_task)
                 cache_update_task.add_done_callback(self._background_tasks.discard)
                 return response
@@ -373,7 +375,9 @@ class CustomRoute(APIRoute):
                     with suppress(Exception):
                         await asyncio.gather(*tasks, return_exceptions=True)
                 if lock_key and acquired:
-                    release_lock_task = asyncio.create_task(caching_handler.release_lock(lock_key))
+                    release_lock_task = asyncio.create_task(
+                        caching_handler.release_lock(lock_key)
+                    )
                     self._background_tasks.add(release_lock_task)
                     release_lock_task.add_done_callback(self._background_tasks.discard)
 
