@@ -5,7 +5,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterable
 from typing import Coroutine, TypeVar, Any, cast
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, desc, asc
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -643,7 +643,7 @@ class HelperService(IHelperService[U]):
                 selects_arr.append(select_item)
         return selects_arr
 
-    def generate_dynamic_order_by(self, entity_name, order_by):
+    def generate_dynamic_order_by(self, entity_name, order_by, descending=False):
         if not order_by:
             return []
 
@@ -654,9 +654,26 @@ class HelperService(IHelperService[U]):
 
             entity = entity_name if "." not in order else order.split(".")[0]
             property_name = order if "." not in order else order.split(".")[1]
+            
+            if property_name.endswith("_nearest"):
+                property_name = property_name.split("_nearest")[0]
+                order_item = EntitiesHandler.get_property(entity, property_name)
+                if order_item:
+                    now = func.now()
+                    
+                    is_past = func.case((order_item < now, 1), else_=0)
+                    
+                    distance = func.abs(order_item - now)
+                    
+                    order_by_arr.extend([asc(is_past), asc(distance)])
+                continue
+            
             order_item = EntitiesHandler.get_property(entity, property_name)
             if order_item:
-                order_by_arr.append(order_item)
+                if descending:
+                    order_by_arr.append(desc(order_item))
+                else:
+                    order_by_arr.append(asc(order_item))
         return order_by_arr
 
     def generate_dynamic_predicate(

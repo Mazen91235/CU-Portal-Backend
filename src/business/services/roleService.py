@@ -55,7 +55,7 @@ class RoleService(IRoleService):
                 "Role", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Role", order_by
+                "Role", order_by, descending
             )
 
             result = await self.role_repository.find_one(
@@ -63,7 +63,6 @@ class RoleService(IRoleService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
             )
 
             if not result.success:
@@ -116,7 +115,7 @@ class RoleService(IRoleService):
                 "Role", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Role", order_by
+                "Role", order_by, descending
             )
 
             result = await self.role_repository.find(
@@ -124,7 +123,6 @@ class RoleService(IRoleService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )

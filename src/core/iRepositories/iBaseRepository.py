@@ -14,7 +14,6 @@ class IBaseRepository(ABC, Generic[T]):
         includes: List[Any] = [],
         selects: List[Any] = [],
         order_by: List[Any] = [],
-        descending: bool = False,
         session: AsyncSession | None = None,
     ) -> BaseResponseDto[T]:
         pass
@@ -26,7 +25,6 @@ class IBaseRepository(ABC, Generic[T]):
         includes: List[Any] = [],
         selects: List[Any] = [],
         order_by: List[Any] = [],
-        descending: bool = False,
         page: int = 1,
         limit: int = 50,
         session: AsyncSession | None = None,

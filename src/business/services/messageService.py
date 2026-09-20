@@ -56,14 +56,13 @@ class MessageService(IMessageService):
                 "Message", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Message", order_by
+                "Message", order_by, descending
             )
             result = await self.message_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
             )
             if not result.success:
                 return BaseResponseDto(
@@ -120,14 +119,13 @@ class MessageService(IMessageService):
                 "Message", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Message", order_by
+                "Message", order_by, descending
             )
             result = await self.message_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )

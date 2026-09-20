@@ -76,14 +76,13 @@ class MaterialService(IMaterialService):
                 "Material", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Material", order_by
+                "Material", order_by, descending
             )
             result = await self.material_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
             )
             if not result.success:
                 return BaseResponseDto(
@@ -140,14 +139,13 @@ class MaterialService(IMaterialService):
                 "Material", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Material", order_by
+                "Material", order_by, descending
             )
             result = await self.material_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )

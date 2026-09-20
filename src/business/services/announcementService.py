@@ -56,14 +56,13 @@ class AnnouncementService(IAnnouncementService):
                 "Announcement", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Announcement", order_by
+                "Announcement", order_by, descending
             )
             result = await self.announcement_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
-                dynamic_order_by,
-                descending,
+                dynamic_order_by
             )
             if not result.success:
                 return BaseResponseDto(
@@ -119,14 +118,13 @@ class AnnouncementService(IAnnouncementService):
                 "Announcement", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Announcement", order_by
+                "Announcement", order_by, descending
             )
             result = await self.announcement_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )

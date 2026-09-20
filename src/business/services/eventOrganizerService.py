@@ -51,14 +51,13 @@ class EventOrganizerService(IEventOrganizerService):
                 "EventOrganizer", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "EventOrganizer", order_by
+                "EventOrganizer", order_by, descending
             )
             result = await self.event_organizer_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
             )
             if not result.success:
                 return BaseResponseDto(
@@ -115,7 +114,7 @@ class EventOrganizerService(IEventOrganizerService):
                 "EventOrganizer", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "EventOrganizer", order_by
+                "EventOrganizer", order_by, descending
             )
 
             result = await self.event_organizer_repository.find(
@@ -123,7 +122,6 @@ class EventOrganizerService(IEventOrganizerService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )

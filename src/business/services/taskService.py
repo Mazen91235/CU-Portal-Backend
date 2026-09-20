@@ -63,14 +63,13 @@ class TaskService(ITaskService):
                 "Task", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Task", order_by
+                "Task", order_by, descending
             )
             result = await self.task_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
             )
 
             if not result.success:
@@ -128,14 +127,13 @@ class TaskService(ITaskService):
                 "Task", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Task", order_by
+                "Task", order_by, descending
             )
             result = await self.task_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )

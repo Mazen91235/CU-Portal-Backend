@@ -72,7 +72,7 @@ class IHelperService(ABC, Generic[U]):
 
     @abstractmethod
     def generate_dynamic_order_by(
-        self, entity_name: str, order_by: list[str] | None
+        self, entity_name: str, order_by: list[str] | None, descending: bool = False
     ) -> list[Any]:
         pass
 

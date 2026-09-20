@@ -61,14 +61,13 @@ class WeekService(IWeekService):
                 "Week", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Week", order_by
+                "Week", order_by, descending
             )
             result = await self.week_repository.find_one(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
             )
             if not result.success:
                 return BaseResponseDto(
@@ -128,14 +127,13 @@ class WeekService(IWeekService):
                 "Week", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Week", order_by
+                "Week", order_by, descending
             )
             result = await self.week_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )

@@ -139,14 +139,13 @@ class NotificationService(INotificationService):
                 "UserNotification", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "UserNotification", order_by
+                "UserNotification", order_by, descending
             )
             result = await self.user_notification_repository.find(
                 predicate,
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )

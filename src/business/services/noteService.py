@@ -51,7 +51,7 @@ class NoteService(INoteService):
                 "Note", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Note", order_by
+                "Note", order_by, descending
             )
 
             result = await self.note_repository.find_one(
@@ -59,7 +59,6 @@ class NoteService(INoteService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
             )
 
             if not result.success:
@@ -109,7 +108,7 @@ class NoteService(INoteService):
                 "Note", selects
             )
             dynamic_order_by = self.helper_service.generate_dynamic_order_by(
-                "Note", order_by
+                "Note", order_by, descending
             )
 
             result = await self.note_repository.find(
@@ -117,7 +116,6 @@ class NoteService(INoteService):
                 dynamic_includes,
                 dynamic_selects,
                 dynamic_order_by,
-                descending,
                 page,
                 limit,
             )
