@@ -89,7 +89,6 @@ class BaseRepository(IBaseRepository):
         includes=None,
         selects=None,
         order_by=None,
-        descending=False,
         session=None,
     ):
         try:
@@ -147,7 +146,6 @@ class BaseRepository(IBaseRepository):
         includes=None,
         selects=None,
         order_by=None,
-        descending=False,
         page=1,
         limit=50,
         session=None,

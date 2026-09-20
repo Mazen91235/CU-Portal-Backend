@@ -654,20 +654,22 @@ class HelperService(IHelperService[U]):
 
             entity = entity_name if "." not in order else order.split(".")[0]
             property_name = order if "." not in order else order.split(".")[1]
-            
+
             if property_name.endswith("_nearest"):
                 property_name = property_name.split("_nearest")[0]
                 order_item = EntitiesHandler.get_property(entity, property_name)
                 if order_item:
                     now = func.now()
-                    
-                    is_past = func.case((order_item.is_(None), 1), (order_item < now, 1), else_=0)
-                    
+
+                    is_past = func.case(
+                        (order_item.is_(None), 2), (order_item < now, 1), else_=0
+                    )
+
                     distance = func.abs(order_item - now)
-                    
+
                     order_by_arr.extend([asc(is_past), asc(distance)])
                 continue
-            
+
             order_item = EntitiesHandler.get_property(entity, property_name)
             if order_item:
                 if descending:
