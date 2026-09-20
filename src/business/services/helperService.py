@@ -5,7 +5,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterable
 from typing import Coroutine, TypeVar, Any, cast
-from sqlalchemy import and_, func, or_, desc, asc
+from sqlalchemy import and_, func, or_, desc, asc, case
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -661,7 +661,7 @@ class HelperService(IHelperService[U]):
                 if order_item:
                     now = func.now()
 
-                    is_past = func.case(
+                    is_past = case(
                         (order_item.is_(None), 2), (order_item < now, 1), else_=0
                     )
 
