@@ -661,7 +661,7 @@ class HelperService(IHelperService[U]):
                 if order_item:
                     now = func.now()
                     
-                    is_past = func.case((order_item < now, 1), else_=0)
+                    is_past = func.case((order_item.is_(None), 1), (order_item < now, 1), else_=0)
                     
                     distance = func.abs(order_item - now)
                     
