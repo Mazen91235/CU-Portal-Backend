@@ -14,7 +14,7 @@ class ReleaseItemMutationDto(BaseModel):
         description="Type of the item (Feature, Improvement, Refactoring, Security Fix, Bug Fix)",
     )
     content: str = Field(
-        ..., min_length=1, max_length=255, description="Content/description of the item"
+        ..., min_length=1, max_length=600, description="Content/description of the item"
     )
 
 

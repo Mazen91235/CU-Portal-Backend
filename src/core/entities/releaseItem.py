@@ -32,7 +32,7 @@ class ReleaseItem(Base):
     item_type: Mapped["ReleaseItem.ItemType"] = mapped_column(
         String(15), nullable=False
     )
-    content: Mapped[str] = mapped_column(String(255), nullable=False)
+    content: Mapped[str] = mapped_column(String(600), nullable=False)
 
     # Timestamps
     created_at: Mapped[Optional[datetime]] = mapped_column(
@@ -54,7 +54,9 @@ class ReleaseItem(Base):
     release: Mapped["Release"] = relationship("Release", back_populates="release_items")
 
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Arguments
     __table_args__ = (Index("idx_release_item_release_id", "release_id", unique=False),)
