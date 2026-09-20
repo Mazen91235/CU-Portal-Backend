@@ -665,7 +665,10 @@ class HelperService(IHelperService[U]):
                         (order_item.is_(None), 2), (order_item < now, 1), else_=0
                     )
 
-                    distance = func.abs(order_item - now)
+                    seconds_diff = func.extract("epoch", order_item) - func.extract(
+                        "epoch", now
+                    )
+                    distance = func.abs(seconds_diff)
 
                     order_by_arr.extend([asc(is_past), asc(distance)])
                 continue
