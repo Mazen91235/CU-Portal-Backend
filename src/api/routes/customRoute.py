@@ -32,8 +32,8 @@ def set_timeout(seconds: float):
     async def _set_timeout_dependency():
         return None
 
-    _set_timeout_dependency._is_timeout_marker = True
-    _set_timeout_dependency._timeout_seconds = seconds
+    setattr(_set_timeout_dependency, "_is_timeout_marker", True)
+    setattr(_set_timeout_dependency, "_timeout_seconds", seconds)
     return _set_timeout_dependency
 
 
@@ -43,7 +43,7 @@ def allow_inactive():
     async def _allow_inactive_dependency():
         return None
 
-    _allow_inactive_dependency._is_allow_inactive_marker = True
+    setattr(_allow_inactive_dependency, "_is_allow_inactive_marker", True)
     return _allow_inactive_dependency
 
 
@@ -261,7 +261,9 @@ class CustomRoute(APIRoute):
         for dep in dependencies:
             func = getattr(dep, "dependency", None)
             if getattr(func, "_is_timeout_marker", False):
-                timeout_seconds = func._timeout_seconds
+                timeout_seconds = getattr(
+                    func, "_timeout_seconds", DEFAULT_TIMEOUT_SECONDS
+                )
             if getattr(func, "_is_allow_inactive_marker", False):
                 skip_active_check = True
 
