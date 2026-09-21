@@ -336,22 +336,8 @@ class SubjectController(ISubjectController):
                 )
 
             enrolled_subjects = response.data
-            if not enrolled_subjects:
-                await self.logger.log(
-                    action="GetEnrolled",
-                    entity="Subject",
-                    level="error",
-                    code=500,
-                    message="Failed to retrieve enrolled subjects",
-                    source="SubjectController",
-                )
-                return ResponseHandler.generate_response(
-                    success=False,
-                    code=500,
-                    message="An error occurred while processing the request, please try again later",
-                )
             subjects_mapped = Mapper[Subject, SubjectResponseDto].map_list(
-                enrolled_subjects, SubjectResponseDto, True
+                enrolled_subjects or [], SubjectResponseDto, True
             )
             return ResponseHandler.generate_response(
                 success=True,
