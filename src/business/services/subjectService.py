@@ -728,22 +728,7 @@ class SubjectService(ISubjectService):
                 return BaseResponseDto(
                     success=False, code=result.code, data=None, message=result.message
                 )
-            links = result.data
-            if not links:
-                await self.logger.log(
-                    action="GetEnrolled",
-                    entity="Subject",
-                    level="warning",
-                    code=404,
-                    message="No enrolled courses found for the logged in user.",
-                    source="SubjectService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="No enrolled courses found for the logged in user.",
-                )
+            links = result.data or []
             subjects = [link.subject for link in links if link.subject]
             await self.logger.log(
                 action="Get",
