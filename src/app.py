@@ -16,8 +16,6 @@ from api.di.container import Container
 from api.routes.customRoute import CustomRoute
 from business.contextVars.requestContext import request_context
 from business.contextVars.sessionContext import session_context
-from business.contextVars.userContext import user_context
-from business.contextVars.permissionsContext import permissions_context
 
 # Imports for Model Rebuild and Open-API Schema Generation
 from core.dtos.baseDtos import *
@@ -135,8 +133,6 @@ def create_app() -> FastAPI:
 
         session_token = session_context.set(session)
         request_token = request_context.set(request)
-        user_token = user_context.set(User())
-        permissions_token = permissions_context.set(set())
         try:
             response = await call_next(request)
         except Exception:
@@ -149,8 +145,6 @@ def create_app() -> FastAPI:
         finally:
             session_context.reset(session_token)
             request_context.reset(request_token)
-            user_context.reset(user_token)
-            permissions_context.reset(permissions_token)
             try:
                 await session.close()
             except IllegalStateChangeError:
