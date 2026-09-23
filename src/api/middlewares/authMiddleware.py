@@ -97,10 +97,9 @@ class AuthMiddleware(IAuthMiddleware):
             if request_from_context and getattr(
                 request_from_context.state, "fetch_user_data", False
             ):
-                includes.append("faculty")
-                includes.append("department")
-                includes.append("year")
-                includes.append("user_subject_links.subject")
+                includes.extend(
+                    ["faculty", "department", "year", "user_subject_links.subject"]
+                )
 
             user_response = await self.user_service.find_one(
                 UserSearchDto(id=user_id),
@@ -163,6 +162,9 @@ class AuthMiddleware(IAuthMiddleware):
             request.state.restrict_departments = False
             request.state.restrict_years = False
             request.state.restrict_courses = False
+
+            request.state.user = user
+            request.state.user_permissions = user_permissions
 
             if any(
                 [

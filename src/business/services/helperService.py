@@ -839,6 +839,29 @@ class HelperService(IHelperService[U]):
         if not request or not user:
             return result
 
+        attrs = [
+            "restrict_courses",
+            "restrict_faculties",
+            "restrict_departments",
+            "restrict_years",
+        ]
+        if not all(hasattr(request.state, attr) for attr in attrs):
+            asyncio.create_task(
+                self._log(
+                    action="VerifyRestrictedAccess",
+                    entity=cls.__name__,
+                    level="error",
+                    code=500,
+                    message="Request state is missing required attributes for access restriction checks",
+                    details={
+                        "missing_attributes": [
+                            attr for attr in attrs if not hasattr(request.state, attr)
+                        ]
+                    },
+                )
+            )
+            return result
+
         if hasattr(cls, "subject_id"):
             if request.state.restrict_courses:
                 user_subjects_subquery = (
@@ -2130,7 +2153,14 @@ class HelperService(IHelperService[U]):
                 max_retries=max_retries,
             )
             if not response.success:
-                print(response)
+                await self._log(
+                    action="GetGoogleAccessToken",
+                    entity="GoogleOAuth",
+                    level="error",
+                    code=response.code or 500,
+                    message=f"Failed to fetch Google access token: {response.message}",
+                    details={"error": response.error},
+                )
                 return BaseResponseDto(
                     success=False,
                     code=response.code,
@@ -2248,7 +2278,14 @@ class HelperService(IHelperService[U]):
                 message="File download stream created successfully",
             )
         except Exception as ex:
-            print(f"Error creating download stream from Google Drive: {repr(ex)}")
+            await self._log(
+                action="CreateDownloadStream",
+                entity="GoogleDrive",
+                level="error",
+                code=500,
+                message=f"Error creating download stream from Google Drive: {repr(ex)}",
+                details={"error": repr(ex)},
+            )
             return BaseResponseDto(
                 success=False,
                 code=500,

@@ -10,7 +10,6 @@ from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
 from business.contextVars.userContext import user_context
 from business.contextVars.permissionsContext import permissions_context
-from business.contextVars.requestContext import request_context
 from core.iMiddlewares.iRequestLimitMiddleware import IRequestLimitMiddleware
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.cachingHandler import CachingHandler
@@ -141,12 +140,9 @@ class CacheHitException(Exception):
 
 
 async def _generate_cache_key_from_template(
-    template: str, token: str, path: str
+    request: Request, template: str, token: str, path: str
 ) -> str:
     try:
-        request = request_context.get(None)
-        if not request:
-            return ""
         SUBS = {
             "{token}": token,
             "{path}": path,
@@ -158,14 +154,14 @@ async def _generate_cache_key_from_template(
         SUBS.clear()
         user_cached_response = await caching_handler.get(f"system:{token}")
         if not user_cached_response:
-            request.state.fetch_user_data = True
-            request_context.set(request)
+            setattr(request.state, "fetch_user_data", True)
             return ""
         await caching_handler.set(
             f"system:{token}", user_cached_response, expire=CACHE_TTL
         )  # Refresh TTL
         SUBS["{registered_subjects}"] = ",".join(
-            user_cached_response.get("registered_subjects", [])
+            str(subject_id)
+            for subject_id in user_cached_response.get("registered_subjects", [])
         )
         SUBS["{restrict_courses}"] = user_cached_response.get("restrict_courses", "1")
         SUBS["{faculty}"] = user_cached_response.get("faculty", "")
@@ -192,20 +188,41 @@ async def _resolve_cache_key(request: Request) -> str:
     if module not in MODULES:
         for custom_path, template in CUSTOM_PATHS.items():
             if custom_path in request.url.path:
-                return await _generate_cache_key_from_template(template, token, path)
+                return await _generate_cache_key_from_template(
+                    request, template, token, path
+                )
         return path
     module_keys = MODULES[module]
     sub_key = "admin" if "admin/" in request.url.path else "user"
     template = module_keys.get(sub_key, "{path}")
-    return await _generate_cache_key_from_template(template, token, path)
+    return await _generate_cache_key_from_template(request, template, token, path)
+
+
+async def _prepare_cache(request: Request):
+    try:
+        if request.method.upper() == "GET":
+            request.state.cache_key = await _resolve_cache_key(request)
+        return None
+    except Exception as e:
+        await _log(
+            request,
+            action="Prepare",
+            entity="Cache",
+            level="error",
+            code=500,
+            message="Failed to prepare cache",
+            details={"error": repr(e)},
+        )
+        request.state.cache_key = ""
+        return None
 
 
 async def _check_cache(request: Request):
     try:
-        if os.environ.get("TESTING", "false").lower() == "true":
-            return None
         if request.method.upper() == "GET":
-            cache_key = await _resolve_cache_key(request)
+            cache_key = getattr(request.state, "cache_key", None)
+            if cache_key is None:
+                cache_key = await _resolve_cache_key(request)
             if not cache_key:
                 return None
             cached_response = await caching_handler.get(cache_key)
@@ -239,14 +256,14 @@ async def _check_cache(request: Request):
 
 async def _update_cache(request: Request, response: Response):
     try:
-        if os.environ.get("TESTING", "false").lower() == "true":
-            return None
         if (
             request.method.upper() == "GET"
             and str(response.status_code)[0] == "2"
             and issubclass(type(response), JSONResponse)
         ):
             cache_key = await _resolve_cache_key(request)
+            if not cache_key:
+                return None
             body_bytes = getattr(response, "body", b"{}")
             body = json.loads(body_bytes.decode("utf-8"))
             await caching_handler.set(
@@ -283,27 +300,21 @@ async def _update_cache(request: Request, response: Response):
 
 async def _update_user_cache(request: Request):
     try:
-        request_from_context = request_context.get(None)
-        user = user_context.get(None)
-        user_permissions = permissions_context.get(None)
+        user = getattr(request.state, "user", None)
+        user_permissions = getattr(request.state, "user_permissions", None)
         if (
-            request_from_context
-            and user
+            user is not None
             and user_permissions is not None
-            and user.faculty
-            and user.department
-            and user.year
-            and user.subjects
-            and getattr(request_from_context.state, "fetch_user_data", False)
+            and user.faculty is not None
+            and user.department is not None
+            and user.year is not None
+            and user.subjects is not None
         ):
-            registered_subjects = [s.id for s in user.subjects]
-            registered_subjects.sort()
+            registered_subjects = sorted(str(subject.id) for subject in user.subjects)
             await caching_handler.set(
-                f"system:{user.token}",
+                f"system:{user.refresh_token}",
                 {
-                    "registered_subjects": ",".join(
-                        [str(s) for s in registered_subjects]
-                    ),
+                    "registered_subjects": registered_subjects,
                     "restrict_courses": (
                         "1" if "Access All Courses" in user_permissions else "0"
                     ),
@@ -425,6 +436,8 @@ class CustomRoute(APIRoute):
                 )
             if getattr(func, "_is_allow_inactive_marker", False):
                 skip_active_check = True
+
+        dependencies.insert(0, Depends(_prepare_cache))
 
         if not skip_active_check:
             dependencies.append(Depends(_enforce_active_user))

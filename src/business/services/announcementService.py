@@ -419,7 +419,6 @@ class AnnouncementService(IAnnouncementService):
                 message="Announcement created successfully",
             )
         except Exception as ex:
-            print(ex)
             await self.logger.log(
                 action="Create",
                 entity="Announcement",
@@ -1016,7 +1015,6 @@ class AnnouncementService(IAnnouncementService):
                 message="Announcement deleted successfully",
             )
         except Exception as ex:
-            print(ex)
             await self.logger.log(
                 action="Delete",
                 entity="Announcement",
