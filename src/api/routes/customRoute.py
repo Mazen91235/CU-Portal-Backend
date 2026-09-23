@@ -59,6 +59,10 @@ MODULES = {
         "admin": "{faculty}-{restrict_faculties}:{department}-{restrict_departments}:{year}-{restrict_years}:{path}",
     },
 }
+CUSTOM_PATHS = {
+    "courses/enrolled": "{token}:{path}",
+    "courses/available": "{department}:{year}:{registered_subjects}:{path}",
+}
 
 caching_handler = CachingHandler()
 
@@ -183,9 +187,12 @@ async def _generate_cache_key_from_template(
 
 async def _resolve_cache_key(request: Request) -> str:
     token = request.cookies.get("token", "")
-    module = _extract_module_from_path(request.url.path)
+    module = _extract_module_from_path(request.url.path).removesuffix("s")
     path = f"{request.url.path}?{request.url.query}"
     if module not in MODULES:
+        for custom_path, template in CUSTOM_PATHS.items():
+            if custom_path in request.url.path:
+                return await _generate_cache_key_from_template(template, token, path)
         return path
     module_keys = MODULES[module]
     sub_key = "admin" if "admin/" in request.url.path else "user"
