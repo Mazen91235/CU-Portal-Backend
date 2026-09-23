@@ -28,7 +28,10 @@ class AuthMiddleware(IAuthMiddleware):
         self.logger = logger
 
     async def is_logged_in(
-        self, request: Request, refresh_token: str | None = None, throw_error: bool = True
+        self,
+        request: Request,
+        refresh_token: str | None = None,
+        throw_error: bool = True,
     ):
         try:
             if not refresh_token:
@@ -88,9 +91,20 @@ class AuthMiddleware(IAuthMiddleware):
                     detail="Unauthorized: Invalid or Expired refresh token",
                 )
 
+            includes = ["role.role_links.exact_role", "avatar"]
+
+            request_from_context = request_context.get(None)
+            if request_from_context and getattr(
+                request_from_context.state, "fetch_user_data", False
+            ):
+                includes.append("faculty")
+                includes.append("department")
+                includes.append("year")
+                includes.append("user_subject_links.subject")
+
             user_response = await self.user_service.find_one(
                 UserSearchDto(id=user_id),
-                ["role.role_links.exact_role", "avatar"],
+                includes=includes,
                 is_and=True,
             )
             if not user_response.success:

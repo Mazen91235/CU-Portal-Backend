@@ -9,6 +9,8 @@ from fastapi import Request, Response, Depends, HTTPException
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
 from business.contextVars.userContext import user_context
+from business.contextVars.permissionsContext import permissions_context
+from business.contextVars.requestContext import request_context
 from core.iMiddlewares.iRequestLimitMiddleware import IRequestLimitMiddleware
 from core.iLoggers.iBaseLogger import IBaseLogger
 from core.utils.cachingHandler import CachingHandler
@@ -22,6 +24,41 @@ DEFAULT_TIMEOUT_SECONDS = int(
     os.environ.get("DEFAULT_TIMEOUT_SECONDS", "10")
 )  # Default request timeout in seconds
 CACHE_TTL = int(os.environ.get("CACHE_TTL", "120"))  # Default cache TTL in seconds
+
+# Any module not here then the path only will be used
+MODULES = {
+    "announcement": {
+        "user": "{registered_subjects}:{path}",
+        "admin": "{registered_subjects}-{restrict_courses}:{path}",
+    },
+    "calendar": {"user": "{token}:{path}"},
+    "event": {
+        "user": "{faculty}:{department}:{year}:{path}",
+        "admin": "{faculty}-{restrict_faculties}:{department}-{restrict_departments}:{year}-{restrict_years}:{path}",
+    },
+    "exam": {
+        "user": "{registered_subjects}:{path}",
+        "admin": "{registered_subjects}-{restrict_courses}:{path}",
+    },
+    "note": {
+        "user": "{token}:{path}",
+    },
+    "notification": {
+        "user": "{token}:{path}",
+    },
+    "task": {
+        "user": "{registered_subjects}:{path}",
+        "admin": "{registered_subjects}-{restrict_courses}:{path}",
+    },
+    "user": {
+        "user": "{token}:{path}",
+        "admin": "{faculty}-{restrict_faculties}:{department}-{restrict_departments}:{year}-{restrict_years}:{path}",
+    },
+    "week": {
+        "user": "{faculty}:{department}:{year}:{path}",
+        "admin": "{faculty}-{restrict_faculties}:{department}-{restrict_departments}:{year}-{restrict_years}:{path}",
+    },
+}
 
 caching_handler = CachingHandler()
 
@@ -99,13 +136,71 @@ class CacheHitException(Exception):
         self.response = response
 
 
+async def _generate_cache_key_from_template(
+    template: str, token: str, path: str
+) -> str:
+    try:
+        request = request_context.get(None)
+        if not request:
+            return ""
+        SUBS = {
+            "{token}": token,
+            "{path}": path,
+        }
+        for key, value in SUBS.items():
+            template = template.replace(key, str(value))
+        if "{" not in template:
+            return template
+        SUBS.clear()
+        user_cached_response = await caching_handler.get(f"system:{token}")
+        if not user_cached_response:
+            request.state.fetch_user_data = True
+            request_context.set(request)
+            return ""
+        await caching_handler.set(
+            f"system:{token}", user_cached_response, expire=CACHE_TTL
+        )  # Refresh TTL
+        SUBS["{registered_subjects}"] = ",".join(
+            user_cached_response.get("registered_subjects", [])
+        )
+        SUBS["{restrict_courses}"] = user_cached_response.get("restrict_courses", "1")
+        SUBS["{faculty}"] = user_cached_response.get("faculty", "")
+        SUBS["{restrict_faculties}"] = user_cached_response.get(
+            "restrict_faculties", "1"
+        )
+        SUBS["{department}"] = user_cached_response.get("department", "")
+        SUBS["{restrict_departments}"] = user_cached_response.get(
+            "restrict_departments", "1"
+        )
+        SUBS["{year}"] = user_cached_response.get("year", "")
+        SUBS["{restrict_years}"] = user_cached_response.get("restrict_years", "1")
+        for key, value in SUBS.items():
+            template = template.replace(key, str(value))
+        return template
+    except Exception:
+        return ""
+
+
+async def _resolve_cache_key(request: Request) -> str:
+    token = request.cookies.get("token", "")
+    module = _extract_module_from_path(request.url.path)
+    path = f"{request.url.path}?{request.url.query}"
+    if module not in MODULES:
+        return path
+    module_keys = MODULES[module]
+    sub_key = "admin" if "admin/" in request.url.path else "user"
+    template = module_keys.get(sub_key, "{path}")
+    return await _generate_cache_key_from_template(template, token, path)
+
+
 async def _check_cache(request: Request):
     try:
         if os.environ.get("TESTING", "false").lower() == "true":
             return None
         if request.method.upper() == "GET":
-            token = request.cookies.get("token", "")
-            cache_key = f"{token}:{request.url.path}?{request.url.query}"
+            cache_key = await _resolve_cache_key(request)
+            if not cache_key:
+                return None
             cached_response = await caching_handler.get(cache_key)
             if cached_response:
                 response = ResponseHandler.generate_response(
@@ -115,6 +210,9 @@ async def _check_cache(request: Request):
                     data=cached_response["data"],
                     next_page=cached_response["next_page"],
                 )
+                await caching_handler.set(
+                    cache_key, cached_response, expire=CACHE_TTL
+                )  # Refresh TTL
                 raise CacheHitException(response)
         return None
     except CacheHitException as ex:
@@ -172,6 +270,61 @@ async def _update_cache(request: Request, response: Response):
             level="error",
             code=500,
             message="Failed to update cache",
+            details={"error": repr(e)},
+        )
+        return None
+
+
+async def _update_user_cache(request: Request):
+    try:
+        request_from_context = request_context.get(None)
+        user = user_context.get(None)
+        user_permissions = permissions_context.get(None)
+        if (
+            request_from_context
+            and user
+            and user_permissions is not None
+            and user.faculty
+            and user.department
+            and user.year
+            and user.subjects
+            and getattr(request_from_context.state, "fetch_user_data", False)
+        ):
+            registered_subjects = [s.id for s in user.subjects]
+            registered_subjects.sort()
+            await caching_handler.set(
+                f"system:{user.token}",
+                {
+                    "registered_subjects": ",".join(
+                        [str(s) for s in registered_subjects]
+                    ),
+                    "restrict_courses": (
+                        "1" if "Access All Courses" in user_permissions else "0"
+                    ),
+                    "faculty": str(user.faculty.id),
+                    "restrict_faculties": (
+                        "1" if "Access All Faculties" in user_permissions else "0"
+                    ),
+                    "department": str(user.department.id),
+                    "restrict_departments": (
+                        "1" if "Access All Departments" in user_permissions else "0"
+                    ),
+                    "year": str(user.year.id),
+                    "restrict_years": (
+                        "1" if "Access All Years" in user_permissions else "0"
+                    ),
+                },
+                expire=CACHE_TTL,
+            )
+        return None
+    except Exception as e:
+        await _log(
+            request,
+            action="Update",
+            entity="UserCache",
+            level="error",
+            code=500,
+            message="Failed to update user cache",
             details={"error": repr(e)},
         )
         return None
@@ -350,6 +503,7 @@ class CustomRoute(APIRoute):
                 )
                 self._background_tasks.add(cache_update_task)
                 cache_update_task.add_done_callback(self._background_tasks.discard)
+                await _update_user_cache(request)
                 return response
             except CacheHitException as ex:
                 return ex.response
