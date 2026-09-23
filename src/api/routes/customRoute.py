@@ -239,8 +239,7 @@ async def _update_cache(request: Request, response: Response):
             and str(response.status_code)[0] == "2"
             and issubclass(type(response), JSONResponse)
         ):
-            token = request.cookies.get("token", "")
-            cache_key = f"{token}:{request.url.path}?{request.url.query}"
+            cache_key = await _resolve_cache_key(request)
             body_bytes = getattr(response, "body", b"{}")
             body = json.loads(body_bytes.decode("utf-8"))
             await caching_handler.set(
@@ -498,12 +497,8 @@ class CustomRoute(APIRoute):
                         status_code=499,
                         detail="Client disconnected before the request could complete.",
                     )
-                cache_update_task = asyncio.create_task(
-                    _update_cache(request, response)
-                )
-                self._background_tasks.add(cache_update_task)
-                cache_update_task.add_done_callback(self._background_tasks.discard)
                 await _update_user_cache(request)
+                await _update_cache(request, response)
                 return response
             except CacheHitException as ex:
                 return ex.response
