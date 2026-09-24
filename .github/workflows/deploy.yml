@@ -21,23 +21,43 @@ jobs:
                   port: 22
                   script: |
                       # Navigate to project directory
-                      cd ~/../home/CU-Portal-Backend
+                      cd /home/CU-Portal-Backend
 
                       # Pull latest changes from master
                       git pull origin master
                       git reset --hard origin/master
 
-                      # Activate virtual environment
-                      source .venv/bin/activate
-
-                      # Install dependencies
+                      # Activate virtual environment and install dependencies
+                      source venv/bin/activate
                       pip install --upgrade pip
                       pip install -r requirements.txt
-
-                      # Deactivate virtual environment
                       deactivate
 
                       # Restart FastAPI daemon and reload Nginx
                       sudo systemctl daemon-reload
                       sudo systemctl restart fastapi
                       sudo systemctl reload nginx
+
+                      # Health Check Verification Loop
+                      echo "Waiting for FastAPI health check at http://localhost:8000/system/health..."
+
+                      MAX_RETRIES=15
+                      RETRY_COUNT=0
+
+                      until [ $RETRY_COUNT -ge $MAX_RETRIES ]
+                      do
+                        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/system/health || true)
+                        
+                        if [ "$HTTP_STATUS" -eq 200 ]; then
+                          echo "Health check passed with status 200!"
+                          exit 0
+                        fi
+                        
+                        echo "Health check status: $HTTP_STATUS. Retrying in 2 seconds ($((RETRY_COUNT+1))/$MAX_RETRIES)..."
+                        RETRY_COUNT=$((RETRY_COUNT+1))
+                        sleep 2
+                      done
+
+                      echo "Health check failed after $MAX_RETRIES attempts!"
+                      sudo journalctl -u fastapi.service -n 30 --no-pager
+                      exit 1
