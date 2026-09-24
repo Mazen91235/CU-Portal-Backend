@@ -1,0 +1,42 @@
+name: Deploy CU-Portal-Backend Code
+
+on:
+    push:
+        branches:
+            - master # Triggers on any commit or merged PR to master
+
+jobs:
+    deploy:
+        name: Deploy to DigitalOcean Droplet
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Executing remote SSH commands
+              uses: appleboy/ssh-action@v1.0.3
+              with:
+                  host: ${{ secrets.DROPLET_HOST }}
+                  username: ${{ secrets.DROPLET_USERNAME }}
+                  key: ${{ secrets.DROPLET_SSH_KEY }}
+                  port: 22
+                  script: |
+                      # Navigate to project directory
+                      cd ~/../home/CU-Portal-Backend
+
+                      # Pull latest changes from master
+                      git pull origin master
+                      git reset --hard origin/master
+
+                      # Activate virtual environment
+                      source venv/bin/activate
+
+                      # Install dependencies
+                      pip install --upgrade pip
+                      pip install -r requirements.txt
+
+                      # Deactivate virtual environment
+                      deactivate
+
+                      # Restart FastAPI daemon and reload Nginx
+                      sudo systemctl daemon-reload
+                      sudo systemctl restart fastapi
+                      sudo systemctl reload nginx
