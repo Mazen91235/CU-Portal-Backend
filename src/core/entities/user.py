@@ -39,7 +39,6 @@ if TYPE_CHECKING:
     from .log import Log
     from .subject import Subject
     from .userSubjectLink import UserSubjectLink
-    from .requestLimit import RequestLimit
     from .event import Event
     from .userEvent import UserEvent
     from .note import Note
@@ -253,7 +252,9 @@ class User(Base):
     )
 
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Arguments
     __table_args__ = (
