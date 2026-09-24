@@ -109,7 +109,6 @@ from business.services.yearService import YearService
 from business.services.departmentService import DepartmentService
 from business.services.weekService import WeekService
 from business.services.eventService import EventService
-from business.services.requestLimitService import RequestLimitService
 from business.services.examService import ExamService
 from business.services.releaseService import ReleaseService
 from business.services.attachmentService import AttachmentService

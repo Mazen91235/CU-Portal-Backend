@@ -14,7 +14,6 @@ from core.entities.notification import Notification
 from core.entities.pendingUser import PendingUser
 from core.entities.release import Release
 from core.entities.releaseItem import ReleaseItem
-from core.entities.requestLimit import RequestLimit
 from core.entities.role import Role
 from core.entities.roleLink import RoleLink
 from core.entities.subject import Subject
@@ -47,7 +46,6 @@ class EntitiesHandler:
         "PendingUser": PendingUser,
         "Release": Release,
         "ReleaseItem": ReleaseItem,
-        "RequestLimit": RequestLimit,
         "Role": Role,
         "RoleLink": RoleLink,
         "Subject": Subject,
