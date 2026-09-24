@@ -59,3 +59,6 @@ class CachingHandler:
         if os.environ.get("TESTING", "false").lower() == "true":
             return
         await self.redis_client.delete(lock_key)
+
+
+caching_handler = CachingHandler()

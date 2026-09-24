@@ -12,7 +12,7 @@ from business.contextVars.userContext import user_context
 from business.contextVars.permissionsContext import permissions_context
 from core.iMiddlewares.iRequestLimitMiddleware import IRequestLimitMiddleware
 from core.iLoggers.iBaseLogger import IBaseLogger
-from core.utils.cachingHandler import CachingHandler
+from core.utils.cachingHandler import caching_handler
 from core.utils.stringHandler import StringHandler
 from core.utils.validator import Validator
 from core.utils.responseHandler import ResponseHandler
@@ -62,8 +62,6 @@ CUSTOM_PATHS = {
     "courses/enrolled": "{token}:{path}",
     "courses/available": "{department}:{year}:{registered_subjects}:{path}",
 }
-
-caching_handler = CachingHandler()
 
 
 def set_timeout(seconds: float):

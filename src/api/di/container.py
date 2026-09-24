@@ -124,7 +124,6 @@ from core.entities.material import Material
 from core.entities.subject import Subject
 from core.entities.pendingUser import PendingUser
 from core.entities.token import Token
-from core.entities.requestLimit import RequestLimit
 from core.entities.subject import Subject
 from core.entities.userSubjectLink import UserSubjectLink
 from core.entities.announcement import Announcement
@@ -209,12 +208,6 @@ class Container(containers.DeclarativeContainer):
         BaseRepository,
         session=db_session,
         model=PendingUser,
-        session_factory=session_factory,
-    )
-    request_limit_repository = providers.Factory(
-        BaseRepository,
-        session=db_session,
-        model=RequestLimit,
         session_factory=session_factory,
     )
     announcement_repository = providers.Factory(
@@ -428,12 +421,6 @@ class Container(containers.DeclarativeContainer):
         helper_service=helper_service,
     )
 
-    request_limit_service = providers.Factory(
-        RequestLimitService,
-        request_limit_repository=request_limit_repository,
-        logger=logger,
-        helper_service=helper_service,
-    )
     announcement_service = providers.Factory(
         AnnouncementService,
         announcement_repository=announcement_repository,
@@ -517,7 +504,6 @@ class Container(containers.DeclarativeContainer):
 
     request_limit_middleware = providers.Factory(
         RequestLimitMiddleware,
-        request_limit_service=request_limit_service,
         logger=logger,
         helper_service=helper_service,
     )

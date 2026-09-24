@@ -10,10 +10,9 @@ from core.entities.user import User
 from core.entities.token import Token
 from core.dtos.userDtos import UserSearchDto
 from core.utils.timezoneHandler import TimezoneHandler
-from core.utils.cachingHandler import CachingHandler
+from core.utils.cachingHandler import caching_handler
 
 cookie_scheme = APIKeyCookie(name="token", auto_error=False)
-caching_handler = CachingHandler()
 
 
 class AuthMiddleware(IAuthMiddleware):
