@@ -36,7 +36,6 @@ from core.dtos.notificationDtos import *
 from core.dtos.pendingUserDtos import *
 from core.dtos.releaseDtos import *
 from core.dtos.releaseItemDtos import *
-from core.dtos.requestLimitDtos import *
 from core.dtos.roleDtos import *
 from core.dtos.subjectDtos import *
 from core.dtos.taskDtos import *
