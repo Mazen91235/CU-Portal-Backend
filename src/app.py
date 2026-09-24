@@ -130,6 +130,11 @@ def create_app() -> FastAPI:
 
         session = container.session_factory()()
 
+        request.state.restrict_faculties = False
+        request.state.restrict_departments = False
+        request.state.restrict_years = False
+        request.state.restrict_courses = False
+
         session_token = session_context.set(session)
         request_token = request_context.set(request)
         try:
