@@ -25,7 +25,6 @@ jobs:
 
                       # Pull latest changes from master
                       git pull origin master
-                      git clean -fd
                       git reset --hard origin/master
 
                       # Activate virtual environment
