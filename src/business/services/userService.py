@@ -2956,6 +2956,32 @@ class UserService(IUserService):
                     data=None,
                     message=update_user_response.message,
                 )
+            message = f"""
+            Dear {user.name}\n\n
+            Your account has been suspended. If you believe this is a mistake or have any questions, please contact our support team for assistance.\n\n
+            Thank you for your understanding.\n\n
+            """
+            email_response = await self.helper_service.send_email(
+                to_email=user.email,
+                subject="CU - Portal - Account Suspension Notification",
+                body=message,
+            )
+            if not email_response.success:
+                await self.logger.log(
+                    action="SuspendUser",
+                    entity="User",
+                    level="error",
+                    code=email_response.code or 500,
+                    message=f"Failed to send suspension notification email to user with ID {user_id}",
+                    details={"error": email_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=email_response.code,
+                    data=None,
+                    message=email_response.message,
+                )
             await self.logger.log(
                 action="SuspendUser",
                 entity="User",
@@ -3111,6 +3137,32 @@ class UserService(IUserService):
                     code=update_user_response.code,
                     data=None,
                     message=update_user_response.message,
+                )
+            message = f"""
+            Dear {user.name}\n\n
+            Your account has been unsuspended. You can now access your account and resume using our services. If you have any questions or need assistance, please feel free to reach out to our support team.\n\n
+            Thank you for your understanding.\n\n
+            """
+            email_response = await self.helper_service.send_email(
+                to_email=user.email,
+                subject="CU - Portal - Account Unsuspension Notification",
+                body=message,
+            )
+            if not email_response.success:
+                await self.logger.log(
+                    action="UnsuspendUser",
+                    entity="User",
+                    level="error",
+                    code=email_response.code or 500,
+                    message=f"Failed to send unsuspension notification email to user with ID {user_id}",
+                    details={"error": email_response.error},
+                    source="UserService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=email_response.code,
+                    data=None,
+                    message=email_response.message,
                 )
             await self.logger.log(
                 action="UnsuspendUser",
