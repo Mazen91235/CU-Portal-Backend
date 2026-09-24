@@ -232,12 +232,6 @@ class User(Base):
         cascade="all, delete-orphan",
         collection_class=set,
     )
-    request_limits: Mapped[set["RequestLimit"]] = relationship(
-        "RequestLimit",
-        back_populates="user",
-        cascade="all, delete-orphan",
-        collection_class=set,
-    )
     attachments: Mapped[set["Attachment"]] = relationship(
         "Attachment",
         back_populates="author",
