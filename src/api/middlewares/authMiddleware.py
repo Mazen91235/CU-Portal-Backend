@@ -157,11 +157,6 @@ class AuthMiddleware(IAuthMiddleware):
 
             permissions_context.set(user_permissions)
 
-            request.state.restrict_faculties = False
-            request.state.restrict_departments = False
-            request.state.restrict_years = False
-            request.state.restrict_courses = False
-
             request.state.user = user
             request.state.user_permissions = user_permissions
 
