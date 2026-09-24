@@ -301,7 +301,8 @@ async def _update_user_cache(request: Request):
         user = getattr(request.state, "user", None)
         user_permissions = getattr(request.state, "user_permissions", None)
         if (
-            user is not None
+            getattr(request.state, "fetch_user_data", False)
+            and user is not None
             and user_permissions is not None
             and user.faculty is not None
             and user.department is not None
