@@ -140,8 +140,9 @@ class Validator:
 
     @staticmethod
     def validate_hostname_is_background_worker(hostname: str) -> bool:
-        return (
-            "onrender" in hostname.lower()
-            or "bg-worker" in hostname.lower()
-            or "localhost" in hostname.lower()
-        )
+        # return (
+        #     "onrender" in hostname.lower()
+        #     or "bg-worker" in hostname.lower()
+        #     or "localhost" in hostname.lower()
+        # )
+        return True  # As now the main instance is on digital ocean droplet
