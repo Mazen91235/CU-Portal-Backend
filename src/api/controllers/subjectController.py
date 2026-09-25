@@ -147,7 +147,6 @@ class SubjectController(ISubjectController):
 
     async def create(self, request, data):
         try:
-            await self.subject_service.begin_transaction()
             subject = Mapper[SubjectCreateDto, Subject].map(data, Subject)
             response = await self.subject_service.create(subject)
             if not response.success:
@@ -204,7 +203,6 @@ class SubjectController(ISubjectController):
 
     async def update(self, request, id, data):
         try:
-            await self.subject_service.begin_transaction()
             subject = cast(
                 Subject, Mapper[SubjectUpdateDto, Subject].map(data, Subject)
             )
@@ -260,7 +258,6 @@ class SubjectController(ISubjectController):
 
     async def delete(self, request, id):
         try:
-            await self.subject_service.begin_transaction()
             subject = Generator[Subject].generate(Subject, {"id": id})
             response = await self.subject_service.delete(subject)
             if not response.success:
@@ -411,7 +408,6 @@ class SubjectController(ISubjectController):
 
     async def register(self, request, data):
         try:
-            await self.subject_service.begin_transaction()
             response = await self.subject_service.register(data.subject_id)
             if not response.success:
                 await self.subject_service.rollback_transaction()
@@ -444,7 +440,6 @@ class SubjectController(ISubjectController):
 
     async def unregister(self, request, data):
         try:
-            await self.subject_service.begin_transaction()
             response = await self.subject_service.unregister(data.subject_id)
             if not response.success:
                 await self.subject_service.rollback_transaction()

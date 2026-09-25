@@ -154,7 +154,6 @@ class AnnouncementController(IAnnouncementController):
 
     async def create(self, request, data):
         try:
-            await self.announcement_service.begin_transaction()
             announcement = Mapper[AnnouncementCreateDto, Announcement].map(
                 data, Announcement
             )
@@ -200,7 +199,6 @@ class AnnouncementController(IAnnouncementController):
 
     async def update(self, request, id, data):
         try:
-            await self.announcement_service.begin_transaction()
             announcement = cast(
                 Announcement,
                 Mapper[AnnouncementUpdateDto, Announcement].map(data, Announcement),
@@ -249,7 +247,6 @@ class AnnouncementController(IAnnouncementController):
 
     async def delete(self, request, id):
         try:
-            await self.announcement_service.begin_transaction()
             data = Generator[AnnouncementDeleteDto].generate(
                 AnnouncementDeleteDto, {"id": id}
             )

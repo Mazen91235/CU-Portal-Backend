@@ -138,7 +138,6 @@ class FacultyController(IFacultyController):
 
     async def create(self, request, data):
         try:
-            await self.faculty_service.begin_transaction()
             faculty = Mapper[FacultyCreateDto, Faculty].map(data, Faculty)
             response = await self.faculty_service.create(faculty)
             if not response.success:
@@ -194,7 +193,6 @@ class FacultyController(IFacultyController):
 
     async def update(self, request, id, data):
         try:
-            await self.faculty_service.begin_transaction()
             faculty = cast(
                 Faculty,
                 Mapper[FacultyUpdateDto, Faculty].map(data, Faculty),
@@ -255,7 +253,6 @@ class FacultyController(IFacultyController):
 
     async def delete(self, request, id):
         try:
-            await self.faculty_service.begin_transaction()
             data = Generator[FacultyDeleteDto].generate(FacultyDeleteDto, {"id": id})
             entity = Mapper[FacultyDeleteDto, Faculty].map(data, Faculty)
             response = await self.faculty_service.delete(entity)

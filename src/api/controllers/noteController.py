@@ -148,7 +148,6 @@ class NoteController(INoteController):
 
     async def create(self, request, data):
         try:
-            await self.note_service.begin_transaction()
             note = Mapper[NoteCreateDto, Note].map(data, Note)
 
             response = await self.note_service.create(note)
@@ -208,7 +207,6 @@ class NoteController(INoteController):
 
     async def update(self, request, id, data):
         try:
-            await self.note_service.begin_transaction()
             note = cast(Note, Mapper[NoteUpdateDto, Note].map(data, Note))
             note.id = id
 
@@ -269,7 +267,6 @@ class NoteController(INoteController):
 
     async def delete(self, request, id):
         try:
-            await self.note_service.begin_transaction()
             data = Generator[NoteDeleteDto].generate(NoteDeleteDto, {"id": id})
             entity = Mapper[NoteDeleteDto, Note].map(data, Note)
 

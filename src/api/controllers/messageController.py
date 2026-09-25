@@ -129,7 +129,6 @@ class MessageController(IMessageController):
 
     async def create(self, request, data):
         try:
-            await self.message_service.begin_transaction()
             message = Mapper[MessageCreateDto, Message].map(data, Message)
             response = await self.message_service.create(message)
             if not response.success:

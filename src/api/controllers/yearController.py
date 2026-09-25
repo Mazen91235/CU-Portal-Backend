@@ -135,7 +135,6 @@ class YearController(IYearController):
 
     async def create(self, request, data):
         try:
-            await self.year_service.begin_transaction()
             year = Mapper[YearCreateDto, Year].map(data, Year)
             response = await self.year_service.create(year)
             if not response.success:
@@ -173,7 +172,6 @@ class YearController(IYearController):
 
     async def update(self, request, id, data):
         try:
-            await self.year_service.begin_transaction()
             year = cast(Year, Mapper[YearUpdateDto, Year].map(data, Year))
             year.id = id
             response = await self.year_service.update(year)
@@ -212,7 +210,6 @@ class YearController(IYearController):
 
     async def delete(self, request, id):
         try:
-            await self.year_service.begin_transaction()
             year = Generator[Year].generate(Year, {"id": id})
             response = await self.year_service.delete(year)
             if not response.success:

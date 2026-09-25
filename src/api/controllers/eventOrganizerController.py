@@ -152,7 +152,6 @@ class EventOrganizerController(IEventOrganizerController):
 
     async def create(self, request, data):
         try:
-            await self.event_organizer_service.begin_transaction()
             event_organizer = Mapper[EventOrganizerCreateDto, EventOrganizer].map(
                 data, EventOrganizer
             )
@@ -213,7 +212,6 @@ class EventOrganizerController(IEventOrganizerController):
 
     async def update(self, request, id, data):
         try:
-            await self.event_organizer_service.begin_transaction()
             event_organizer = cast(
                 EventOrganizer,
                 Mapper[EventOrganizerUpdateDto, EventOrganizer].map(
@@ -278,7 +276,6 @@ class EventOrganizerController(IEventOrganizerController):
 
     async def delete(self, request, id):
         try:
-            await self.event_organizer_service.begin_transaction()
             data = Generator[EventOrganizerDeleteDto].generate(
                 EventOrganizerDeleteDto, {"id": id}
             )

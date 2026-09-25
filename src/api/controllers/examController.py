@@ -154,7 +154,6 @@ class ExamController(IExamController):
 
     async def create(self, request, data):
         try:
-            await self.exam_service.begin_transaction()
             exam = Mapper[ExamCreateDto, Task].map(data, Task)
 
             response = await self.exam_service.create(exam)
@@ -216,7 +215,6 @@ class ExamController(IExamController):
 
     async def update(self, request, id, data):
         try:
-            await self.exam_service.begin_transaction()
             exam = cast(
                 Task,
                 Mapper[ExamUpdateDto, Task].map(data, Task),
@@ -281,7 +279,6 @@ class ExamController(IExamController):
 
     async def delete(self, request, id):
         try:
-            await self.exam_service.begin_transaction()
             data = Generator[ExamDeleteDto].generate(ExamDeleteDto, {"id": id})
             entity = Mapper[ExamDeleteDto, Task].map(data, Task)
 
