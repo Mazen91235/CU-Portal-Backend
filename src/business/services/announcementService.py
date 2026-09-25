@@ -59,10 +59,7 @@ class AnnouncementService(IAnnouncementService):
                 "Announcement", order_by, descending
             )
             result = await self.announcement_repository.find_one(
-                predicate,
-                dynamic_includes,
-                dynamic_selects,
-                dynamic_order_by
+                predicate, dynamic_includes, dynamic_selects, dynamic_order_by
             )
             if not result.success:
                 return BaseResponseDto(
@@ -161,66 +158,6 @@ class AnnouncementService(IAnnouncementService):
 
     async def create(self, data):
         try:
-            existing_announcement_response = (
-                await self.announcement_repository.find_one(
-                    and_(
-                        Announcement.title == data.title,
-                        Announcement.subject_id == data.subject_id,
-                        Announcement.date.is_not_distinct_from(data.date),
-                    )
-                )
-            )
-            if not existing_announcement_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=existing_announcement_response.code,
-                    data=None,
-                    message=existing_announcement_response.message,
-                )
-            existing_announcement = existing_announcement_response.data
-            if existing_announcement:
-                await self.logger.log(
-                    action="Create",
-                    entity="Announcement",
-                    level="warning",
-                    code=400,
-                    message="Announcement with the same title already exists for this subject.",
-                    details={"title": data.title, "subject_id": data.subject_id},
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Announcement with the same title already exists for this subject.",
-                )
-            subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id
-            )
-            if not subject_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=subject_response.code,
-                    data=None,
-                    message=subject_response.message,
-                )
-            subject = subject_response.data
-            if not subject:
-                await self.logger.log(
-                    action="Create",
-                    entity="Announcement",
-                    level="warning",
-                    code=404,
-                    message="Subject not found for Announcement Creation.",
-                    details={"subject_id": data.subject_id},
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="Subject not found",
-                )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -254,6 +191,80 @@ class AnnouncementService(IAnnouncementService):
                     message="An error occurred while creating announcement",
                 )
             data.author_id = logged_in_user.id
+            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
+            data.department_id = data.department_id or logged_in_user.department_id
+            data.year_id = data.year_id or logged_in_user.year_id
+            sub_condition = (
+                Announcement.subject_id == data.subject_id
+                if data.subject_id
+                else and_(
+                    Announcement.faculty_id == data.faculty_id,
+                    Announcement.department_id == data.department_id,
+                    Announcement.year_id == data.year_id,
+                )
+            )
+            existing_announcement_response = (
+                await self.announcement_repository.find_one(
+                    and_(
+                        Announcement.title == data.title,
+                        sub_condition,
+                        Announcement.date.is_not_distinct_from(data.date),
+                    )
+                )
+            )
+            if not existing_announcement_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_announcement_response.code,
+                    data=None,
+                    message=existing_announcement_response.message,
+                )
+            existing_announcement = existing_announcement_response.data
+            if existing_announcement:
+                await self.logger.log(
+                    action="Create",
+                    entity="Announcement",
+                    level="warning",
+                    code=400,
+                    message="Announcement with the same title already exists for this subject.",
+                    details={"title": data.title, "subject_id": data.subject_id},
+                    source="AnnouncementService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Announcement with the same title already exists for this subject.",
+                )
+            subject = None
+            if data.subject_id:
+                subject_response = await self.subject_repository.find_one(
+                    Subject.id == data.subject_id
+                )
+                if not subject_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=subject_response.code,
+                        data=None,
+                        message=subject_response.message,
+                    )
+                subject = subject_response.data
+                if not subject:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Announcement",
+                        level="warning",
+                        code=404,
+                        message="Subject not found for Announcement Creation.",
+                        details={"subject_id": data.subject_id},
+                        source="AnnouncementService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message="Subject not found",
+                    )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(
                     faculty_id=data.faculty_id,
@@ -277,9 +288,6 @@ class AnnouncementService(IAnnouncementService):
                     code=403,
                     message="User does not have access to create announcement for the specified criteria.",
                 )
-            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
-            data.department_id = data.department_id or logged_in_user.department_id
-            data.year_id = data.year_id or logged_in_user.year_id
             data.details = {} if not data.details else data.details
             urls = data.details.get("urls", [])
             links = data.details.get("links", [])
@@ -400,7 +408,7 @@ class AnnouncementService(IAnnouncementService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.ANNOUNCEMENT,
                 created_announcement.id,
-                f"New announcement '{created_announcement.title}' has been created for subject {subject.name}.",
+                f"New announcement '{created_announcement.title}' has been created{f' for subject {subject.name}' if subject else ''}.",
                 share_link,
                 subject_id=created_announcement.subject_id,
             )
@@ -466,66 +474,6 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="Announcement not found",
                 )
-            subject_response = await self.subject_repository.find_one(
-                Subject.id == data.subject_id
-            )
-            if not subject_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=subject_response.code,
-                    data=None,
-                    message=subject_response.message,
-                )
-            subject = subject_response.data
-            if not subject:
-                await self.logger.log(
-                    action="Update",
-                    entity="Announcement",
-                    level="warning",
-                    code=404,
-                    message="Subject not found for Announcement Update.",
-                    details={"subject_id": data.subject_id},
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=404,
-                    data=None,
-                    message="Subject not found",
-                )
-            existing_announcement_response = (
-                await self.announcement_repository.find_one(
-                    and_(
-                        Announcement.title == data.title,
-                        Announcement.subject_id == data.subject_id,
-                        Announcement.date.is_not_distinct_from(data.date),
-                    )
-                )
-            )
-            if not existing_announcement_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=existing_announcement_response.code,
-                    data=None,
-                    message=existing_announcement_response.message,
-                )
-            existing_announcement = existing_announcement_response.data
-            if existing_announcement and existing_announcement.id != data.id:
-                await self.logger.log(
-                    action="Update",
-                    entity="Announcement",
-                    level="warning",
-                    code=400,
-                    message="Another announcement with the same title already exists for this subject.",
-                    details={"title": data.title, "subject_id": data.subject_id},
-                    source="AnnouncementService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Another announcement with the same title already exists for this subject.",
-                )
             logged_in_user_response = await self.helper_service.get_logged_in_user()
             if not logged_in_user_response.success:
                 await self.logger.log(
@@ -558,6 +506,81 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="An error occurred while updating announcement",
                 )
+            data.author_id = logged_in_user.id
+            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
+            data.department_id = data.department_id or logged_in_user.department_id
+            data.year_id = data.year_id or logged_in_user.year_id
+            subject = None
+            if data.subject_id:
+                subject_response = await self.subject_repository.find_one(
+                    Subject.id == data.subject_id
+                )
+                if not subject_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=subject_response.code,
+                        data=None,
+                        message=subject_response.message,
+                    )
+                subject = subject_response.data
+                if not subject:
+                    await self.logger.log(
+                        action="Update",
+                        entity="Announcement",
+                        level="warning",
+                        code=404,
+                        message="Subject not found for Announcement Update.",
+                        details={"subject_id": data.subject_id},
+                        source="AnnouncementService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message="Subject not found",
+                    )
+            sub_condition = (
+                Announcement.subject_id == data.subject_id
+                if data.subject_id
+                else and_(
+                    Announcement.faculty_id == data.faculty_id,
+                    Announcement.department_id == data.department_id,
+                    Announcement.year_id == data.year_id,
+                )
+            )
+            existing_announcement_response = (
+                await self.announcement_repository.find_one(
+                    and_(
+                        Announcement.title == data.title,
+                        sub_condition,
+                        Announcement.date.is_not_distinct_from(data.date),
+                    )
+                )
+            )
+            if not existing_announcement_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_announcement_response.code,
+                    data=None,
+                    message=existing_announcement_response.message,
+                )
+            existing_announcement = existing_announcement_response.data
+            if existing_announcement and existing_announcement.id != data.id:
+                await self.logger.log(
+                    action="Update",
+                    entity="Announcement",
+                    level="warning",
+                    code=400,
+                    message="Another announcement with the same title already exists for this subject.",
+                    details={"title": data.title, "subject_id": data.subject_id},
+                    source="AnnouncementService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Another announcement with the same title already exists for this subject.",
+                )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(
                     faculty_id=data.faculty_id,
@@ -581,9 +604,6 @@ class AnnouncementService(IAnnouncementService):
                     code=403,
                     message="User does not have access to update announcement for the specified criteria.",
                 )
-            data.faculty_id = data.faculty_id or logged_in_user.faculty_id
-            data.department_id = data.department_id or logged_in_user.department_id
-            data.year_id = data.year_id or logged_in_user.year_id
             logged_in_user_permissions_response = (
                 await self.helper_service.get_logged_in_user_permissions()
             )
@@ -640,7 +660,6 @@ class AnnouncementService(IAnnouncementService):
                     data=None,
                     message="You do not have permission to update this announcement.",
                 )
-            data.author_id = logged_in_user.id
             old_attachments = target_announcement.attachments or set()
             data.details = {} if not data.details else data.details
             urls = data.details.get("urls", [])
@@ -810,7 +829,7 @@ class AnnouncementService(IAnnouncementService):
             await self.helper_service.send_notification(
                 Notification.NotificationType.ANNOUNCEMENT,
                 updated_announcement.id,
-                f"Announcement '{updated_announcement.title}' has been updated for subject {subject.name}.",
+                f"Announcement '{updated_announcement.title}' has been updated{f' for subject {subject.name}' if subject else ''}.",
                 share_link,
                 subject_id=updated_announcement.subject_id,
             )
