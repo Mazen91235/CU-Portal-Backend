@@ -1,6 +1,10 @@
 import re
+import os
+from dotenv import load_dotenv
 from email_validator import validate_email, EmailNotValidError
 from core.dtos.baseDtos import BaseResponseDto
+
+load_dotenv()  # Load environment variables from .env file
 
 
 class Validator:
@@ -140,9 +144,10 @@ class Validator:
 
     @staticmethod
     def validate_hostname_is_background_worker(hostname: str) -> bool:
-        # return (
-        #     "onrender" in hostname.lower()
-        #     or "bg-worker" in hostname.lower()
-        #     or "localhost" in hostname.lower()
-        # )
-        return True  # As now the main instance is on digital ocean droplet
+        if os.environ.get("HOSTED", "false").lower() == "true":
+            return True
+        return (
+            "onrender" in hostname.lower()
+            or "bg-worker" in hostname.lower()
+            or "localhost" in hostname.lower()
+        )
