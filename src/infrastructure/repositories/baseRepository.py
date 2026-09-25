@@ -26,13 +26,15 @@ class BaseRepository(IBaseRepository):
         self._model = model
         self._session_factory = session_factory
 
-    def _resolve_session(self) -> AsyncSession:
+    def _resolve_session(self) -> AsyncSession | None:
         request_session = session_context.get(None)
         if request_session is not None:
             return request_session
         if self._session is not None:
             return self._session
-        raise RuntimeError("No active database session found for this request")
+        if self._session_factory is None:
+            raise RuntimeError("No active database session found for this request")
+        return None
 
     @asynccontextmanager
     async def _read_session(self, session: AsyncSession | None = None):
@@ -57,11 +59,22 @@ class BaseRepository(IBaseRepository):
         session_token = session_context.set(read_session)
         try:
             yield read_session
-        finally:
-            session_context.reset(session_token)
+        except Exception:
+            # A failed read must end its transaction before the connection is released.
             try:
                 if read_session.in_transaction():
                     await read_session.rollback()
+            except Exception:
+                pass
+            raise
+        finally:
+            # Do not rollback a successful read here. SQLAlchemy expires ORM state on
+            # rollback, so the returned objects would become expired/detached before
+            # the caller can use their already-loaded attributes. Closing the session
+            # is sufficient to release the connection; the DB transaction is ended as
+            # part of closing the session/connection.
+            session_context.reset(session_token)
+            try:
                 await read_session.close()
             except Exception:
                 pass
@@ -99,6 +112,8 @@ class BaseRepository(IBaseRepository):
     async def _execute_isolated_sql(self, command: str, params: dict | None = None):
         if not self._session_factory:
             session = self._resolve_session()
+            if session is None:
+                raise RuntimeError("No database session or session factory available")
             return await session.execute(text(command), params or {})
 
         async with self._session_factory() as isolated_session:
@@ -201,6 +216,7 @@ class BaseRepository(IBaseRepository):
                 code=500,
                 error=repr(ex),
             )
+
     async def find(
         self,
         predicate=None,
@@ -241,7 +257,9 @@ class BaseRepository(IBaseRepository):
 
                 return BaseResponseDto(
                     success=True,
-                    data=list(entities[:-1]) if len(entities) > limit else list(entities),
+                    data=(
+                        list(entities[:-1]) if len(entities) > limit else list(entities)
+                    ),
                     message="Found Successfully",
                     code=200,
                     next_page=len(entities) > limit,
@@ -262,6 +280,7 @@ class BaseRepository(IBaseRepository):
                 code=500,
                 error=repr(ex),
             )
+
     async def count(self, predicate=None, session=None):
         try:
             async with self._read_session(session) as session:
@@ -295,6 +314,7 @@ class BaseRepository(IBaseRepository):
                 code=500,
                 error=repr(ex),
             )
+
     async def find_distinct(
         self,
         predicate=None,
@@ -341,6 +361,7 @@ class BaseRepository(IBaseRepository):
                 code=500,
                 error=repr(ex),
             )
+
     async def create(self, entity, session=None):
         try:
             session = await self._write_session(session)
@@ -508,6 +529,10 @@ class BaseRepository(IBaseRepository):
             if session is None:
                 session = self._resolve_session()
             if self._session_factory is None:
+                if session is None:
+                    raise RuntimeError(
+                        "No database session or session factory available"
+                    )
                 await session.execute(text(command), params or {})
                 await session.commit()
             else:
@@ -563,6 +588,7 @@ class BaseRepository(IBaseRepository):
                 code=500,
                 error=repr(ex),
             )
+
     async def begin_transaction(self, session=None):
         try:
             await self._write_session(session)
