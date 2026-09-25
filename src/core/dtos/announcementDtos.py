@@ -22,8 +22,8 @@ class AnnouncementCreateDto(BaseModel):
         ..., min_length=1, max_length=1000, description="Content of the announcement"
     )
     date: datetime | None = Field(default=None, description="Date for the announcement")
-    subject_id: int = Field(
-        ..., gt=0, description="ID of the subject this announcement belongs to"
+    subject_id: int | None = Field(
+        default=None, gt=0, description="ID of the subject this announcement belongs to"
     )
     faculty_id: int | None = Field(default=None, gt=0, description="ID of the faculty")
     department_id: int | None = Field(
@@ -33,7 +33,8 @@ class AnnouncementCreateDto(BaseModel):
         default=None, gt=0, description="ID of the academic year"
     )
     details: dict[str, Any] = Field(
-        default_factory=dict, description="Additional details dictionary (eg. urls, links)"
+        default_factory=dict,
+        description="Additional details dictionary (eg. urls, links)",
     )
 
 
@@ -94,8 +95,8 @@ class AnnouncementUpdateDto(BaseModel):
         description="Content of the announcement",
     )
     date: datetime | None = Field(default=None, description="Date for the announcement")
-    subject_id: int = Field(
-        ..., gt=0, description="ID of the subject this announcement belongs to"
+    subject_id: int | None = Field(
+        default=None, gt=0, description="ID of the subject this announcement belongs to"
     )
     faculty_id: int | None = Field(default=None, gt=0, description="ID of the faculty")
     department_id: int | None = Field(
@@ -105,7 +106,8 @@ class AnnouncementUpdateDto(BaseModel):
         default=None, gt=0, description="ID of the academic year"
     )
     details: dict[str, Any] = Field(
-        default_factory=dict, description="Additional details dictionary (eg. urls, links)"
+        default_factory=dict,
+        description="Additional details dictionary (eg. urls, links)",
     )
 
 
