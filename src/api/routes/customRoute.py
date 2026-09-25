@@ -454,14 +454,6 @@ class CustomRoute(APIRoute):
         timeout_seconds = self.timeout_seconds
 
         async def custom_route_handler(request: Request) -> Response:
-            def _get_rate_limit_middleware() -> IRequestLimitMiddleware:
-                return request.app.state.container.request_limit_middleware()
-
-            async def _rate_limit(
-                request: Request,
-            ):
-                return await _get_rate_limit_middleware().throttle(request)
-
             redirect_response = await _check_for_redirect(request)
             if redirect_response is not None:
                 return redirect_response
@@ -470,7 +462,6 @@ class CustomRoute(APIRoute):
             acquired = False
             tasks = set()
             try:
-                await _rate_limit(request)
                 if lock_key:
                     acquired = await caching_handler.acquire_lock(lock_key)
                     if not acquired:
