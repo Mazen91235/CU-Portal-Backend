@@ -51,9 +51,10 @@ BEGIN
         -- 4. Fetch Announcements with non-null date within range
         SELECT a.*, json_build_object('id', s.id, 'name', s.name) AS subject
         FROM announcements a
-        JOIN registered_subjects rs ON rs.subject_id = a.subject_id
-        JOIN subjects s ON s.id = a.subject_id
+        LEFT JOIN registered_subjects rs ON rs.subject_id = a.subject_id
+        LEFT JOIN subjects s ON s.id = a.subject_id
         WHERE a.date IS NOT NULL
+        AND (a.subject_id IS NOT NULL OR (a.faculty_id IS NULL OR a.faculty_id = v_faculty_id) AND (a.department_id IS NULL OR a.department_id = v_department_id) AND (a.year_id IS NULL OR a.year_id = v_year_id))
           AND a.date >= p_date_from 
           AND a.date <= p_date_to
     ),
