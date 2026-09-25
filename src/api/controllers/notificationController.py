@@ -89,7 +89,6 @@ class NotificationController(INotificationController):
 
     async def create(self, request, data):
         try:
-            await self.notification_service.begin_transaction()
             response = await self.notification_service.create(data)
 
             if not response.success:
@@ -124,7 +123,6 @@ class NotificationController(INotificationController):
 
     async def mark_notifications_as_seen(self, request, data):
         try:
-            await self.notification_service.begin_transaction()
             response = await self.notification_service.mark_notifications_as_seen(data)
 
             if not response.success:

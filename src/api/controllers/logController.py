@@ -183,7 +183,6 @@ class LogController(ILogController):
 
     async def delete(self, request, logs_count):
         try:
-            await self.log_service.begin_transaction()
             response = await self.log_service.delete(logs_count)
             if not response.success:
                 await self.log_service.rollback_transaction()

@@ -128,36 +128,46 @@ def create_app() -> FastAPI:
                 response.headers["Vary"] = "Origin"
             return response
 
-        session = container.session_factory()()
-
         request.state.restrict_faculties = False
         request.state.restrict_departments = False
         request.state.restrict_years = False
         request.state.restrict_courses = False
 
-        session_token = session_context.set(session)
+        # The middleware establishes the request ContextVar boundary but does not
+        # allocate a DB session. Repositories create one only when the request needs it.
+        session_context_token = session_context.set(None)
         request_token = request_context.set(request)
         try:
             response = await call_next(request)
         except Exception:
-            if session.in_transaction():
+            session = session_context.get(None)
+            if session is not None and session.in_transaction():
                 try:
                     await session.rollback()
                 except Exception:
                     pass
             raise
         finally:
-            session_context.reset(session_token)
-            request_context.reset(request_token)
-            try:
-                await session.close()
-            except IllegalStateChangeError:
+            session = session_context.get(None)
+            if session is not None and session.in_transaction():
                 try:
-                    await session.invalidate()
+                    await session.rollback()
                 except Exception:
                     pass
-            except Exception:
-                pass
+
+            session_context.reset(session_context_token)
+            request_context.reset(request_token)
+
+            if session is not None:
+                try:
+                    await session.close()
+                except IllegalStateChangeError:
+                    try:
+                        await session.invalidate()
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
         if real_origin and real_origin in ALLOWED_ORIGINS:
             req_headers = request.headers.get(
                 "access-control-request-headers", "content-type, authorization"

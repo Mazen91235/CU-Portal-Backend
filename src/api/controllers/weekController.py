@@ -133,7 +133,6 @@ class WeekController(IWeekController):
 
     async def create(self, request, data):
         try:
-            await self.week_service.begin_transaction()
             week = Mapper[WeekCreateDto, Week].map(data, Week)
             response = await self.week_service.create(week)
             if not response.success:
@@ -171,7 +170,6 @@ class WeekController(IWeekController):
 
     async def update(self, request, id, data):
         try:
-            await self.week_service.begin_transaction()
             week = cast(Week, Mapper[WeekUpdateDto, Week].map(data, Week))
             week.id = id
             response = await self.week_service.update(week)
@@ -210,7 +208,6 @@ class WeekController(IWeekController):
 
     async def delete(self, request, id):
         try:
-            await self.week_service.begin_transaction()
             week = Generator[Week].generate(Week, {"id": id})
             response = await self.week_service.delete(week)
             if not response.success:

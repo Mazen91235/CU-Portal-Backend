@@ -12,7 +12,6 @@ class AttachmentController(IAttachmentController):
     # File Specific Functions
     async def seed(self, request):
         try:
-            await self.attachment_service.begin_transaction()
             seed_response = await self.attachment_service.seed()
             if not seed_response.success:
                 await self.attachment_service.rollback_transaction()

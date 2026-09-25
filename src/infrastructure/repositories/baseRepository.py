@@ -1,4 +1,5 @@
 import json
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Type
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -32,6 +33,68 @@ class BaseRepository(IBaseRepository):
         if self._session is not None:
             return self._session
         raise RuntimeError("No active database session found for this request")
+
+    @asynccontextmanager
+    async def _read_session(self, session: AsyncSession | None = None):
+        """Use an active request transaction, or a temporary session for one read."""
+        if session is not None:
+            yield session
+            return
+
+        request_session = session_context.get(None)
+        if request_session is not None:
+            yield request_session
+            return
+
+        if self._session is not None:
+            yield self._session
+            return
+
+        if self._session_factory is None:
+            raise RuntimeError("No database session or session factory available")
+
+        read_session = self._session_factory()
+        session_token = session_context.set(read_session)
+        try:
+            yield read_session
+        finally:
+            session_context.reset(session_token)
+            try:
+                if read_session.in_transaction():
+                    await read_session.rollback()
+                await read_session.close()
+            except Exception:
+                pass
+
+    async def _write_session(self, session: AsyncSession | None = None) -> AsyncSession:
+        """Lazily create the request session and begin a transaction for a mutation."""
+        request_session = session_context.get(None)
+        session = session or request_session or self._session
+
+        context_session_created = False
+        context_token = None
+
+        if session is None:
+            if self._session_factory is None:
+                raise RuntimeError("No database session or session factory available")
+            session = self._session_factory()
+            context_token = session_context.set(session)
+            context_session_created = True
+        elif request_session is None:
+            session_context.set(session)
+
+        try:
+            if not session.in_transaction():
+                await session.begin()
+            return session
+        except Exception:
+            if context_session_created and context_token is not None:
+                session_context.reset(context_token)
+                try:
+                    await session.close()
+                except Exception:
+                    pass
+            raise
 
     async def _execute_isolated_sql(self, command: str, params: dict | None = None):
         if not self._session_factory:
@@ -92,37 +155,36 @@ class BaseRepository(IBaseRepository):
         session=None,
     ):
         try:
-            if session is None:
-                session = self._resolve_session()
-            query = select(self._model)
+            async with self._read_session(session) as session:
+                query = select(self._model)
 
-            # Handling Predicates
-            if predicate is not None:
-                query = query.where(predicate)
+                # Handling Predicates
+                if predicate is not None:
+                    query = query.where(predicate)
 
-            # Handling Dynamic Includes (Multilevel nested includes)
-            if includes:
-                for include in includes:
-                    query = query.options(include)
+                # Handling Dynamic Includes (Multilevel nested includes)
+                if includes:
+                    for include in includes:
+                        query = query.options(include)
 
-            # Handling Projections (Selects)
-            if selects and len(selects) > 0:
-                query = query.options(load_only(*selects))
+                # Handling Projections (Selects)
+                if selects and len(selects) > 0:
+                    query = query.options(load_only(*selects))
 
-            # Ordering
-            if order_by:
-                for ob in order_by:
-                    query = query.order_by(ob)
+                # Ordering
+                if order_by:
+                    for ob in order_by:
+                        query = query.order_by(ob)
 
-            result = await session.execute(query)
-            entity = result.scalars().first()
+                result = await session.execute(query)
+                entity = result.scalars().first()
 
-            return BaseResponseDto(
-                success=True,
-                data=entity,
-                message="Found Successfully",
-                code=200,
-            )
+                return BaseResponseDto(
+                    success=True,
+                    data=entity,
+                    message="Found Successfully",
+                    code=200,
+                )
         except Exception as ex:
             await self._log_error(
                 action="FindOne",
@@ -139,7 +201,6 @@ class BaseRepository(IBaseRepository):
                 code=500,
                 error=repr(ex),
             )
-
     async def find(
         self,
         predicate=None,
@@ -151,41 +212,40 @@ class BaseRepository(IBaseRepository):
         session=None,
     ):
         try:
-            if session is None:
-                session = self._resolve_session()
-            query = select(self._model)
+            async with self._read_session(session) as session:
+                query = select(self._model)
 
-            # Handling Predicates
-            if predicate is not None:
-                query = query.where(predicate)
+                # Handling Predicates
+                if predicate is not None:
+                    query = query.where(predicate)
 
-            # Handling Dynamic Includes (Multilevel nested includes)
-            if includes:
-                for include in includes:
-                    query = query.options(include)
+                # Handling Dynamic Includes (Multilevel nested includes)
+                if includes:
+                    for include in includes:
+                        query = query.options(include)
 
-            # Handling Projections (Selects)
-            if selects and len(selects) > 0:
-                query = query.options(load_only(*selects))
+                # Handling Projections (Selects)
+                if selects and len(selects) > 0:
+                    query = query.options(load_only(*selects))
 
-            # Ordering
-            if order_by:
-                for ob in order_by:
-                    query = query.order_by(ob)
+                # Ordering
+                if order_by:
+                    for ob in order_by:
+                        query = query.order_by(ob)
 
-            # Pagination
-            query = query.offset((page - 1) * limit).limit(limit + 1)
+                # Pagination
+                query = query.offset((page - 1) * limit).limit(limit + 1)
 
-            result = await session.execute(query)
-            entities = result.scalars().all()
+                result = await session.execute(query)
+                entities = result.scalars().all()
 
-            return BaseResponseDto(
-                success=True,
-                data=list(entities[:-1]) if len(entities) > limit else list(entities),
-                message="Found Successfully",
-                code=200,
-                next_page=len(entities) > limit,
-            )
+                return BaseResponseDto(
+                    success=True,
+                    data=list(entities[:-1]) if len(entities) > limit else list(entities),
+                    message="Found Successfully",
+                    code=200,
+                    next_page=len(entities) > limit,
+                )
         except Exception as ex:
             await self._log_error(
                 action="Find",
@@ -202,25 +262,23 @@ class BaseRepository(IBaseRepository):
                 code=500,
                 error=repr(ex),
             )
-
     async def count(self, predicate=None, session=None):
         try:
-            if session is None:
-                session = self._resolve_session()
-            query = select(func.count(getattr(self._model, "id")))
+            async with self._read_session(session) as session:
+                query = select(func.count(getattr(self._model, "id")))
 
-            if predicate is not None:
-                query = query.where(predicate)
+                if predicate is not None:
+                    query = query.where(predicate)
 
-            result = await session.execute(query)
-            count = result.scalar()
+                result = await session.execute(query)
+                count = result.scalar()
 
-            return BaseResponseDto(
-                success=True,
-                data=count if count else 0,
-                message="Count Retrieved Successfully",
-                code=200,
-            )
+                return BaseResponseDto(
+                    success=True,
+                    data=count if count else 0,
+                    message="Count Retrieved Successfully",
+                    code=200,
+                )
         except Exception as ex:
             await self._log_error(
                 action="Count",
@@ -237,7 +295,6 @@ class BaseRepository(IBaseRepository):
                 code=500,
                 error=repr(ex),
             )
-
     async def find_distinct(
         self,
         predicate=None,
@@ -245,30 +302,29 @@ class BaseRepository(IBaseRepository):
         session=None,
     ):
         try:
-            if session is None:
-                session = self._resolve_session()
-            if column is None:
+            async with self._read_session(session) as session:
+                if column is None:
+                    return BaseResponseDto(
+                        success=False,
+                        data=[],
+                        message="Column must be provided for distinct query",
+                        code=400,
+                    )
+
+                query = select(column).distinct()
+
+                if predicate is not None:
+                    query = query.where(predicate)
+
+                result = await session.execute(query)
+                distinct_values = result.scalars().all()
+
                 return BaseResponseDto(
-                    success=False,
-                    data=[],
-                    message="Column must be provided for distinct query",
-                    code=400,
+                    success=True,
+                    data=list(distinct_values),
+                    message="Distinct Values Retrieved Successfully",
+                    code=200,
                 )
-
-            query = select(column).distinct()
-
-            if predicate is not None:
-                query = query.where(predicate)
-
-            result = await session.execute(query)
-            distinct_values = result.scalars().all()
-
-            return BaseResponseDto(
-                success=True,
-                data=list(distinct_values),
-                message="Distinct Values Retrieved Successfully",
-                code=200,
-            )
         except Exception as ex:
             await self._log_error(
                 action="FindDistinct",
@@ -285,11 +341,9 @@ class BaseRepository(IBaseRepository):
                 code=500,
                 error=repr(ex),
             )
-
     async def create(self, entity, session=None):
         try:
-            if session is None:
-                session = self._resolve_session()
+            session = await self._write_session(session)
             session.add(entity)
             await session.flush()
             await session.refresh(entity)
@@ -334,8 +388,7 @@ class BaseRepository(IBaseRepository):
 
     async def update(self, entity, updates=None, session=None):
         try:
-            if session is None:
-                session = self._resolve_session()
+            session = await self._write_session(session)
             # Similar to EF Core's nuclear Clear(), we ensure the instance is merged
             updated_entity = await session.merge(entity)
 
@@ -410,8 +463,7 @@ class BaseRepository(IBaseRepository):
 
     async def delete(self, entity, session=None):
         try:
-            if session is None:
-                session = self._resolve_session()
+            session = await self._write_session(session)
             merged = await session.merge(entity)
             await session.delete(merged)
             await session.flush()
@@ -482,20 +534,19 @@ class BaseRepository(IBaseRepository):
 
     async def execute_stored_function(self, function_name, params=None, session=None):
         try:
-            if session is None:
-                session = self._resolve_session()
-            if not params:
-                params = {}
-            param_placeholders = ", ".join([f":{key}" for key in params.keys()])
-            command = f"SELECT {function_name}({param_placeholders})"
-            result = await session.execute(text(command), params)
-            await session.flush()
-            return BaseResponseDto(
-                success=True,
-                data=result.scalar(),
-                message="Stored Function Executed",
-                code=200,
-            )
+            async with self._read_session(session) as session:
+                if not params:
+                    params = {}
+                param_placeholders = ", ".join([f":{key}" for key in params.keys()])
+                command = f"SELECT {function_name}({param_placeholders})"
+                result = await session.execute(text(command), params)
+                await session.flush()
+                return BaseResponseDto(
+                    success=True,
+                    data=result.scalar(),
+                    message="Stored Function Executed",
+                    code=200,
+                )
         except Exception as ex:
             await self._log_error(
                 action="ExecuteStoredFunction",
@@ -512,14 +563,9 @@ class BaseRepository(IBaseRepository):
                 code=500,
                 error=repr(ex),
             )
-
     async def begin_transaction(self, session=None):
         try:
-            if session is None:
-                session = self._resolve_session()
-            if session.in_transaction():
-                return
-            await session.begin()
+            await self._write_session(session)
         except Exception as ex:
             await self._log_error(
                 action="BeginTransaction",
@@ -533,8 +579,8 @@ class BaseRepository(IBaseRepository):
     async def commit_transaction(self, session=None):
         try:
             if session is None:
-                session = self._resolve_session()
-            if not session.in_transaction():
+                session = session_context.get(None)
+            if session is None or not session.in_transaction():
                 return
             await session.commit()
         except Exception as ex:
@@ -550,8 +596,8 @@ class BaseRepository(IBaseRepository):
     async def rollback_transaction(self, session=None):
         try:
             if session is None:
-                session = self._resolve_session()
-            if not session.in_transaction():
+                session = session_context.get(None)
+            if session is None or not session.in_transaction():
                 return
             await session.rollback()
         except Exception as ex:

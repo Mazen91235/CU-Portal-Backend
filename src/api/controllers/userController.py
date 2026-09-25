@@ -136,7 +136,6 @@ class UserController(IUserController):
 
     async def create(self, request, data):
         try:
-            await self.user_service.begin_transaction()
             if not data.agreed:
                 await self.user_service.rollback_transaction()
                 return ResponseHandler.generate_response(
@@ -209,7 +208,6 @@ class UserController(IUserController):
 
     async def update(self, request, data):
         try:
-            await self.user_service.begin_transaction()
             user = Mapper[UserUpdateDto, User].map(data, User)
             response = await self.user_service.update(user)
             if not response.success:
@@ -264,7 +262,6 @@ class UserController(IUserController):
     # Auth Functions
     async def verify_email(self, request, data):
         try:
-            await self.user_service.begin_transaction()
             response = await self.user_service.verify_email(data.token)
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -300,7 +297,6 @@ class UserController(IUserController):
 
     async def login_with_google(self, request):
         try:
-            await self.user_service.begin_transaction()
             logout_response = await self.user_service.logout()
             if not logout_response.success:
                 await self.user_service.rollback_transaction()
@@ -359,7 +355,6 @@ class UserController(IUserController):
 
     async def change_google_account(self, request):
         try:
-            await self.user_service.begin_transaction()
             response = await self.user_service.change_google_account()
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -410,7 +405,6 @@ class UserController(IUserController):
 
     async def google_authentication_redirect(self, request):
         try:
-            await self.user_service.begin_transaction()
             response = await self.user_service.authenticate_with_google()
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -514,7 +508,6 @@ class UserController(IUserController):
 
     async def logout(self, request):
         try:
-            await self.user_service.begin_transaction()
             response = await self.user_service.logout()
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -639,7 +632,6 @@ class UserController(IUserController):
 
     async def resend_token(self, request):
         try:
-            await self.user_service.begin_transaction()
             token_details_stringified = CookieHandler.get_cookie(request, "saved_token")
             if not token_details_stringified:
                 await self.user_service.rollback_transaction()
@@ -906,7 +898,6 @@ class UserController(IUserController):
 
     async def update_many(self, request, data):
         try:
-            await self.user_service.begin_transaction()
             response = await self.user_service.update_many(data)
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -940,7 +931,6 @@ class UserController(IUserController):
 
     async def suspend(self, request, id):
         try:
-            await self.user_service.begin_transaction()
             response = await self.user_service.suspend(id)
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -974,7 +964,6 @@ class UserController(IUserController):
 
     async def unsuspend(self, request, id):
         try:
-            await self.user_service.begin_transaction()
             response = await self.user_service.unsuspend(id)
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -1008,7 +997,6 @@ class UserController(IUserController):
 
     async def update_academic_data(self, request, data):
         try:
-            await self.user_service.begin_transaction()
             response = await self.user_service.update_academic_data(data)
             if not response.success:
                 await self.user_service.rollback_transaction()
@@ -1151,7 +1139,6 @@ class UserController(IUserController):
 
     async def register_device(self, request, data):
         try:
-            await self.user_service.begin_transaction()
             response = await self.user_service.register_device(
                 data.device_id, data.device_token
             )
@@ -1186,7 +1173,6 @@ class UserController(IUserController):
 
     async def unregister_device(self, request, data):
         try:
-            await self.user_service.begin_transaction()
             response = await self.user_service.unregister_device(data.device_id)
             if not response.success:
                 await self.user_service.rollback_transaction()

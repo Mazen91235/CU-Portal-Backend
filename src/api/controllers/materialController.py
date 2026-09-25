@@ -148,7 +148,6 @@ class MaterialController(IMaterialController):
 
     async def create(self, request, data):
         try:
-            await self.material_service.begin_transaction()
             material = Mapper[MaterialCreateDto, Material].map(data, Material)
             response = await self.material_service.create(material)
             if not response.success:
@@ -202,7 +201,6 @@ class MaterialController(IMaterialController):
 
     async def update(self, request, id, data):
         try:
-            await self.material_service.begin_transaction()
             material = cast(
                 Material,
                 Mapper[MaterialUpdateDto, Material].map(data, Material),
@@ -261,7 +259,6 @@ class MaterialController(IMaterialController):
 
     async def delete_many(self, request, ids):
         try:
-            await self.material_service.begin_transaction()
             data = Generator[MaterialsDeleteDto].generate(
                 MaterialsDeleteDto, {"material_ids": ids}
             )
@@ -333,7 +330,6 @@ class MaterialController(IMaterialController):
 
     async def copy_many(self, request, data):
         try:
-            await self.material_service.begin_transaction()
             response = await self.material_service.copy_many(data)
             if not response.success:
                 await self.material_service.rollback_transaction()
@@ -367,7 +363,6 @@ class MaterialController(IMaterialController):
 
     async def move_many(self, request, data):
         try:
-            await self.material_service.begin_transaction()
             response = await self.material_service.move_many(data)
             if not response.success:
                 await self.material_service.rollback_transaction()
@@ -451,7 +446,6 @@ class MaterialController(IMaterialController):
 
     async def fetch_materials_from_drive(self, request, data):
         try:
-            await self.material_service.begin_transaction()
             response = await self.material_service.fetch_materials_from_drive(data)
             if not response.success:
                 await self.material_service.rollback_transaction()

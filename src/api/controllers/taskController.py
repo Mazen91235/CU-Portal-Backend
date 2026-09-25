@@ -155,7 +155,6 @@ class TaskController(ITaskController):
 
     async def create(self, request, data):
         try:
-            await self.task_service.begin_transaction()
             task = Mapper[TaskCreateDto, Task].map(data, Task)
 
             response = await self.task_service.create(task)
@@ -217,7 +216,6 @@ class TaskController(ITaskController):
 
     async def update(self, request, id, data):
         try:
-            await self.task_service.begin_transaction()
             task = cast(Task, Mapper[TaskUpdateDto, Task].map(data, Task))
             task.id = id
 
@@ -279,7 +277,6 @@ class TaskController(ITaskController):
 
     async def delete(self, request, id):
         try:
-            await self.task_service.begin_transaction()
             data = Generator[TaskDeleteDto].generate(TaskDeleteDto, {"id": id})
             entity = Mapper[TaskDeleteDto, Task].map(data, Task)
 

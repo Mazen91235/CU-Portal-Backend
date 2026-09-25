@@ -176,7 +176,6 @@ class ReleaseController(IReleaseController):
 
     async def create(self, request, data):
         try:
-            await self.release_service.begin_transaction()
             response = await self.release_service.create(data)
             if not response.success:
                 await self.release_service.rollback_transaction()
@@ -231,7 +230,6 @@ class ReleaseController(IReleaseController):
 
     async def update(self, request, id, data):
         try:
-            await self.release_service.begin_transaction()
             response = await self.release_service.update(data)
             if not response.success:
                 await self.release_service.rollback_transaction()
@@ -286,7 +284,6 @@ class ReleaseController(IReleaseController):
 
     async def delete(self, request, id):
         try:
-            await self.release_service.begin_transaction()
             data = Generator[ReleaseDeleteDto].generate(ReleaseDeleteDto, {"id": id})
             entity = Mapper[ReleaseDeleteDto, Release].map(data, Release)
             response = await self.release_service.delete(entity)

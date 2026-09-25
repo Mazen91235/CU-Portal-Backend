@@ -137,7 +137,6 @@ class DepartmentController(IDepartmentController):
 
     async def create(self, request, data):
         try:
-            await self.department_service.begin_transaction()
             department = Mapper[DepartmentCreateDto, Department].map(data, Department)
             response = await self.department_service.create(department)
             if not response.success:
@@ -175,7 +174,6 @@ class DepartmentController(IDepartmentController):
 
     async def update(self, request, id, data):
         try:
-            await self.department_service.begin_transaction()
             department = cast(
                 Department,
                 Mapper[DepartmentUpdateDto, Department].map(data, Department),
@@ -217,7 +215,6 @@ class DepartmentController(IDepartmentController):
 
     async def delete(self, request, id):
         try:
-            await self.department_service.begin_transaction()
             department = Generator[Department].generate(Department, {"id": id})
             response = await self.department_service.delete(department)
             if not response.success:

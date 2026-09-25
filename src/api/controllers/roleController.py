@@ -143,7 +143,6 @@ class RoleController(IRoleController):
 
     async def create(self, request, data):
         try:
-            await self.role_service.begin_transaction()
             role = Mapper[RoleCreateDto, Role].map(data, Role)
             response = await self.role_service.create(role)
 
@@ -203,7 +202,6 @@ class RoleController(IRoleController):
 
     async def update(self, request, id, data):
         try:
-            await self.role_service.begin_transaction()
             response = await self.role_service.update(id, data)
 
             if not response.success:
@@ -262,7 +260,6 @@ class RoleController(IRoleController):
 
     async def delete(self, request, id):
         try:
-            await self.role_service.begin_transaction()
             data = Generator[RoleDeleteDto].generate(RoleDeleteDto, {"id": id})
             entity = Mapper[RoleDeleteDto, Role].map(data, Role)
 
@@ -364,7 +361,6 @@ class RoleController(IRoleController):
 
     async def reset_permissions(self, request):
         try:
-            await self.role_service.begin_transaction()
             response = await self.role_service.reset_permissions()
             if not response.success:
                 await self.role_service.rollback_transaction()

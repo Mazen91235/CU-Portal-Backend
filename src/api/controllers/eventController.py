@@ -151,7 +151,6 @@ class EventController(IEventController):
 
     async def create(self, request, data):
         try:
-            await self.event_service.begin_transaction()
             event = Mapper[EventCreateDto, Event].map(data, Event)
             response = await self.event_service.create(event)
             if not response.success:
@@ -206,7 +205,6 @@ class EventController(IEventController):
 
     async def update(self, request, id, data):
         try:
-            await self.event_service.begin_transaction()
             event = cast(Event, Mapper[EventUpdateDto, Event].map(data, Event))
             event.id = id
             response = await self.event_service.update(event)
@@ -262,7 +260,6 @@ class EventController(IEventController):
 
     async def delete(self, request, id):
         try:
-            await self.event_service.begin_transaction()
             data = Generator[EventDeleteDto].generate(EventDeleteDto, {"id": id})
             entity = Mapper[EventDeleteDto, Event].map(data, Event)
             response = await self.event_service.delete(entity)
@@ -302,7 +299,6 @@ class EventController(IEventController):
     # Event Specific Functions
     async def register(self, request, data):
         try:
-            await self.event_service.begin_transaction()
             response = await self.event_service.register(data.event_id)
             if not response.success:
                 await self.event_service.rollback_transaction()
@@ -336,7 +332,6 @@ class EventController(IEventController):
 
     async def unregister(self, request, data):
         try:
-            await self.event_service.begin_transaction()
             response = await self.event_service.unregister(data.event_id)
             if not response.success:
                 await self.event_service.rollback_transaction()
