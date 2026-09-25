@@ -133,8 +133,7 @@ def create_app() -> FastAPI:
         request.state.restrict_years = False
         request.state.restrict_courses = False
 
-        request_session = request.app.state.container.session_factory()
-        session_context_token = session_context.set(request_session)
+        session_token = session_context.set(None)
         request_token = request_context.set(request)
         try:
             response = await call_next(request)
@@ -164,7 +163,7 @@ def create_app() -> FastAPI:
                 except Exception:
                     pass
 
-            session_context.reset(session_context_token)
+            session_context.reset(session_token)
             request_context.reset(request_token)
 
         if real_origin and real_origin in ALLOWED_ORIGINS:
