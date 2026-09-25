@@ -149,16 +149,12 @@ def create_app() -> FastAPI:
             raise
         finally:
             session = session_context.get(None)
-            if session is not None and session.in_transaction():
+            if session is not None:
                 try:
-                    await session.rollback()
+                    if session.in_transaction():
+                        await session.rollback()
                 except Exception:
                     pass
-
-            session_context.reset(session_context_token)
-            request_context.reset(request_token)
-
-            if session is not None:
                 try:
                     await session.close()
                 except IllegalStateChangeError:
@@ -168,6 +164,10 @@ def create_app() -> FastAPI:
                         pass
                 except Exception:
                     pass
+
+            session_context.reset(session_context_token)
+            request_context.reset(request_token)
+
         if real_origin and real_origin in ALLOWED_ORIGINS:
             req_headers = request.headers.get(
                 "access-control-request-headers", "content-type, authorization"

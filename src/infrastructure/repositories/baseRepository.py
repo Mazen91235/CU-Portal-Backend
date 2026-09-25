@@ -59,11 +59,22 @@ class BaseRepository(IBaseRepository):
         session_token = session_context.set(read_session)
         try:
             yield read_session
-        finally:
-            session_context.reset(session_token)
+        except Exception:
+            # A failed read must end its transaction before the connection is released.
             try:
                 if read_session.in_transaction():
                     await read_session.rollback()
+            except Exception:
+                pass
+            raise
+        finally:
+            # Do not rollback a successful read here. SQLAlchemy expires ORM state on
+            # rollback, so the returned objects would become expired/detached before
+            # the caller can use their already-loaded attributes. Closing the session
+            # is sufficient to release the connection; the DB transaction is ended as
+            # part of closing the session/connection.
+            session_context.reset(session_token)
+            try:
                 await read_session.close()
             except Exception:
                 pass
