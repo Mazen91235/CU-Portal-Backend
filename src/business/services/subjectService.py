@@ -8,6 +8,7 @@ from core.entities.subject import Subject
 from core.entities.userSubjectLink import UserSubjectLink
 from core.entities.year import Year
 from core.dtos.baseDtos import BaseResponseDto
+from core.utils.cachingHandler import caching_handler
 
 
 class SubjectService(ISubjectService):
@@ -1043,7 +1044,9 @@ class SubjectService(ISubjectService):
                     data=None,
                     message=create_response.message,
                 )
-
+            refresh_token = logged_in_user.refresh_token
+            if refresh_token:
+                await caching_handler.delete(f"system:{refresh_token}")
             await self.logger.log(
                 action="Register",
                 entity="Subject",
@@ -1148,7 +1151,9 @@ class SubjectService(ISubjectService):
                     data=None,
                     message=delete_response.message,
                 )
-
+            refresh_token = logged_in_user.refresh_token
+            if refresh_token:
+                await caching_handler.delete(f"system:{refresh_token}")
             await self.logger.log(
                 action="Unregister",
                 entity="Subject",

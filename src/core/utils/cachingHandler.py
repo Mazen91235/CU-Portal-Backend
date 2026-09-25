@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from dotenv import load_dotenv
 from redis.asyncio import Redis
 
@@ -13,17 +14,68 @@ class CachingHandler:
         self.redis_client = Redis.from_url(
             os.environ.get("REDIS_URL", ""), decode_responses=True
         )
+        self._refresh_tasks: set[asyncio.Task] = set()
 
-    async def get(self, key: str) -> dict | None:
+    def _schedule_refresh(self, key: str, value: str, expire: int) -> None:
+        if os.environ.get("TESTING", "false").lower() == "true":
+            return
+
+        async def _refresh() -> None:
+            # Refresh only if the key still contains the value that was read. This
+            # keeps the desired GET->SET TTL refresh behavior without resurrecting
+            # a key that was deleted and replaced concurrently.
+            try:
+                await self.redis_client.eval(
+                    """
+                    if redis.call('GET', KEYS[1]) == ARGV[1] then
+                        return redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
+                    end
+                    return 0
+                    """,
+                    1,
+                    key,
+                    value,
+                    str(expire),
+                )
+            except Exception:
+                pass
+
+        task = asyncio.create_task(_refresh())
+        self._refresh_tasks.add(task)
+        task.add_done_callback(self._refresh_tasks.discard)
+
+    async def get(self, key: str, expire: int = CACHE_TTL) -> dict | None:
         if os.environ.get("TESTING", "false").lower() == "true":
             return None
         result = await self.redis_client.get(key)
-        return json.loads(result) if result and type(result) == str else None
+        if isinstance(result, str):
+            self._schedule_refresh(key, result, expire)
+            try:
+                return json.loads(result)
+            except Exception:
+                return None
+        return None
+
+    async def get_raw(self, key: str, expire: int = CACHE_TTL) -> str | None:
+        if os.environ.get("TESTING", "false").lower() == "true":
+            return None
+        result = await self.redis_client.get(key)
+        if isinstance(result, str):
+            self._schedule_refresh(key, result, expire)
+            return result
+        return None
 
     async def set(self, key: str, value: dict, expire: int = CACHE_TTL) -> None:
         if os.environ.get("TESTING", "false").lower() == "true":
             return
         await self.redis_client.set(key, json.dumps(value), ex=expire)
+
+    async def set_raw(
+        self, key: str, value: bytes | str, expire: int = CACHE_TTL
+    ) -> None:
+        if os.environ.get("TESTING", "false").lower() == "true":
+            return
+        await self.redis_client.set(key, value, ex=expire)
 
     async def delete(self, *keys: str) -> None:
         if os.environ.get("TESTING", "false").lower() == "true":
@@ -33,9 +85,16 @@ class CachingHandler:
     async def invalidate_module_cache(self, module: str) -> None:
         if os.environ.get("TESTING", "false").lower() == "true":
             return
-        keys = await self.redis_client.keys(f"*/{module}*")
-        if keys:
-            await self.redis_client.delete(*keys)
+
+        batch: list[str] = []
+        async for key in self.redis_client.scan_iter(match=f"*/{module}*", count=500):
+            batch.append(key)
+            if len(batch) >= 500:
+                await self.redis_client.delete(*batch)
+                batch.clear()
+        if batch:
+            await self.redis_client.delete(*batch)
+
         if any(
             [x in module for x in ["task", "exam", "announcement", "event", "note"]]
         ):

@@ -11,6 +11,7 @@ from core.entities.token import Token
 from core.dtos.userDtos import UserSearchDto
 from core.utils.timezoneHandler import TimezoneHandler
 from core.utils.cachingHandler import caching_handler
+from core.utils.authCacheHandler import deserialize_user_from_cache
 
 cookie_scheme = APIKeyCookie(name="token", auto_error=False)
 
@@ -56,6 +57,72 @@ class AuthMiddleware(IAuthMiddleware):
                     detail="Unauthorized: No refresh token provided",
                 )
 
+            cached_auth = getattr(request.state, "cached_user_auth", None)
+            if cached_auth is None:
+                cached_auth = getattr(request.state, "cached_user_access", None)
+            if cached_auth is None:
+                cached_auth = await caching_handler.get(f"system:{refresh_token}")
+
+            cached_user = None
+            
+            if cached_auth is not None:
+                cached_user = deserialize_user_from_cache(cached_auth, refresh_token)
+
+            if cached_user is not None:
+                user_permissions = (
+                    set(cached_auth.get("permissions") or []) if cached_auth else set()
+                )
+                user_context.set(cached_user)
+                permissions_context.set(user_permissions)
+                request.state.user = cached_user
+                request.state.user_permissions = user_permissions
+                access = cached_auth.get("access") or cached_auth if cached_auth else {}
+                request.state.registered_subject_ids = {
+                    int(subject_id)
+                    for subject_id in (access.get("registered_subjects", []))
+                    if str(subject_id).isdigit()
+                }
+                request.state.cached_user_access = cached_auth
+
+                if any(
+                    [
+                        x in request.url.path
+                        for x in [
+                            "/faculties",
+                            "/departments",
+                            "/years",
+                            "/courses",
+                            "/materials",
+                        ]
+                    ]
+                ):
+                    request_context.set(request)
+                    return None
+
+                if (
+                    "/admin" not in request.url.path
+                    or "Access All Faculties" not in user_permissions
+                ):
+                    request.state.restrict_faculties = True
+                if (
+                    "/admin" not in request.url.path
+                    or "Access All Departments" not in user_permissions
+                ):
+                    request.state.restrict_departments = True
+                if (
+                    "/admin" not in request.url.path
+                    or "Access All Years" not in user_permissions
+                ):
+                    request.state.restrict_years = True
+                if (
+                    "/admin" not in request.url.path
+                    or "Access All Courses" not in user_permissions
+                ):
+                    request.state.restrict_courses = True
+
+                request_context.set(request)
+                return None
+
             token_response = await self.token_repository.find_one(
                 (
                     (Token.token == refresh_token)
@@ -90,15 +157,11 @@ class AuthMiddleware(IAuthMiddleware):
                     detail="Unauthorized: Invalid or Expired refresh token",
                 )
 
-            includes = ["role.role_links.exact_role", "avatar"]
-
-            request_from_context = request_context.get(None)
-            if request_from_context and getattr(
-                request_from_context.state, "fetch_user_data", False
-            ):
-                includes.extend(
-                    ["faculty", "department", "year", "user_subject_links.subject"]
-                )
+            includes = [
+                "role.role_links.exact_role",
+                "avatar",
+                "user_subject_links.subject",
+            ]
 
             user_response = await self.user_service.find_one(
                 UserSearchDto(id=user_id),
@@ -130,6 +193,7 @@ class AuthMiddleware(IAuthMiddleware):
 
             user.refresh_token = refresh_token
             user_context.set(user)
+            request.state.refresh_user_cache = True
 
             if (
                 TimezoneHandler.get_abs_diff_in_days(token_record.expires_at)
@@ -159,6 +223,9 @@ class AuthMiddleware(IAuthMiddleware):
 
             request.state.user = user
             request.state.user_permissions = user_permissions
+            request.state.registered_subject_ids = {
+                int(subject.id) for subject in (user.subjects or []) if subject.id
+            }
 
             if any(
                 [
@@ -392,17 +459,30 @@ class AuthMiddleware(IAuthMiddleware):
                     detail="Unauthorized: You are not logged in",
                 )
 
-            user_response = await self.user_service.find_one(
-                UserSearchDto(id=user.id),
-                ["user_subject_links.subject"],
+            registered_subject_ids = getattr(
+                request.state, "registered_subject_ids", None
             )
-            if not user_response.success:
-                raise HTTPException(
-                    status_code=user_response.code or 500,
-                    detail=user_response.message,
+            if registered_subject_ids is None:
+                user_response = await self.user_service.find_one(
+                    UserSearchDto(id=user.id),
+                    ["user_subject_links.subject"],
                 )
-            user_with_subjects = user_response.data
-            if not user_with_subjects or not user_with_subjects.subjects:
+                if not user_response.success:
+                    raise HTTPException(
+                        status_code=user_response.code or 500,
+                        detail=user_response.message,
+                    )
+                user_with_subjects = user_response.data
+                registered_subject_ids = {
+                    int(subject.id)
+                    for subject in (
+                        user_with_subjects.subjects if user_with_subjects else []
+                    )
+                    if subject.id
+                }
+                request.state.registered_subject_ids = registered_subject_ids
+
+            if not registered_subject_ids:
                 await self.logger.log(
                     action="RegisteredSubjectsCheck",
                     entity="User",

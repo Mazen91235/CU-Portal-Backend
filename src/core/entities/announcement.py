@@ -117,6 +117,7 @@ class Announcement(Base):
             "date",
             unique=True,
         ),
+        Index("idx_announcement_subject_id_date", "subject_id", "date"),
     )
     __mapper_args__ = {
         "version_id_col": version,
