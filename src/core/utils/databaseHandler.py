@@ -37,12 +37,40 @@ class DatabaseHandler:
         resolved_url = db_url or DatabaseHandler.get_db_url()
         if resolved_url.startswith("sqlite"):
             return {}
+
+        # Supabase transaction mode (port 6543) does not support prepared statements
+        # and is intended for short-lived connections, so keep NullPool there.
+        # Persistent VM deployments should prefer direct/session-mode connections and
+        # let SQLAlchemy reuse a small async pool instead.
+        is_transaction_pooler = (
+            os.environ.get("DB_POOL_MODE", "auto").lower() == "transaction"
+            or ":6543/" in resolved_url
+            or ":6543?" in resolved_url
+        )
+
+        if is_transaction_pooler:
+            return {
+                "connect_args": {
+                    "statement_cache_size": 0,
+                    "prepared_statement_cache_size": 0,
+                    "prepared_statement_name_func": lambda *args: "",
+                },
+                "poolclass": NullPool,
+                "json_serializer": lambda obj: json.dumps(obj, default=str),
+            }
+
         return {
+            "pool_size": int(os.environ.get("DB_POOL_SIZE", "5")),
+            "max_overflow": int(os.environ.get("DB_MAX_OVERFLOW", "5")),
+            "pool_timeout": int(os.environ.get("DB_POOL_TIMEOUT", "5")),
+            "pool_recycle": int(os.environ.get("DB_POOL_RECYCLE", "1800")),
+            "pool_pre_ping": os.environ.get("DB_POOL_PRE_PING", "true").lower() == "true",
+            "pool_use_lifo": True,
             "connect_args": {
-                "statement_cache_size": 0,
-                "prepared_statement_cache_size": 0,
-                "prepared_statement_name_func": lambda *args: "",  # Force anonymous prepared statements
+                "statement_cache_size": int(os.environ.get("DB_STATEMENT_CACHE_SIZE", "100")),
+                "prepared_statement_cache_size": int(
+                    os.environ.get("DB_PREPARED_STATEMENT_CACHE_SIZE", "100")
+                ),
             },
-            "poolclass": NullPool,
             "json_serializer": lambda obj: json.dumps(obj, default=str),
         }

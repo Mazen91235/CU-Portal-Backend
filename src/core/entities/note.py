@@ -70,6 +70,7 @@ class Note(Base):
             unique=True,
             postgresql_nulls_not_distinct=True,
         ),
+        Index("idx_note_author_id_date", "author_id", "date"),
     )
     __mapper_args__ = {
         "version_id_col": version,

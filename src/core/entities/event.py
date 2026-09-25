@@ -140,6 +140,7 @@ class Event(Base):
             unique=True,
             postgresql_nulls_not_distinct=True,
         ),
+        Index("idx_event_faculty_department_year_start_date", "faculty_id", "department_id", "year_id", "start_date"),
     )
     __mapper_args__ = {
         "version_id_col": version,

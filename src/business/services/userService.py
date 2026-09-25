@@ -29,6 +29,7 @@ from core.utils.validator import Validator
 from core.utils.jwtHandler import JWTHandler
 from core.utils.oauthHandler import OAuthHandler
 from core.utils.generator import Generator
+from core.utils.cachingHandler import caching_handler
 
 
 class UserService(IUserService):
@@ -763,6 +764,9 @@ class UserService(IUserService):
                         data=None,
                         message="An error occurred while updating user with new avatar, please try again.",
                     )
+            refresh_token = logged_in_user.refresh_token
+            if refresh_token:
+                await caching_handler.delete(f"system:{refresh_token}")
             await self.logger.log(
                 action="Update",
                 entity="User",
@@ -1745,8 +1749,9 @@ class UserService(IUserService):
                 )
 
             user = user_response.data
+            refresh_token = user.refresh_token
             invalidate_token_response = await self._invalidate_current_token(
-                user.refresh_token
+                refresh_token
             )
             if not invalidate_token_response.success:
                 return BaseResponseDto(
@@ -1755,6 +1760,9 @@ class UserService(IUserService):
                     data=False,
                     message=invalidate_token_response.message,
                 )
+
+            if refresh_token:
+                await caching_handler.delete(f"system:{refresh_token}")
 
             user.refresh_token = None
             await self.logger.log(
@@ -3267,6 +3275,9 @@ class UserService(IUserService):
                     data=False,
                     message=update_user_response.message,
                 )
+            refresh_token = logged_in_user.refresh_token
+            if refresh_token:
+                await caching_handler.delete(f"system:{refresh_token}")
             await self.logger.log(
                 action="UpdateAcademicData",
                 entity="User",

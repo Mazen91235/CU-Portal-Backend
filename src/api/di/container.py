@@ -166,6 +166,7 @@ class Container(containers.DeclarativeContainer):
         bind=engine,
         class_=AsyncSession,
         expire_on_commit=False,
+        autoflush=False,
     )
 
     # --- 2. Request-Scoped Session Provider ---

@@ -133,9 +133,7 @@ def create_app() -> FastAPI:
         request.state.restrict_years = False
         request.state.restrict_courses = False
 
-        # The middleware establishes the request ContextVar boundary but does not
-        # allocate a DB session. Repositories create one only when the request needs it.
-        session_context_token = session_context.set(None)
+        session_token = session_context.set(None)
         request_token = request_context.set(request)
         try:
             response = await call_next(request)
@@ -165,7 +163,7 @@ def create_app() -> FastAPI:
                 except Exception:
                     pass
 
-            session_context.reset(session_context_token)
+            session_context.reset(session_token)
             request_context.reset(request_token)
 
         if real_origin and real_origin in ALLOWED_ORIGINS:
@@ -281,4 +279,9 @@ def create_app() -> FastAPI:
 app = create_app()
 
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=3000, reload=True)
+    uvicorn.run(
+        "app:app",
+        host="0.0.0.0",
+        port=3000,
+        reload=os.environ.get("UVICORN_RELOAD", "false").lower() == "true",
+    )

@@ -2,7 +2,6 @@ import os
 import hashlib
 import asyncio
 import json
-from contextlib import suppress
 from dotenv import load_dotenv
 from typing import Callable
 from fastapi import Request, Response, Depends, HTTPException
@@ -16,6 +15,7 @@ from core.utils.cachingHandler import caching_handler
 from core.utils.stringHandler import StringHandler
 from core.utils.validator import Validator
 from core.utils.responseHandler import ResponseHandler
+from core.utils.authCacheHandler import build_auth_cache
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -24,7 +24,6 @@ DEFAULT_TIMEOUT_SECONDS = int(
 )  # Default request timeout in seconds
 CACHE_TTL = int(os.environ.get("CACHE_TTL", "120"))  # Default cache TTL in seconds
 
-# Any module not here then the path only will be used
 MODULES = {
     "announcement": {
         "user": "{registered_subjects}:{path}",
@@ -133,7 +132,7 @@ async def _log(
 
 
 class CacheHitException(Exception):
-    def __init__(self, response: JSONResponse):
+    def __init__(self, response: Response):
         self.response = response
 
 
@@ -149,29 +148,32 @@ async def _generate_cache_key_from_template(
             template = template.replace(key, str(value))
         if "{" not in template:
             return template
-        SUBS.clear()
-        user_cached_response = await caching_handler.get(f"system:{token}")
+
+        user_cached_response = getattr(request.state, "cached_user_access", None)
+        if user_cached_response is None:
+            user_cached_response = await caching_handler.get(f"system:{token}")
+
         if not user_cached_response:
             setattr(request.state, "fetch_user_data", True)
             return ""
-        await caching_handler.set(
-            f"system:{token}", user_cached_response, expire=CACHE_TTL
-        )  # Refresh TTL
+
+        request.state.cached_user_access = user_cached_response
+        access_data = user_cached_response.get("access", user_cached_response)
         SUBS["{registered_subjects}"] = ",".join(
             str(subject_id)
-            for subject_id in user_cached_response.get("registered_subjects", [])
+            for subject_id in access_data.get("registered_subjects", [])
         )
-        SUBS["{restrict_courses}"] = user_cached_response.get("restrict_courses", "1")
-        SUBS["{faculty}"] = user_cached_response.get("faculty", "")
-        SUBS["{restrict_faculties}"] = user_cached_response.get(
+        SUBS["{restrict_courses}"] = access_data.get("restrict_courses", "1")
+        SUBS["{faculty}"] = access_data.get("faculty", "")
+        SUBS["{restrict_faculties}"] = access_data.get(
             "restrict_faculties", "1"
         )
-        SUBS["{department}"] = user_cached_response.get("department", "")
-        SUBS["{restrict_departments}"] = user_cached_response.get(
+        SUBS["{department}"] = access_data.get("department", "")
+        SUBS["{restrict_departments}"] = access_data.get(
             "restrict_departments", "1"
         )
-        SUBS["{year}"] = user_cached_response.get("year", "")
-        SUBS["{restrict_years}"] = user_cached_response.get("restrict_years", "1")
+        SUBS["{year}"] = access_data.get("year", "")
+        SUBS["{restrict_years}"] = access_data.get("restrict_years", "1")
         for key, value in SUBS.items():
             template = template.replace(key, str(value))
         return template
@@ -223,18 +225,13 @@ async def _check_cache(request: Request):
                 cache_key = await _resolve_cache_key(request)
             if not cache_key:
                 return None
-            cached_response = await caching_handler.get(cache_key)
-            if cached_response:
-                response = ResponseHandler.generate_response(
-                    success=cached_response["success"],
-                    code=cached_response["code"],
-                    message=cached_response["message"],
-                    data=cached_response["data"],
-                    next_page=cached_response["next_page"],
+            cached_body = await caching_handler.get_raw(cache_key)
+            if cached_body:
+                response = Response(
+                    content=cached_body,
+                    status_code=200,
+                    media_type="application/json",
                 )
-                await caching_handler.set(
-                    cache_key, cached_response, expire=CACHE_TTL
-                )  # Refresh TTL
                 raise CacheHitException(response)
         return None
     except CacheHitException as ex:
@@ -259,22 +256,13 @@ async def _update_cache(request: Request, response: Response):
             and str(response.status_code)[0] == "2"
             and issubclass(type(response), JSONResponse)
         ):
-            cache_key = await _resolve_cache_key(request)
+            cache_key = getattr(request.state, "cache_key", None)
+            if cache_key is None:
+                cache_key = await _resolve_cache_key(request)
             if not cache_key:
                 return None
             body_bytes = getattr(response, "body", b"{}")
-            body = json.loads(body_bytes.decode("utf-8"))
-            await caching_handler.set(
-                cache_key,
-                {
-                    "success": body.get("success", True),
-                    "code": response.status_code,
-                    "message": body.get("message", ""),
-                    "data": body.get("data", None),
-                    "next_page": body.get("next_page", False),
-                },
-                expire=CACHE_TTL,
-            )
+            await caching_handler.set_raw(cache_key, body_bytes, expire=CACHE_TTL)
         elif (
             request.method.upper() in ["POST", "PATCH", "PUT", "DELETE"]
             and str(response.status_code)[0] == "2"
@@ -298,40 +286,46 @@ async def _update_cache(request: Request, response: Response):
 
 async def _update_user_cache(request: Request):
     try:
+        if (
+            not getattr(request.state, "refresh_user_cache", False)
+            or request.method.upper() != "GET"
+        ):
+            return None
+
         user = getattr(request.state, "user", None)
         user_permissions = getattr(request.state, "user_permissions", None)
-        if (
-            getattr(request.state, "fetch_user_data", False)
-            and user is not None
-            and user_permissions is not None
-            and user.faculty is not None
-            and user.department is not None
-            and user.year is not None
-            and user.subjects is not None
-        ):
-            registered_subjects = sorted(str(subject.id) for subject in user.subjects)
-            await caching_handler.set(
-                f"system:{user.refresh_token}",
-                {
-                    "registered_subjects": registered_subjects,
-                    "restrict_courses": (
-                        "1" if "Access All Courses" in user_permissions else "0"
-                    ),
-                    "faculty": str(user.faculty.id),
-                    "restrict_faculties": (
-                        "1" if "Access All Faculties" in user_permissions else "0"
-                    ),
-                    "department": str(user.department.id),
-                    "restrict_departments": (
-                        "1" if "Access All Departments" in user_permissions else "0"
-                    ),
-                    "year": str(user.year.id),
-                    "restrict_years": (
-                        "1" if "Access All Years" in user_permissions else "0"
-                    ),
-                },
-                expire=CACHE_TTL,
-            )
+        refresh_token = getattr(user, "refresh_token", None) if user else None
+        if user is None or user_permissions is None or not refresh_token:
+            return None
+
+        registered_subjects = sorted(
+            str(subject_id)
+            for subject_id in getattr(request.state, "registered_subject_ids", set())
+        )
+        access = {
+            "registered_subjects": registered_subjects,
+            "restrict_courses": (
+                "1" if "Access All Courses" in user_permissions else "0"
+            ),
+            "faculty": str(user.faculty_id or ""),
+            "restrict_faculties": (
+                "1" if "Access All Faculties" in user_permissions else "0"
+            ),
+            "department": str(user.department_id or ""),
+            "restrict_departments": (
+                "1" if "Access All Departments" in user_permissions else "0"
+            ),
+            "year": str(user.year_id or ""),
+            "restrict_years": (
+                "1" if "Access All Years" in user_permissions else "0"
+            ),
+        }
+
+        cached = build_auth_cache(user, user_permissions)
+        cached["access"] = access
+        await caching_handler.set(
+            f"system:{refresh_token}", cached, expire=CACHE_TTL
+        )
         return None
     except Exception as e:
         await _log(
@@ -413,13 +407,6 @@ async def _check_for_redirect(request: Request):
     return None
 
 
-async def _poll_for_disconnect(request: Request):
-    while True:
-        if await request.is_disconnected():
-            return True
-        await asyncio.sleep(0.5)
-
-
 class CustomRoute(APIRoute):
     def __init__(self, *args, dependencies=None, **kwargs):
         dependencies = list(dependencies) if dependencies else []
@@ -460,7 +447,6 @@ class CustomRoute(APIRoute):
 
             lock_key = await _generate_inflight_key(request)
             acquired = False
-            tasks = set()
             try:
                 if lock_key:
                     acquired = await caching_handler.acquire_lock(lock_key)
@@ -479,33 +465,11 @@ class CustomRoute(APIRoute):
                             code=409,
                             message="A similar request is already being processed. Please wait for it to complete.",
                         )
-                handler_task = asyncio.create_task(original_route_handler(request))
-                response_task = (
-                    handler_task
-                    if timeout_seconds == 0
-                    else asyncio.create_task(
-                        asyncio.wait_for(handler_task, timeout=timeout_seconds)
-                    )
-                )
-                disconnect_task = asyncio.create_task(_poll_for_disconnect(request))
-                tasks = {response_task, disconnect_task}
-                done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-
-                if response_task in done:
-                    response = response_task.result()
+                if timeout_seconds == 0:
+                    response = await original_route_handler(request)
                 else:
-                    await _log(
-                        request,
-                        action="ClientDisconnect",
-                        entity="Request",
-                        level="warning",
-                        code=499,
-                        message="Client disconnected before the request could complete.",
-                        details={},
-                    )
-                    raise HTTPException(
-                        status_code=499,
-                        detail="Client disconnected before the request could complete.",
+                    response = await asyncio.wait_for(
+                        original_route_handler(request), timeout=timeout_seconds
                     )
                 await _update_user_cache(request)
                 await _update_cache(request, response)
@@ -529,12 +493,6 @@ class CustomRoute(APIRoute):
             except Exception:
                 raise
             finally:
-                for task in tasks:
-                    if not task.done():
-                        task.cancel()
-                if tasks:
-                    with suppress(Exception):
-                        await asyncio.gather(*tasks, return_exceptions=True)
                 if lock_key and acquired:
                     release_lock_task = asyncio.create_task(
                         caching_handler.release_lock(lock_key)

@@ -9,6 +9,7 @@ from sqlalchemy.orm import load_only
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from business.contextVars.sessionContext import session_context
+from business.contextVars.requestContext import request_context
 from core.iRepositories.iBaseRepository import IBaseRepository
 from core.dtos.baseDtos import BaseResponseDto
 from core.utils.entitiesHandler import EntitiesHandler
@@ -607,6 +608,10 @@ class BaseRepository(IBaseRepository):
             if session is None:
                 session = session_context.get(None)
             if session is None or not session.in_transaction():
+                return
+            request = request_context.get(None)
+            if request and await request.is_disconnected():
+                await session.rollback()
                 return
             await session.commit()
         except Exception as ex:

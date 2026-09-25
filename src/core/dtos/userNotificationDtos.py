@@ -34,10 +34,10 @@ class UserNotificationResponseDto(BaseModel):
 
 class UserNotificationSearchDto(BaseSearchDto):
     id: int | None = Field(default=None, description="Filter by user notification ID")
+    user_id: int | None = Field(default=None, description="Filter by user ID")
     seen: bool | None = Field(
         default=None, description="Filter notifications by seen status"
     )
-    user_id: int | None = Field(default=None, description="Filter by user ID")
     notification_id: int | None = Field(
         default=None, description="Filter by notification ID"
     )

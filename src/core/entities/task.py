@@ -95,6 +95,7 @@ class Task(Base):
             "subject_id",
             unique=True,
         ),
+        Index("idx_task_type_subject_id_deadline", "task_type", "subject_id", "deadline"),
     )
     __mapper_args__ = {
         "version_id_col": version,
