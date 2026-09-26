@@ -5,7 +5,8 @@ from typing import Type
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 from sqlalchemy import text, desc, func, inspect
-from sqlalchemy.orm import load_only, selectinload
+from sqlalchemy.orm import load_only
+from sqlalchemy.ext.associationproxy import AssociationProxy
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from business.contextVars.sessionContext import session_context
@@ -416,24 +417,60 @@ class BaseRepository(IBaseRepository):
             mapper = inspected_entity.mapper
             pk_values = mapper.primary_key_from_instance(entity)
 
+            # Updates always target an existing row; never let an update become an INSERT.
+            if any(value is None for value in pk_values):
+                await self._log_error(
+                    action="Update",
+                    level="error",
+                    code=400,
+                    message=f"Cannot update {self._model.__name__} without a complete primary key",
+                    details={"primary_key": pk_values},
+                    source="BaseRepository",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    data=None,
+                    message=f"Cannot update {self._model.__name__} without a complete primary key",
+                    code=400,
+                )
+
             if updates and len(updates) > 0:
-                attrs_to_update = [
-                    attr for attr in updates if attr not in inspected_entity.unloaded
-                ]
+                # Partial updates only use explicitly requested, loaded attributes.
+                attrs_to_update = []
+                for attr in updates:
+                    if attr in attrs_to_update or attr in inspected_entity.unloaded:
+                        continue
+                    if not hasattr(entity, attr):
+                        continue
+                    attrs_to_update.append(attr)
             else:
-                attrs_to_update = list(inspected_entity.dict.keys())
+                # Full updates copy every currently loaded mapped attribute.
+                mapped_attributes = [
+                    attr.key for attr in mapper.column_attrs
+                ] + [
+                    relationship.key for relationship in mapper.relationships
+                ]
+                attrs_to_update = [
+                    attr
+                    for attr in mapped_attributes
+                    if attr not in inspected_entity.unloaded
+                ]
 
-            get_options = []
+            # Prefer a real relationship over its association proxy if both are requested.
+            requested_attributes = set(attrs_to_update)
+            filtered_attrs = []
             for attr in attrs_to_update:
-                if attr in mapper.relationships:
-                    get_options.append(selectinload(getattr(self._model, attr)))
+                descriptor = mapper.all_orm_descriptors.get(attr)
+                if isinstance(descriptor, AssociationProxy):
+                    target_collection = descriptor.target_collection
+                    if target_collection in requested_attributes:
+                        continue
+                filtered_attrs.append(attr)
+            attrs_to_update = filtered_attrs
 
-            updated_entity = await session.get(
-                self._model,
-                pk_values,
-                options=get_options if get_options else None,
-            )
-
+            # Load the target once so missing rows still return 404 and merge() reuses
+            # the existing identity-map instance.
+            updated_entity = await session.get(self._model, pk_values)
             if not updated_entity:
                 await self._log_error(
                     action="Update",
@@ -450,10 +487,28 @@ class BaseRepository(IBaseRepository):
                     message=f"{self._model.__name__} not found for update",
                 )
 
-            for attr in attrs_to_update:
-                if hasattr(entity, attr) and attr not in inspected_entity.unloaded:
-                    val = getattr(entity, attr)
-                    setattr(updated_entity, attr, val)
+            relationship_names = set(mapper.relationships.keys())
+            has_relationship_update = any(
+                attr in relationship_names
+                or isinstance(mapper.all_orm_descriptors.get(attr), AssociationProxy)
+                for attr in attrs_to_update
+            )
+
+            if not has_relationship_update:
+                # Fast path: scalar/column updates never receive detached relationships.
+                for attr in attrs_to_update:
+                    setattr(updated_entity, attr, getattr(entity, attr))
+            else:
+                # Relationship-safe path: merge a partial graph instead of assigning
+                # detached relationship objects directly to the managed entity.
+                partial_entity = self._model()
+                for primary_key, value in zip(mapper.primary_key, pk_values):
+                    setattr(partial_entity, primary_key.key, value)
+
+                for attr in attrs_to_update:
+                    setattr(partial_entity, attr, getattr(entity, attr))
+
+                updated_entity = await session.merge(partial_entity)
 
             await session.flush()
             return BaseResponseDto(
