@@ -879,8 +879,15 @@ class MaterialService(IMaterialService):
             ):
                 to_be_removed = existing_material.attachment
             data.author_id = logged_in_user.id
+            existing_material.name = data.name or existing_material.name
+            existing_material.material_type = (
+                data.material_type or existing_material.material_type
+            )
+            existing_material.details = data.details or existing_material.details
+            existing_material.week_id = data.week_id or existing_material.week_id
+            existing_material.author_id = data.author_id or existing_material.author_id
             updated_material_response = await self.material_repository.update(
-                data, ["name", "material_type", "details", "author_id"]
+                existing_material, ["name"]
             )
             if not updated_material_response.success:
                 return BaseResponseDto(
