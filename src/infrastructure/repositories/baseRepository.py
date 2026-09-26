@@ -411,20 +411,37 @@ class BaseRepository(IBaseRepository):
     async def update(self, entity, updates=None, session=None):
         try:
             session = await self._write_session(session)
-            # Similar to EF Core's nuclear Clear(), we ensure the instance is merged
-            updated_entity = await session.merge(entity)
+
+            mapper = inspect(self._model)
+            pk_values = mapper.primary_key_from_instance(entity)
+
+            updated_entity = await session.get(self._model, pk_values)
+            if not updated_entity:
+                await self._log_error(
+                    action="Update",
+                    level="error",
+                    code=404,
+                    message=f"{self._model.__name__} not found for update",
+                    details={"entity": repr(entity)},
+                    source="BaseRepository",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"{self._model.__name__} not found for update",
+                )
 
             if updates and len(updates) > 0:
-                # Partial update logic
-                for attr in updates:
-                    val = getattr(entity, attr)
-                    setattr(updated_entity, attr, val)
+                attrs_to_update = updates
             else:
-                # Full update logic - all attributes are updated
                 inspected = inspect(entity)
-                loaded_attrs = inspected.dict.keys() if inspected else dir(entity)
-                for attr in loaded_attrs:
+                attrs_to_update = inspected.dict.keys() if inspected else dir(entity)
+
+            for attr in attrs_to_update:
+                if hasattr(entity, attr):
                     val = getattr(entity, attr)
+                    # Setting relationships directly on updated_entity cleanly re-parents child objects
                     setattr(updated_entity, attr, val)
 
             await session.flush()
