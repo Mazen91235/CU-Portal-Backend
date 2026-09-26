@@ -409,22 +409,290 @@ class BaseRepository(IBaseRepository):
                 code=500,
             )
 
+    def _complete_primary_key(self, mapper, instance):
+        values = mapper.primary_key_from_instance(instance)
+        return values if values and all(value is not None for value in values) else None
+
+    def _unique_column_sets(self, mapper):
+        unique_sets = []
+        for constraint in mapper.local_table.constraints:
+            if getattr(constraint, "unique", False):
+                columns = tuple(column.key for column in constraint.columns)
+                if columns:
+                    unique_sets.append(columns)
+        for index in mapper.local_table.indexes:
+            if index.unique:
+                columns = tuple(
+                    column.key for column in index.columns if hasattr(column, "key")
+                )
+                if columns:
+                    unique_sets.append(columns)
+        return unique_sets
+
+    def _source_column_values(self, source, mapper, relationship_property, parent):
+        values = {}
+        source_state = inspect(source)
+        source_data = source_state.dict
+
+        for column in mapper.columns:
+            if column.key in source_data:
+                values[column.key] = source_data[column.key]
+
+        for local_column, remote_column in relationship_property.local_remote_pairs:
+            parent_value = getattr(parent, local_column.key, None)
+            if parent_value is not None:
+                values[remote_column.key] = parent_value
+
+        for relationship in mapper.relationships:
+            if relationship.uselist:
+                continue
+            related = source_data.get(relationship.key)
+            if related is None:
+                continue
+            related_pk = self._complete_primary_key(relationship.mapper, related)
+            if related_pk is None:
+                continue
+            for local_column, remote_column in relationship.local_remote_pairs:
+                remote_index = list(relationship.mapper.primary_key).index(remote_column)
+                values[local_column.key] = related_pk[remote_index]
+
+        return values
+
+    def _identities_for_values(self, mapper, values):
+        identities = []
+        primary_key = tuple(values.get(column.key) for column in mapper.primary_key)
+        if primary_key and all(value is not None for value in primary_key):
+            identities.append(("pk", primary_key))
+
+        for columns in self._unique_column_sets(mapper):
+            key = tuple(values.get(column) for column in columns)
+            if key and all(value is not None for value in key):
+                identities.append(("unique", columns, key))
+
+        return identities
+
+    def _identity_for_values(self, mapper, values):
+        identities = self._identities_for_values(mapper, values)
+        return identities[0] if identities else None
+
+    async def _hydrate_child_relationships(
+        self, session, child, child_mapper, column_values, parent_mapper
+    ):
+        for relationship in child_mapper.relationships:
+            if relationship.uselist or relationship.mapper is parent_mapper:
+                continue
+
+            related_primary_key = []
+            valid = True
+            for local_column, remote_column in relationship.local_remote_pairs:
+                value = column_values.get(local_column.key)
+                if value is None:
+                    valid = False
+                    break
+                related_primary_key.append(
+                    (remote_column, value)
+                )
+
+            if not valid or not related_primary_key:
+                continue
+
+            remote_pk_columns = list(relationship.mapper.primary_key)
+            remote_values = [None] * len(remote_pk_columns)
+            for remote_column, value in related_primary_key:
+                try:
+                    remote_index = remote_pk_columns.index(remote_column)
+                except ValueError:
+                    valid = False
+                    break
+                remote_values[remote_index] = value
+
+            if not valid or any(value is None for value in remote_values):
+                continue
+
+            related = await session.get(relationship.mapper.class_, tuple(remote_values))
+            if related is not None:
+                setattr(child, relationship.key, related)
+
+    async def _reconcile_collection_relationship(
+        self, session, parent, source, relationship_property
+    ):
+        child_mapper = relationship_property.mapper
+        child_class = child_mapper.class_
+        current_collection = getattr(parent, relationship_property.key)
+        current_children = list(current_collection)
+
+        current_by_identity = {}
+        for child in current_children:
+            child_values = {
+                column.key: getattr(child, column.key, None)
+                for column in child_mapper.columns
+            }
+            for identity in self._identities_for_values(child_mapper, child_values):
+                current_by_identity[identity] = child
+
+        desired_children = []
+        seen_identities = set()
+        source_children = (
+            source
+            if isinstance(source, (list, tuple, set))
+            else getattr(source, relationship_property.key, None)
+        )
+
+        for source_child in list(source_children or []):
+            source_values = self._source_column_values(
+                source_child, child_mapper, relationship_property, parent
+            )
+            identity = self._identity_for_values(child_mapper, source_values)
+
+            managed_child = current_by_identity.get(identity) if identity else None
+
+            if managed_child is None and identity and identity[0] == "pk":
+                managed_child = await session.get(child_class, identity[1])
+
+            if managed_child is None and identity and identity[0] == "unique":
+                conditions = [
+                    getattr(child_class, column) == value
+                    for column, value in zip(identity[1], identity[2])
+                ]
+                result = await session.execute(select(child_class).where(*conditions))
+                managed_child = result.scalars().first()
+
+            if managed_child is None:
+                child_kwargs = {}
+                for column in child_mapper.columns:
+                    value = source_values.get(column.key)
+                    if column.primary_key and value is None:
+                        continue
+                    if value is not None:
+                        child_kwargs[column.key] = value
+                managed_child = child_class(**child_kwargs)
+
+            managed_identity = self._identity_for_values(
+                child_mapper,
+                {
+                    column.key: getattr(managed_child, column.key, None)
+                    for column in child_mapper.columns
+                },
+            )
+            if managed_identity is not None:
+                if managed_identity in seen_identities:
+                    continue
+                seen_identities.add(managed_identity)
+
+            desired_children.append(managed_child)
+
+        desired_set = set(desired_children) if isinstance(current_collection, set) else None
+
+        for current_child in current_children:
+            should_keep = (
+                current_child in desired_set
+                if desired_set is not None
+                else current_child in desired_children
+            )
+            if not should_keep:
+                current_collection.remove(current_child)
+
+        existing = set(current_collection) if desired_set is not None else list(current_collection)
+        for desired_child in desired_children:
+            if desired_child not in existing:
+                if desired_set is not None:
+                    current_collection.add(desired_child)
+                else:
+                    current_collection.append(desired_child)
+
+        for desired_child in desired_children:
+            await self._hydrate_child_relationships(
+                session,
+                desired_child,
+                child_mapper,
+                {
+                    column.key: getattr(desired_child, column.key, None)
+                    for column in child_mapper.columns
+                },
+                relationship_property.parent,
+            )
+
+        return parent
+
+    async def _reconcile_relationship_updates(
+        self,
+        session,
+        managed_entity,
+        source_entity,
+        mapper,
+        attributes,
+        relationship_sources=None,
+    ):
+        relationship_sources = relationship_sources or {}
+        with session.no_autoflush:
+            for attr in attributes:
+                relationship_property = mapper.relationships.get(attr)
+                if relationship_property is None:
+                    continue
+
+                source_value = relationship_sources.get(attr)
+                if relationship_property.uselist:
+                    await self._reconcile_collection_relationship(
+                        session,
+                        managed_entity,
+                        source_value if source_value is not None else source_entity,
+                        relationship_property,
+                    )
+                else:
+                    source_value = (
+                        source_value
+                        if source_value is not None
+                        else inspect(source_entity).dict.get(attr)
+                    )
+                    if source_value is not None or attr in inspect(source_entity).dict:
+                        await self._reconcile_scalar_relationship_value(
+                            session,
+                            managed_entity,
+                            source_value,
+                            relationship_property,
+                        )
+
+    async def _reconcile_scalar_relationship_value(
+        self, session, parent, related, relationship_property
+    ):
+        if related is None:
+            setattr(parent, relationship_property.key, None)
+            return parent
+
+        related_mapper = relationship_property.mapper
+        identity = self._complete_primary_key(related_mapper, related)
+        if identity is not None:
+            managed_related = await session.get(related_mapper.class_, identity)
+            if managed_related is None:
+                raise ValueError(
+                    f"{related_mapper.class_.__name__} with primary key {identity} was not found"
+                )
+            setattr(parent, relationship_property.key, managed_related)
+            return parent
+
+        if inspect(related).transient:
+            setattr(parent, relationship_property.key, related)
+            return parent
+
+        raise ValueError(
+            f"Cannot update relationship '{relationship_property.key}' with an entity that has no primary key"
+        )
+
     async def update(self, entity, updates=None, session=None):
         try:
             session = await self._write_session(session)
 
             inspected_entity = inspect(entity)
             mapper = inspected_entity.mapper
-            pk_values = mapper.primary_key_from_instance(entity)
+            pk_values = self._complete_primary_key(mapper, entity)
 
-            # Updates always target an existing row; never let an update become an INSERT.
-            if any(value is None for value in pk_values):
+            if pk_values is None:
                 await self._log_error(
                     action="Update",
                     level="error",
                     code=400,
                     message=f"Cannot update {self._model.__name__} without a complete primary key",
-                    details={"primary_key": pk_values},
+                    details={"primary_key": mapper.primary_key_from_instance(entity)},
                     source="BaseRepository",
                 )
                 return BaseResponseDto(
@@ -435,42 +703,70 @@ class BaseRepository(IBaseRepository):
                 )
 
             if updates and len(updates) > 0:
-                # Partial updates only use explicitly requested, loaded attributes.
                 attrs_to_update = []
                 for attr in updates:
                     if attr in attrs_to_update or attr in inspected_entity.unloaded:
                         continue
-                    if not hasattr(entity, attr):
+                    descriptor = mapper.all_orm_descriptors.get(attr)
+                    if not hasattr(entity, attr) and not isinstance(descriptor, AssociationProxy):
                         continue
                     attrs_to_update.append(attr)
             else:
-                # Full updates copy every currently loaded mapped attribute.
                 mapped_attributes = [
                     attr.key for attr in mapper.column_attrs
-                ] + [
-                    relationship.key for relationship in mapper.relationships
-                ]
+                ] + [relationship.key for relationship in mapper.relationships]
                 attrs_to_update = [
                     attr
                     for attr in mapped_attributes
                     if attr not in inspected_entity.unloaded
                 ]
 
-            # Prefer a real relationship over its association proxy if both are requested.
             requested_attributes = set(attrs_to_update)
-            filtered_attrs = []
+            normalized_attributes = []
+            relationship_sources = {}
             for attr in attrs_to_update:
                 descriptor = mapper.all_orm_descriptors.get(attr)
                 if isinstance(descriptor, AssociationProxy):
-                    target_collection = descriptor.target_collection
-                    if target_collection in requested_attributes:
+                    target_relationship = descriptor.target_collection
+                    if target_relationship in requested_attributes:
                         continue
-                filtered_attrs.append(attr)
-            attrs_to_update = filtered_attrs
+                    relationship_property = mapper.relationships.get(target_relationship)
+                    if relationship_property is None or target_relationship in relationship_sources:
+                        continue
+                    proxy_values = getattr(entity, attr)
+                    if relationship_property.uselist:
+                        relationship_sources[target_relationship] = [
+                            descriptor.creator(value) for value in (proxy_values or [])
+                        ]
+                    else:
+                        relationship_sources[target_relationship] = (
+                            descriptor.creator(proxy_values)
+                            if proxy_values is not None
+                            else None
+                        )
+                    normalized_attributes.append(target_relationship)
+                    continue
+                normalized_attributes.append(attr)
+            attrs_to_update = list(dict.fromkeys(normalized_attributes))
 
-            # Load the target once so missing rows still return 404 and merge() reuses
-            # the existing identity-map instance.
-            updated_entity = await session.get(self._model, pk_values)
+            relationship_names = set(mapper.relationships.keys())
+            relationship_attributes = [
+                attr for attr in attrs_to_update if attr in relationship_names
+            ]
+            scalar_attributes = [
+                attr for attr in attrs_to_update if attr not in relationship_names
+            ]
+
+            get_options = [
+                selectinload(getattr(self._model, attr))
+                for attr in relationship_attributes
+            ]
+            updated_entity = await session.get(
+                self._model,
+                pk_values,
+                options=get_options or None,
+            )
+
             if not updated_entity:
                 await self._log_error(
                     action="Update",
@@ -487,28 +783,19 @@ class BaseRepository(IBaseRepository):
                     message=f"{self._model.__name__} not found for update",
                 )
 
-            relationship_names = set(mapper.relationships.keys())
-            has_relationship_update = any(
-                attr in relationship_names
-                or isinstance(mapper.all_orm_descriptors.get(attr), AssociationProxy)
-                for attr in attrs_to_update
-            )
-
-            if not has_relationship_update:
-                # Fast path: scalar/column updates never receive detached relationships.
-                for attr in attrs_to_update:
+            for attr in scalar_attributes:
+                if hasattr(entity, attr) and attr not in inspected_entity.unloaded:
                     setattr(updated_entity, attr, getattr(entity, attr))
-            else:
-                # Relationship-safe path: merge a partial graph instead of assigning
-                # detached relationship objects directly to the managed entity.
-                partial_entity = self._model()
-                for primary_key, value in zip(mapper.primary_key, pk_values):
-                    setattr(partial_entity, primary_key.key, value)
 
-                for attr in attrs_to_update:
-                    setattr(partial_entity, attr, getattr(entity, attr))
-
-                updated_entity = await session.merge(partial_entity)
+            if relationship_attributes:
+                await self._reconcile_relationship_updates(
+                    session,
+                    updated_entity,
+                    entity,
+                    mapper,
+                    relationship_attributes,
+                    relationship_sources,
+                )
 
             await session.flush()
             return BaseResponseDto(
