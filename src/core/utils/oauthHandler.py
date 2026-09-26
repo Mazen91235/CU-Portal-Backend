@@ -5,7 +5,6 @@ from fastapi.responses import RedirectResponse
 from starlette.config import Config
 from authlib.integrations.starlette_client import OAuth
 
-
 config = Config(".env")  # read config from .env file
 oauth = OAuth(config)
 google = oauth.register(
@@ -66,9 +65,16 @@ class OAuthHandler:
         request: Request, redirect_url: str, state: str, nonce: str
     ):
         google_client = oauth.create_client("google")
-        authorization_url, _ = await google_client.create_authorization_url(
+        authorization_data = await google_client.create_authorization_url(
             redirect_url,
             state=state,
             nonce=nonce,
         )
-        return RedirectResponse(url=authorization_url, status_code=302)
+        return RedirectResponse(
+            url=(
+                authorization_data["url"]
+                if isinstance(authorization_data, dict)
+                else authorization_data
+            ),
+            status_code=302,
+        )
