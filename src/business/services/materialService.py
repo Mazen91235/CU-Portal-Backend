@@ -2500,7 +2500,12 @@ class MaterialService(IMaterialService):
     ) -> BaseResponseDto[Material]:
         try:
             fetched_file = fetched_data.data
-            fetched_file_type = "file" if len(fetched_data.children) < 1 else "folder"
+            fetched_file_type = (
+                "file"
+                if fetched_file.file_type not in {"folder", "gdrive"}
+                and len(fetched_data.children) < 1
+                else "folder"
+            )
             new_material = Material(
                 name=fetched_file.name,
                 material_type=fetched_file_type,
