@@ -914,6 +914,7 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Failed to update material, please try again later.",
                 )
+            updated_material.attachment = existing_material.attachment
             if to_be_removed:
                 await self.helper_service.delete_attachment(attachment=to_be_removed)
                 if updated_material.material_type == "file":
@@ -2077,7 +2078,11 @@ class MaterialService(IMaterialService):
                         data=name,
                         message="Unique name generated successfully",
                     )
-                if name.endswith(")") and name.rfind("(") != -1 and Validator.is_int(name[name.rfind("(") + 1 : -1]):
+                if (
+                    name.endswith(")")
+                    and name.rfind("(") != -1
+                    and Validator.is_int(name[name.rfind("(") + 1 : -1])
+                ):
                     base_name = name[: name.rfind("(")].strip()
                     count_str = name[name.rfind("(") + 1 : -1]
                     if Validator.is_int(count_str):
