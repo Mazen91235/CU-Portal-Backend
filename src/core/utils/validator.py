@@ -96,9 +96,7 @@ class Validator:
 
     @staticmethod
     def is_valid_youtube_url(url: str) -> bool:
-        youtube_regex = (
-            r"^(https?://)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)/.*$"
-        )
+        youtube_regex = r"^(https?://)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com|youtubeeducation\.com)/.*$"
         return re.match(youtube_regex, url) is not None
 
     @staticmethod
