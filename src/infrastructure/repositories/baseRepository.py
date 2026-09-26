@@ -5,7 +5,7 @@ from typing import Type
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 from sqlalchemy import text, desc, func, inspect
-from sqlalchemy.orm import load_only
+from sqlalchemy.orm import load_only, selectinload
 from sqlalchemy.ext.associationproxy import AssociationProxy
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
@@ -453,7 +453,9 @@ class BaseRepository(IBaseRepository):
             if related_pk is None:
                 continue
             for local_column, remote_column in relationship.local_remote_pairs:
-                remote_index = list(relationship.mapper.primary_key).index(remote_column)
+                remote_index = list(relationship.mapper.primary_key).index(
+                    remote_column
+                )
                 values[local_column.key] = related_pk[remote_index]
 
         return values
@@ -489,9 +491,7 @@ class BaseRepository(IBaseRepository):
                 if value is None:
                     valid = False
                     break
-                related_primary_key.append(
-                    (remote_column, value)
-                )
+                related_primary_key.append((remote_column, value))
 
             if not valid or not related_primary_key:
                 continue
@@ -509,7 +509,9 @@ class BaseRepository(IBaseRepository):
             if not valid or any(value is None for value in remote_values):
                 continue
 
-            related = await session.get(relationship.mapper.class_, tuple(remote_values))
+            related = await session.get(
+                relationship.mapper.class_, tuple(remote_values)
+            )
             if related is not None:
                 setattr(child, relationship.key, related)
 
@@ -581,7 +583,9 @@ class BaseRepository(IBaseRepository):
 
             desired_children.append(managed_child)
 
-        desired_set = set(desired_children) if isinstance(current_collection, set) else None
+        desired_set = (
+            set(desired_children) if isinstance(current_collection, set) else None
+        )
 
         for current_child in current_children:
             should_keep = (
@@ -592,7 +596,11 @@ class BaseRepository(IBaseRepository):
             if not should_keep:
                 current_collection.remove(current_child)
 
-        existing = set(current_collection) if desired_set is not None else list(current_collection)
+        existing = (
+            set(current_collection)
+            if desired_set is not None
+            else list(current_collection)
+        )
         for desired_child in desired_children:
             if desired_child not in existing:
                 if desired_set is not None:
@@ -708,13 +716,15 @@ class BaseRepository(IBaseRepository):
                     if attr in attrs_to_update or attr in inspected_entity.unloaded:
                         continue
                     descriptor = mapper.all_orm_descriptors.get(attr)
-                    if not hasattr(entity, attr) and not isinstance(descriptor, AssociationProxy):
+                    if not hasattr(entity, attr) and not isinstance(
+                        descriptor, AssociationProxy
+                    ):
                         continue
                     attrs_to_update.append(attr)
             else:
-                mapped_attributes = [
-                    attr.key for attr in mapper.column_attrs
-                ] + [relationship.key for relationship in mapper.relationships]
+                mapped_attributes = [attr.key for attr in mapper.column_attrs] + [
+                    relationship.key for relationship in mapper.relationships
+                ]
                 attrs_to_update = [
                     attr
                     for attr in mapped_attributes
@@ -730,8 +740,13 @@ class BaseRepository(IBaseRepository):
                     target_relationship = descriptor.target_collection
                     if target_relationship in requested_attributes:
                         continue
-                    relationship_property = mapper.relationships.get(target_relationship)
-                    if relationship_property is None or target_relationship in relationship_sources:
+                    relationship_property = mapper.relationships.get(
+                        target_relationship
+                    )
+                    if (
+                        relationship_property is None
+                        or target_relationship in relationship_sources
+                    ):
                         continue
                     proxy_values = getattr(entity, attr)
                     if relationship_property.uselist:
