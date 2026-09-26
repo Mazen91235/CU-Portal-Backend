@@ -5,7 +5,7 @@ from typing import Type
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.future import select
 from sqlalchemy import text, desc, func, inspect
-from sqlalchemy.orm import load_only
+from sqlalchemy.orm import load_only, selectinload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm.exc import StaleDataError
 from business.contextVars.sessionContext import session_context
@@ -412,10 +412,28 @@ class BaseRepository(IBaseRepository):
         try:
             session = await self._write_session(session)
 
-            mapper = inspect(self._model)
+            inspected_entity = inspect(entity)
+            mapper = inspected_entity.mapper
             pk_values = mapper.primary_key_from_instance(entity)
 
-            updated_entity = await session.get(self._model, pk_values)
+            if updates and len(updates) > 0:
+                attrs_to_update = [
+                    attr for attr in updates if attr not in inspected_entity.unloaded
+                ]
+            else:
+                attrs_to_update = list(inspected_entity.dict.keys())
+
+            get_options = []
+            for attr in attrs_to_update:
+                if attr in mapper.relationships:
+                    get_options.append(selectinload(getattr(self._model, attr)))
+
+            updated_entity = await session.get(
+                self._model,
+                pk_values,
+                options=get_options if get_options else None,
+            )
+
             if not updated_entity:
                 await self._log_error(
                     action="Update",
@@ -432,16 +450,9 @@ class BaseRepository(IBaseRepository):
                     message=f"{self._model.__name__} not found for update",
                 )
 
-            if updates and len(updates) > 0:
-                attrs_to_update = updates
-            else:
-                inspected = inspect(entity)
-                attrs_to_update = inspected.dict.keys() if inspected else dir(entity)
-
             for attr in attrs_to_update:
-                if hasattr(entity, attr):
+                if hasattr(entity, attr) and attr not in inspected_entity.unloaded:
                     val = getattr(entity, attr)
-                    # Setting relationships directly on updated_entity cleanly re-parents child objects
                     setattr(updated_entity, attr, val)
 
             await session.flush()
