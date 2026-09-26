@@ -873,9 +873,7 @@ class UserService(IUserService):
                     message="User not found",
                 )
 
-            refresh_token = StringHandler.generate_random_string(
-                Token.STANDARD_LENGTH
-            )
+            refresh_token = StringHandler.generate_random_string(Token.STANDARD_LENGTH)
             expires_at = TimezoneHandler.add_days(User.RefreshToken.EXPIRE_DAYS)
             refresh_token_record = Token(
                 user_id=user.id,
@@ -1498,6 +1496,10 @@ class UserService(IUserService):
             details["nonce"] = (
                 state_token.details.get("nonce") if state_token.details else None
             )
+            if oauth_state:
+                request.session["_state"] = oauth_state
+                request.session["_google_authlib_state_"] = oauth_state
+                request.session["state"] = oauth_state
             user_id = state_token.user_id
             token = await OAuthHandler.authorize_google_access_token(
                 request,
@@ -2095,7 +2097,9 @@ class UserService(IUserService):
             return BaseResponseDto(
                 success=True,
                 code=200,
-                data=UserResendTokenResponseDto(token=FernetHandler.encrypt(updated_token.token)),
+                data=UserResendTokenResponseDto(
+                    token=FernetHandler.encrypt(updated_token.token)
+                ),
                 message="Verification email sent successfully.",
             )
         except Exception as ex:
@@ -2167,7 +2171,9 @@ class UserService(IUserService):
                     message="Refresh token not found or expired, please log in again.",
                 )
 
-            token_record.expires_at = TimezoneHandler.add_days(User.RefreshToken.EXPIRE_DAYS)
+            token_record.expires_at = TimezoneHandler.add_days(
+                User.RefreshToken.EXPIRE_DAYS
+            )
             update_token_response = await self.token_repository.update(
                 token_record, ["expires_at"]
             )
@@ -2187,9 +2193,7 @@ class UserService(IUserService):
                 message="User refresh token expiration extended successfully",
                 source="UserService",
             )
-            response_data = UserLoginResponseDto(
-                user=user, token=user.refresh_token
-            )
+            response_data = UserLoginResponseDto(user=user, token=user.refresh_token)
             return BaseResponseDto(
                 success=True,
                 code=200,
@@ -3801,4 +3805,3 @@ class UserService(IUserService):
                 data=None,
                 message="An error occurred while unregistering device, please try again.",
             )
-
