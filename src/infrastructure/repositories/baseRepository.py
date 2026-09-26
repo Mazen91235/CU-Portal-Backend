@@ -622,6 +622,99 @@ class BaseRepository(IBaseRepository):
 
         return parent
 
+    def _build_loaded_relationship_options(self, entity):
+        """Build eager-load options matching relationships already loaded on a source graph.
+
+        The entity passed to update() may come from a short-lived read session. We do not
+        reuse its relationship instances in the write session, but we preserve the
+        caller's loaded relationship shape on the entity returned from update().
+        """
+        root_state = inspect(entity)
+
+        def build_for_instance(instance, ancestor_mappers):
+            state = inspect(instance)
+            mapper = state.mapper
+            options = []
+            next_ancestors = set(ancestor_mappers)
+            next_ancestors.add(mapper)
+
+            for relationship in mapper.relationships:
+                # Only relationships that were already loaded on the source entity are
+                # part of the requested shape. Access source_state.dict only so this
+                # helper never triggers an implicit lazy load on a detached instance.
+                if relationship.key in state.unloaded:
+                    continue
+
+                loader = selectinload(getattr(mapper.class_, relationship.key))
+                related = state.dict.get(relationship.key)
+                related_instances = []
+                if relationship.uselist:
+                    related_instances = list(related or [])
+                elif related is not None:
+                    related_instances = [related]
+
+                # Preserve loaded nested relationships as well. Stop recursion when a
+                # mapper occurs again in the current path to prevent cyclic loader
+                # option construction (e.g. Role -> RoleLink -> Role).
+                if related_instances and relationship.mapper not in next_ancestors:
+                    nested_options = build_for_instances(
+                        related_instances, next_ancestors
+                    )
+                    for nested_option in nested_options:
+                        loader = loader.options(nested_option)
+
+                options.append(loader)
+
+            return options
+
+        def build_for_instances(instances, ancestor_mappers):
+            # Several children can have different loaded relationships. SQLAlchemy's
+            # loader option applies to the whole target class, so union the loaded
+            # relationship shape across all source children.
+            if not instances:
+                return []
+
+            mapper = inspect(instances[0]).mapper
+            relationships = {}
+            for instance in instances:
+                state = inspect(instance)
+                instance_mapper = state.mapper
+                for relationship in instance_mapper.relationships:
+                    if relationship.key in state.unloaded:
+                        continue
+                    relationships[relationship.key] = relationship
+
+            options = []
+            target_mapper = mapper
+            target_class = target_mapper.class_
+            for relationship in relationships.values():
+                loader = selectinload(getattr(target_class, relationship.key))
+
+                related_instances = []
+                for instance in instances:
+                    state = inspect(instance)
+                    if relationship.key in state.unloaded:
+                        continue
+                    related = state.dict.get(relationship.key)
+                    if relationship.uselist:
+                        related_instances.extend(list(related or []))
+                    elif related is not None:
+                        related_instances.append(related)
+
+                if related_instances and relationship.mapper not in ancestor_mappers:
+                    nested_options = build_for_instances(
+                        related_instances,
+                        set(ancestor_mappers) | {target_mapper},
+                    )
+                    for nested_option in nested_options:
+                        loader = loader.options(nested_option)
+
+                options.append(loader)
+
+            return options
+
+        return build_for_instance(entity, set())
+
     async def _reconcile_relationship_updates(
         self,
         session,
@@ -772,10 +865,13 @@ class BaseRepository(IBaseRepository):
                 attr for attr in attrs_to_update if attr not in relationship_names
             ]
 
-            get_options = [
-                selectinload(getattr(self._model, attr))
-                for attr in relationship_attributes
-            ]
+            # Preserve every relationship that was already loaded on the source
+            # entity, not only relationships explicitly listed in `updates`. Services
+            # commonly load related data before an update and expect the returned
+            # entity to have the same usable relationship graph. The relationships are
+            # loaded fresh into the current write-session, so no detached ORM objects
+            # are re-attached.
+            get_options = self._build_loaded_relationship_options(entity)
             updated_entity = await session.get(
                 self._model,
                 pk_values,
