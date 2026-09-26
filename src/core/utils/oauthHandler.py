@@ -1,6 +1,7 @@
 import os
 from typing import Any
 from fastapi import Request
+from fastapi.responses import RedirectResponse
 from starlette.config import Config
 from authlib.integrations.starlette_client import OAuth
 
@@ -29,13 +30,45 @@ class OAuthHandler:
         return oauth.create_client("google")
 
     @staticmethod
+    def get_google_callback_url(request: Request) -> str:
+        is_localhost = "localhost" in (request.url.hostname or "")
+        return (
+            ("https://" if not is_localhost else "http://")
+            + (request.url.hostname or "")
+            + (f":{request.url.port}" if request.url.port else "")
+            + "/auth/google-authentication-redirect"
+        )
+
+    @staticmethod
     async def authorize_google_access_token(request: Request, nonce: Any):
-        return await oauth.google.authorize_access_token(request, nonce=nonce)
+        code = request.query_params.get("code")
+        if not code:
+            raise ValueError("Missing Google authorization code")
+
+        google_client = oauth.create_client("google")
+        token = await google_client.fetch_access_token(
+            code=code,
+            redirect_uri=OAuthHandler.get_google_callback_url(request),
+        )
+
+        if "id_token" in token:
+            token["userinfo"] = await google_client.parse_id_token(
+                token,
+                nonce=nonce,
+            )
+        else:
+            token["userinfo"] = await google_client.userinfo(token=token)
+
+        return token
 
     @staticmethod
     async def authorize_google_redirect(
         request: Request, redirect_url: str, state: str, nonce: str
     ):
-        return await oauth.google.authorize_redirect(
-            request, redirect_url, state=state, nonce=nonce
+        google_client = oauth.create_client("google")
+        authorization_url, _ = await google_client.create_authorization_url(
+            redirect_url,
+            state=state,
+            nonce=nonce,
         )
+        return RedirectResponse(url=authorization_url, status_code=302)

@@ -1458,10 +1458,6 @@ class UserService(IUserService):
                 "https://www.googleapis.com/auth/userinfo.profile",
                 "https://www.googleapis.com/auth/drive.file",
             ]
-            details = {
-                "cookies": {k: v for k, v in request.cookies.items()},
-                "session": {k: v for k, v in request.session.items()},
-            }
             oauth_state = request.query_params.get("state")
             state_token_response = await self.token_repository.find_one(
                 and_(
@@ -1493,17 +1489,11 @@ class UserService(IUserService):
                     data=None,
                     message="Invalid or expired Google Authentication, please try again.",
                 )
-            details["nonce"] = (
-                state_token.details.get("nonce") if state_token.details else None
-            )
-            if oauth_state:
-                request.session["_state"] = oauth_state
-                request.session["_google_authlib_state_"] = oauth_state
-                request.session["state"] = oauth_state
+            nonce = state_token.details.get("nonce") if state_token.details else None
             user_id = state_token.user_id
             token = await OAuthHandler.authorize_google_access_token(
                 request,
-                nonce=details.get("nonce"),
+                nonce=nonce,
             )
             granted_scopes = token.get("scope")
             ungranted_scopes = [
