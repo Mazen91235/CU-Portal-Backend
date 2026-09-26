@@ -959,7 +959,6 @@ class MaterialService(IMaterialService):
                         message=f"Failed to create attachment for material, please try again later.",
                     )
                 updated_material.attachment = attachment
-            user_ids = [user.id for user in subject.users] if subject.users else []
             share_link = f"/user/materials?subject_id={updated_material.subject_id}"
             if updated_material.parent_id:
                 share_link += f"&parent_id={updated_material.parent_id}"
