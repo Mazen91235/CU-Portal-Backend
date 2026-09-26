@@ -43,38 +43,7 @@ BEGIN
         v_percentage_increase := 0;
     END IF;
 
-    -- 5. Calculate Active Now (Unique users tracking via request_limits within filtered user group)
-    SELECT COUNT(DISTINCT rl.user_id) INTO v_active_now
-    FROM request_limits rl
-    JOIN users u ON rl.user_id = u.id
-    WHERE rl.user_id IS NOT NULL
-      AND rl.created_at >= v_two_hours_ago
-      AND (p_faculty_id IS NULL OR u.faculty_id = p_faculty_id)
-      AND (p_department_id IS NULL OR u.department_id = p_department_id)
-      AND (p_year_id IS NULL OR u.year_id = p_year_id);
-
-    -- 6. Retrieve Last 5 Active Avatars (Fixed sorting pattern via CTE)
-    SELECT COALESCE(JSON_AGG(active_avatars.avatar), '[]'::json) INTO v_last_five_users_active
-    FROM (
-        SELECT COALESCE(u.details->>'avatar', u.google_avatar) AS avatar
-        FROM (
-            -- Get the 5 most recently active user IDs uniquely
-            SELECT rl.user_id, MAX(rl.created_at) as max_time
-            FROM request_limits rl
-            JOIN users u ON rl.user_id = u.id
-            WHERE rl.user_id IS NOT NULL
-              AND rl.created_at >= v_two_hours_ago
-              AND (p_faculty_id IS NULL OR u.faculty_id = p_faculty_id)
-              AND (p_department_id IS NULL OR u.department_id = p_department_id)
-              AND (p_year_id IS NULL OR u.year_id = p_year_id)
-            GROUP BY rl.user_id
-            ORDER BY max_time DESC
-            LIMIT 5
-        ) recent_ids
-        JOIN users u ON u.id = recent_ids.user_id
-    ) active_avatars;
-
-    -- 7. Get Pending Users Count
+    -- 5. Get Pending Users Count
     SELECT COUNT(pu.id) INTO v_pending_users_count
     FROM pending_users pu
     JOIN users u ON u.id = pu.user_id
@@ -88,14 +57,12 @@ BEGIN
       AND (p_department_id IS NULL OR u.department_id = p_department_id)
       AND (p_year_id IS NULL OR u.year_id = p_year_id);
 
-    -- 8. Build final structured payload matching your exact schema output
+    -- 6. Build final structured payload matching your exact schema output
     v_result := JSON_BUILD_OBJECT(
         'users_count', v_total_users,
         'users_this_month', v_users_this_month,
         'percentage_increase', v_percentage_increase,
-        'active_now', v_active_now,
-        'pending_users_count', v_pending_users_count,
-        'last_five_users_active', v_last_five_users_active
+        'pending_users_count', v_pending_users_count
     );
 
     RETURN v_result;
