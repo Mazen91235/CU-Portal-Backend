@@ -340,12 +340,8 @@ class UserStatisticsResponseDto(BaseModel):
     percentage_increase: float = Field(
         ..., description="Percentage increase in users compared to the previous month"
     )
-    active_now_count: int = Field(..., description="Number of users currently active")
     pending_users_count: int = Field(
         ..., description="Number of users pending approval"
-    )
-    last_five_users_active: list[str] = Field(
-        ..., description="List of Avatar URLs of the last five users who were active"
     )
 
 
