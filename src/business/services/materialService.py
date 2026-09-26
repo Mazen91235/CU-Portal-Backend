@@ -887,7 +887,8 @@ class MaterialService(IMaterialService):
             existing_material.week_id = data.week_id or existing_material.week_id
             existing_material.author_id = data.author_id or existing_material.author_id
             updated_material_response = await self.material_repository.update(
-                existing_material, ["name"]
+                existing_material,
+                ["name", "material_type", "details", "week_id", "author_id"],
             )
             if not updated_material_response.success:
                 return BaseResponseDto(
@@ -2049,7 +2050,7 @@ class MaterialService(IMaterialService):
             name = name.strip()
             if (
                 name.endswith(")")
-                or name.rfind("(") != -1
+                and name.rfind("(") != -1
                 and Validator.is_int(name[name.rfind("(") + 1 : -1])
             ):
                 name = name[: name.rfind("(")].strip()
@@ -2076,7 +2077,7 @@ class MaterialService(IMaterialService):
                         data=name,
                         message="Unique name generated successfully",
                     )
-                if name.endswith(")"):
+                if name.endswith(")") and name.rfind("(") != -1 and Validator.is_int(name[name.rfind("(") + 1 : -1]):
                     base_name = name[: name.rfind("(")].strip()
                     count_str = name[name.rfind("(") + 1 : -1]
                     if Validator.is_int(count_str):
