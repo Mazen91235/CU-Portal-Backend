@@ -914,7 +914,6 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Failed to update material, please try again later.",
                 )
-            updated_material.attachment = existing_material.attachment
             if to_be_removed:
                 await self.helper_service.delete_attachment(attachment=to_be_removed)
                 if updated_material.material_type == "file":
