@@ -49,7 +49,8 @@ class WeekService(IWeekService):
                 condition = between(
                     data.start_date_includes,
                     Week.start_date,
-                    Week.start_date + timedelta(days=7),
+                    Week.start_date
+                    + timedelta(days=6, hours=23, minutes=59, seconds=59),
                 )
                 predicate = (
                     and_(predicate, condition) if predicate is not None else condition
@@ -115,7 +116,8 @@ class WeekService(IWeekService):
                 condition = between(
                     data.start_date_includes,
                     Week.start_date,
-                    Week.start_date + timedelta(days=7),
+                    Week.start_date
+                    + timedelta(days=6, hours=23, minutes=59, seconds=59),
                 )
                 predicate = (
                     and_(predicate, condition) if predicate is not None else condition
