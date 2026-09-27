@@ -77,7 +77,6 @@ class HelperService(IHelperService[U]):
         self.smtp_email = os.environ.get("SMTP_FROM_EMAIL", "")
         self.brevo_api_url = os.environ.get("BREVO_API_URL", "")
         self.brevo_api_key = os.environ.get("BREVO_API_KEY", "")
-        self.smtp_from = os.environ.get("SMTP_FROM", "")
         self.smtp_user = os.environ.get("SMTP_USER", "")
         self.smtp_pass = os.environ.get("SMTP_PASS", "")
         self.smtp_host = os.environ.get("SMTP_HOST", "")
@@ -560,7 +559,7 @@ class HelperService(IHelperService[U]):
                 return BaseResponseDto(success=True, data=True)
             if os.environ.get("HOSTED", "false").lower() == "true":
                 message = EmailMessage()
-                message["From"] = self.smtp_from
+                message["From"] = (self.smtp_name, self.smtp_email)
                 message["To"] = to_email
                 message["Subject"] = subject
                 message.set_content(body)
@@ -582,7 +581,10 @@ class HelperService(IHelperService[U]):
                             "content-type": "application/json",
                         },
                         json={
-                            "sender": {"name": self.smtp_name, "email": self.smtp_email},
+                            "sender": {
+                                "name": self.smtp_name,
+                                "email": self.smtp_email,
+                            },
                             "to": [{"email": to_email}],
                             "subject": subject,
                             "htmlContent": body,
