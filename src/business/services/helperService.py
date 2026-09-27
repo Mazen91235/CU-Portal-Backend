@@ -81,6 +81,9 @@ class HelperService(IHelperService[U]):
         self.smtp_pass = os.environ.get("SMTP_PASS", "")
         self.smtp_host = os.environ.get("SMTP_HOST", "")
         self.smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+        self.smtp_send_local = (
+            os.environ.get("SMTP_SEND_LOCAL", "false").lower() == "true"
+        )
         self.session_factory = session_factory
 
     async def _log(
@@ -557,8 +560,11 @@ class HelperService(IHelperService[U]):
             if os.environ.get("TESTING", "false").lower() == "true":
                 # In testing mode, we won't actually send an email.
                 return BaseResponseDto(success=True, data=True)
-            if os.environ.get("HOSTED", "false").lower() == "true":
-                try:   
+            if (
+                os.environ.get("HOSTED", "false").lower() == "true"
+                and self.smtp_send_local
+            ):
+                try:
                     message = EmailMessage()
                     message["From"] = (self.smtp_name, self.smtp_email)
                     message["To"] = to_email
