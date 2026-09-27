@@ -558,46 +558,49 @@ class HelperService(IHelperService[U]):
                 # In testing mode, we won't actually send an email.
                 return BaseResponseDto(success=True, data=True)
             if os.environ.get("HOSTED", "false").lower() == "true":
-                message = EmailMessage()
-                message["From"] = (self.smtp_name, self.smtp_email)
-                message["To"] = to_email
-                message["Subject"] = subject
-                message.set_content(body)
-                await aiosmtplib.send(
-                    message,
-                    hostname=self.smtp_host,
-                    port=self.smtp_port,
-                    username=self.smtp_user,
-                    password=self.smtp_pass,
-                    validate_certs=False,
-                )
-            else:
-                async with aiohttp.ClientSession() as session:
-                    response = await session.post(
-                        self.brevo_api_url,
-                        headers={
-                            "accept": "application/json",
-                            "api-key": self.brevo_api_key,
-                            "content-type": "application/json",
-                        },
-                        json={
-                            "sender": {
-                                "name": self.smtp_name,
-                                "email": self.smtp_email,
-                            },
-                            "to": [{"email": to_email}],
-                            "subject": subject,
-                            "htmlContent": body,
-                        },
+                try:   
+                    message = EmailMessage()
+                    message["From"] = (self.smtp_name, self.smtp_email)
+                    message["To"] = to_email
+                    message["Subject"] = subject
+                    message.set_content(body)
+                    await aiosmtplib.send(
+                        message,
+                        hostname=self.smtp_host,
+                        port=self.smtp_port,
+                        username=self.smtp_user,
+                        password=self.smtp_pass,
+                        validate_certs=False,
                     )
-                    if response.status != 201:
-                        return BaseResponseDto(
-                            success=False,
-                            code=response.status,
-                            data=False,
-                            message=f"Failed to send email. Please try again later.",
-                            error=f"Code: {response.status}, Response: {await response.text()}",
-                        )
+                    return BaseResponseDto(success=True, data=True)
+                except Exception:
+                    pass
+            async with aiohttp.ClientSession() as session:
+                response = await session.post(
+                    self.brevo_api_url,
+                    headers={
+                        "accept": "application/json",
+                        "api-key": self.brevo_api_key,
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "sender": {
+                            "name": self.smtp_name,
+                            "email": self.smtp_email,
+                        },
+                        "to": [{"email": to_email}],
+                        "subject": subject,
+                        "htmlContent": body,
+                    },
+                )
+                if response.status != 201:
+                    return BaseResponseDto(
+                        success=False,
+                        code=response.status,
+                        data=False,
+                        message=f"Failed to send email. Please try again later.",
+                        error=f"Code: {response.status}, Response: {await response.text()}",
+                    )
             return BaseResponseDto(success=True, data=True)
         except Exception as ex:
             return BaseResponseDto(
