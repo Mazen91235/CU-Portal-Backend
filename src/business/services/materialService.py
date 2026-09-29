@@ -1648,7 +1648,7 @@ class MaterialService(IMaterialService):
                 )
                 existing_material.parent_id = destination_id
                 update_response = await self.material_repository.update(
-                    existing_material, ["parent_id"]
+                    existing_material, [""parent_id"]
                 )
                 if not update_response.success:
                     return BaseResponseDto(
