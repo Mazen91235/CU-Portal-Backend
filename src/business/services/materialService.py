@@ -727,7 +727,13 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Material with ID {data.id} not found",
                 )
-            if (data.material_type == "folder" and existing_material.material_type != "folder") or (data.material_type != "folder" and existing_material.material_type == "folder"):
+            if (
+                data.material_type == "folder"
+                and existing_material.material_type != "folder"
+            ) or (
+                data.material_type != "folder"
+                and existing_material.material_type == "folder"
+            ):
                 await self.logger.log(
                     action="Update",
                     entity="Material",
@@ -973,7 +979,9 @@ class MaterialService(IMaterialService):
                         message=f"You are not authorized to update this material.",
                     )
             if should_overwrite:
-                manage_all_materials = "Manage All Materials" in logged_in_user_permissions
+                manage_all_materials = (
+                    "Manage All Materials" in logged_in_user_permissions
+                )
                 overwrite_target = Material(
                     id=data.id,
                     name=data.name,
@@ -1016,7 +1024,11 @@ class MaterialService(IMaterialService):
 
             if data.name and data.name != existing_material.name:
                 unique_name_response = await self._generate_unique_name(
-                    data.name, existing_material.subject_id, existing_material.parent_id, existing_material.material_type, existing_material.id
+                    data.name,
+                    existing_material.subject_id,
+                    existing_material.parent_id,
+                    existing_material.material_type,
+                    existing_material.id,
                 )
                 if not unique_name_response.success:
                     return BaseResponseDto(
@@ -1521,7 +1533,9 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"You do not have the necessary permissions to move these materials.",
                     )
-                manage_all_materials = "Manage All Materials" in logged_in_user_permissions
+                manage_all_materials = (
+                    "Manage All Materials" in logged_in_user_permissions
+                )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(
                     subject_id=subject_id
@@ -1644,11 +1658,15 @@ class MaterialService(IMaterialService):
                         )
                     continue
                 existing_material.name = await self._generate_unique_name(
-                    existing_material.name, existing_material.subject_id, destination_id, existing_material.material_type, existing_material.id
+                    existing_material.name,
+                    existing_material.subject_id,
+                    destination_id,
+                    existing_material.material_type,
+                    existing_material.id,
                 )
                 existing_material.parent_id = destination_id
                 update_response = await self.material_repository.update(
-                    existing_material, [""parent_id"]
+                    existing_material, ["name", "parent_id"]
                 )
                 if not update_response.success:
                     return BaseResponseDto(
@@ -1846,7 +1864,9 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"You do not have the necessary permissions to copy these materials.",
                     )
-                manage_all_materials = "Manage All Materials" in logged_in_user_permissions
+                manage_all_materials = (
+                    "Manage All Materials" in logged_in_user_permissions
+                )
             access_token_response = await self.helper_service.get_google_access_token(
                 logged_in_user.google_refresh_token
             )
@@ -2146,7 +2166,9 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"You do not have the necessary permissions to fetch materials from Google Drive.",
                     )
-                manage_all_materials = "Manage All Materials" in logged_in_user_permissions
+                manage_all_materials = (
+                    "Manage All Materials" in logged_in_user_permissions
+                )
             fetched_data_response = await self.helper_service.fetch_from_drive(file_id)
             if not fetched_data_response.success:
                 await self.logger.log(
@@ -2604,7 +2626,12 @@ class MaterialService(IMaterialService):
 
     # Helper Functions
     async def _generate_unique_name(
-        self, name: str | None, subject_id: int | None, parent_id: int | None, material_type: str | None, material_id: int | None = None
+        self,
+        name: str | None,
+        subject_id: int | None,
+        parent_id: int | None,
+        material_type: str | None,
+        material_id: int | None = None,
     ) -> BaseResponseDto[str]:
         try:
             if not name:
@@ -2633,7 +2660,9 @@ class MaterialService(IMaterialService):
                         message=existing_material_response.message,
                     )
                 existing_material = existing_material_response.data
-                if not existing_material or (material_id and existing_material.id == material_id):
+                if not existing_material or (
+                    material_id and existing_material.id == material_id
+                ):
                     return BaseResponseDto(
                         success=True,
                         code=200,
@@ -3062,7 +3091,11 @@ class MaterialService(IMaterialService):
 
             new_material = target_material
             unique_name_response = await self._generate_unique_name(
-                new_material.name, new_material.subject_id, new_material.parent_id, new_material.material_type, new_material.id
+                new_material.name,
+                new_material.subject_id,
+                new_material.parent_id,
+                new_material.material_type,
+                new_material.id,
             )
             if not unique_name_response.success:
                 return BaseResponseDto(
@@ -3334,7 +3367,11 @@ class MaterialService(IMaterialService):
 
             new_material = target_material
             unique_name_response = await self._generate_unique_name(
-                new_material.name, new_material.subject_id, new_material.parent_id, new_material.material_type, new_material.id
+                new_material.name,
+                new_material.subject_id,
+                new_material.parent_id,
+                new_material.material_type,
+                new_material.id,
             )
             if not unique_name_response.success:
                 return BaseResponseDto(

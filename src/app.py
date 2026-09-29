@@ -3,8 +3,9 @@ import sys
 import uvicorn
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IllegalStateChangeError
 
 # Ensure `src` is importable as the top-level package root in serverless runtimes.
@@ -109,25 +110,6 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
-        origin = request.headers.get("origin")
-        real_origin = origin
-        if not real_origin or real_origin == "null":
-            real_origin = request.headers.get("referer", "").rstrip("/")
-        if request.method.upper() == "OPTIONS":
-            response = Response(status_code=204)
-            if real_origin and real_origin in ALLOWED_ORIGINS:
-                req_headers = request.headers.get(
-                    "access-control-request-headers", "content-type, authorization"
-                )
-                response.headers["Access-Control-Allow-Origin"] = origin or real_origin
-                response.headers["Access-Control-Allow-Credentials"] = "true"
-                response.headers["Access-Control-Allow-Methods"] = (
-                    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-                )
-                response.headers["Access-Control-Allow-Headers"] = req_headers
-                response.headers["Vary"] = "Origin"
-            return response
-
         request.state.restrict_faculties = False
         request.state.restrict_departments = False
         request.state.restrict_years = False
@@ -166,18 +148,15 @@ def create_app() -> FastAPI:
             session_context.reset(session_token)
             request_context.reset(request_token)
 
-        if real_origin and real_origin in ALLOWED_ORIGINS:
-            req_headers = request.headers.get(
-                "access-control-request-headers", "content-type, authorization"
-            )
-            response.headers["Access-Control-Allow-Origin"] = origin or real_origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Allow-Methods"] = (
-                "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-            )
-            response.headers["Access-Control-Allow-Headers"] = req_headers
-            response.headers["Vary"] = "Origin"
         return response
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(ALLOWED_ORIGINS),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     app.add_middleware(
         SessionMiddleware,
