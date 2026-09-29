@@ -148,7 +148,9 @@ class MaterialController(IMaterialController):
 
     async def create(self, request, data):
         try:
-            material = Mapper[MaterialCreateDto, Material].map(data, Material)
+            material = cast(Material, Mapper[MaterialCreateDto, Material].map(data, Material))
+            material.details = material.details or {}
+            material.details["should_overwrite"] = data.should_overwrite
             response = await self.material_service.create(material)
             if not response.success:
                 await self.material_service.rollback_transaction()
@@ -206,6 +208,8 @@ class MaterialController(IMaterialController):
                 Mapper[MaterialUpdateDto, Material].map(data, Material),
             )
             material.id = id
+            material.details = material.details or {}
+            material.details["should_overwrite"] = data.should_overwrite
             response = await self.material_service.update(material)
             if not response.success:
                 await self.material_service.rollback_transaction()

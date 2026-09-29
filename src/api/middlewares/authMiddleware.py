@@ -1,4 +1,7 @@
+import asyncio
+
 from fastapi import Request, HTTPException
+from sqlalchemy import and_
 from fastapi.security import APIKeyCookie
 from business.contextVars.userContext import user_context
 from business.contextVars.permissionsContext import permissions_context
@@ -6,8 +9,11 @@ from business.contextVars.requestContext import request_context
 from core.iMiddlewares.iAuthMiddleware import IAuthMiddleware
 from core.iServices.iUserService import IUserService
 from core.iLoggers.iBaseLogger import IBaseLogger
+from core.iRepositories.iBaseRepository import IBaseRepository
 from core.entities.user import User
 from core.entities.token import Token
+from core.entities.log import Log
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from core.dtos.userDtos import UserSearchDto
 from core.utils.timezoneHandler import TimezoneHandler
 from core.utils.cachingHandler import caching_handler
@@ -20,12 +26,76 @@ class AuthMiddleware(IAuthMiddleware):
     def __init__(
         self,
         user_service: IUserService,
-        token_repository,
+        token_repository: IBaseRepository[Token],
+        log_repository: IBaseRepository[Log],
         logger: IBaseLogger,
+        session_factory: async_sessionmaker[AsyncSession],
     ):
         self.user_service = user_service
         self.token_repository = token_repository
+        self.log_repository = log_repository
         self.logger = logger
+        self.session_factory = session_factory
+
+    async def _track_user(self, user: User):
+        try:
+            if not user or not user.id:
+                return
+
+            async with self.session_factory() as session:
+                try:
+                    log_response = await self.log_repository.find_one(
+                        and_(
+                            Log.user_id.isnot(None),
+                            Log.user_id == user.id,
+                            Log.created_at >= TimezoneHandler.add_minutes(-15),
+                        ),
+                        session=session,
+                    )
+                    if not log_response.success:
+                        await self.logger.log(
+                            action="Track",
+                            entity="User",
+                            level="error",
+                            code=log_response.code or 500,
+                            message=f"Failed to check recent user activity for user {user.id}: {log_response.message}",
+                            source="AuthMiddleware",
+                        )
+                        return
+                    if log_response.data:
+                        return
+                except Exception:
+                    await self.logger.log(
+                        action="Track",
+                        entity="User",
+                        level="error",
+                        code=500,
+                        message=f"Unexpected error occurred while checking user activity for user {user.id}",
+                        source="AuthMiddleware",
+                    )
+                    return
+                finally:
+                    try:
+                        await session.close()
+                    except Exception:
+                        pass
+            await self.logger.log(
+                action="Track",
+                entity="User",
+                level="info",
+                code=200,
+                message=f"User {user.id} activity tracked",
+                source="AuthMiddleware",
+            )
+        except Exception:
+            await self.logger.log(
+                action="Track",
+                entity="User",
+                level="error",
+                code=500,
+                message=f"Failed to track user {user.id} activity",
+                source="AuthMiddleware",
+            )
 
     async def is_logged_in(
         self,
@@ -64,7 +134,7 @@ class AuthMiddleware(IAuthMiddleware):
                 cached_auth = await caching_handler.get(f"system:{refresh_token}")
 
             cached_user = None
-            
+
             if cached_auth is not None:
                 cached_user = deserialize_user_from_cache(cached_auth, refresh_token)
 
@@ -83,6 +153,8 @@ class AuthMiddleware(IAuthMiddleware):
                     if str(subject_id).isdigit()
                 }
                 request.state.cached_user_access = cached_auth
+                request_context.set(request)
+                asyncio.create_task(self._track_user(cached_user))
 
                 if any(
                     [
@@ -96,7 +168,6 @@ class AuthMiddleware(IAuthMiddleware):
                         ]
                     ]
                 ):
-                    request_context.set(request)
                     return None
 
                 if (
@@ -226,6 +297,8 @@ class AuthMiddleware(IAuthMiddleware):
             request.state.registered_subject_ids = {
                 int(subject.id) for subject in (user.subjects or []) if subject.id
             }
+            request_context.set(request)
+            asyncio.create_task(self._track_user(user))
 
             if any(
                 [
@@ -239,7 +312,6 @@ class AuthMiddleware(IAuthMiddleware):
                     ]
                 ]
             ):
-                request_context.set(request)
                 return None
 
             if (

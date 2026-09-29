@@ -30,6 +30,9 @@ class MaterialCreateDto(BaseModel):
     details: dict | None = Field(
         default=None, description="Additional metadata about the material (like url)"
     )
+    should_overwrite: bool = Field(
+        default=False, description="Whether to overwrite an existing material with the same name"
+    )
 
 
 class MaterialResponseDto(BaseModel):
@@ -90,6 +93,9 @@ class MaterialUpdateDto(BaseModel):
         default=None,
         description="Updated additional metadata about the material (like url)",
     )
+    should_overwrite: bool = Field(
+        default=False, description="Whether to overwrite an existing material with the same name"
+    )
 
 
 class MaterialsDeleteDto(BaseModel):
@@ -137,6 +143,9 @@ class MaterialsCopyOrMoveDto(BaseModel):
     )
     subject_id: int = Field(..., description="ID of the subject for the operation")
     destination_id: int | None = Field(None, description="Destination parent ID")
+    should_overwrite: bool = Field(
+        default=False, description="Whether to overwrite existing materials with matching names"
+    )
 
 
 class MaterialsFetchFromDriveDto(BaseModel):
@@ -146,6 +155,9 @@ class MaterialsFetchFromDriveDto(BaseModel):
     )
     parent_id: int | None = Field(
         None, description="ID of the parent material for the fetched materials"
+    )
+    should_overwrite: bool = Field(
+        default=False, description="Whether to overwrite existing materials with matching names"
     )
 
 

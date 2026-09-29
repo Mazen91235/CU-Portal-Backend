@@ -12,6 +12,7 @@ from core.entities.device import Device
 from core.entities.pendingUser import PendingUser
 from core.entities.role import Role
 from core.entities.token import Token
+from core.entities.log import Log
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.userDtos import (
     UserGetUserWithDetailsDto,
@@ -77,6 +78,11 @@ class UserService(IUserService):
             predicate = self.helper_service.generate_dynamic_predicate(
                 User, data, ["name", "email", "phone"], is_and, starts_with, is_exact
             )
+            if data and data.is_active_now:
+                active_predicate = User.logs.has(Log.created_at >= TimezoneHandler.add_hours(-1))
+                predicate = and_(
+                    predicate, active_predicate
+                ) if predicate is not None else active_predicate
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 User, includes
             )
@@ -135,6 +141,11 @@ class UserService(IUserService):
             predicate = self.helper_service.generate_dynamic_predicate(
                 User, data, ["name", "email", "phone"], is_and, starts_with, is_exact
             )
+            if data and data.is_active_now:
+                active_predicate = User.logs.has(Log.created_at >= TimezoneHandler.add_hours(-1))
+                predicate = and_(
+                    predicate, active_predicate
+                ) if predicate is not None else active_predicate
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 User, includes
             )

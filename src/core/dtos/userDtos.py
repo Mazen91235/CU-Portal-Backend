@@ -157,6 +157,10 @@ class UserSearchDto(BaseSearchDto):
     )
     year_id: int | None = Field(default=None, description="ID of Year to filter by")
     status: bool | None = Field(default=None, description="Whether the user is active")
+    is_active_now: bool | None = Field(
+        default=None,
+        description="Whether the user has any log created within the last hour",
+    )
 
 
 # User-Specific DTOs
@@ -342,6 +346,9 @@ class UserStatisticsResponseDto(BaseModel):
     )
     pending_users_count: int = Field(
         ..., description="Number of users pending approval"
+    )
+    active_now_count: int = Field(
+        ..., description="Number of users with activity logs in the last hour"
     )
 
 

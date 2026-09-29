@@ -3,6 +3,7 @@ import aiohttp
 from aiohttp import FormData
 import aiosmtplib
 from email.message import EmailMessage
+from html import escape
 import asyncio
 import json
 from collections.abc import AsyncIterable
@@ -569,7 +570,7 @@ class HelperService(IHelperService[U]):
                     message["From"] = (self.smtp_name, self.smtp_email)
                     message["To"] = to_email
                     message["Subject"] = subject
-                    message.set_content(body)
+                    message.set_content(body, subtype="html")
                     await aiosmtplib.send(
                         message,
                         hostname=self.smtp_host,
@@ -1261,38 +1262,164 @@ class HelperService(IHelperService[U]):
                     )
                 await session.close()  # Ensure the session is closed
 
+    def _get_notification_title(self, notification_type, body: str) -> str:
+        notification_type_value = getattr(notification_type, "value", notification_type)
+        notification_type_value = str(notification_type_value).lower()
+        body_lower = body.lower()
+        title = "New Notification"
+
+        if "new" in body_lower:
+            if notification_type_value == "announcement":
+                title = "New Announcement has been posted"
+            elif notification_type_value == "task":
+                title = "New Task has been assigned"
+            elif notification_type_value == "exam":
+                title = "New Exam has been scheduled"
+            elif notification_type_value == "event":
+                title = "New Event has been created"
+            elif notification_type_value == "material":
+                title = "New Material has been added"
+        elif "updated" in body_lower:
+            if notification_type_value == "announcement":
+                title = "Announcement has been updated"
+            elif notification_type_value == "task":
+                title = "Task has been updated"
+            elif notification_type_value == "exam":
+                title = "Exam has been updated"
+            elif notification_type_value == "event":
+                title = "Event has been updated"
+            elif notification_type_value == "material":
+                title = "Material has been updated"
+
+        return title
+
+    def _get_absolute_frontend_url(self, url: str | None) -> str:
+        frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip(
+            "/"
+        )
+        if not url:
+            return f"{frontend_url}/"
+        if url.startswith(("http://", "https://")):
+            return url
+        return f"{frontend_url}/{url.lstrip('/')}"
+
+    def _build_notification_email(
+        self, user: User, title: str, body: str, url: str | None
+    ) -> str:
+        safe_name = escape(user.name or "there")
+        safe_title = escape(title)
+        safe_body = escape(body).replace("\n", "<br>")
+        absolute_url = escape(self._get_absolute_frontend_url(url), quote=True)
+
+        return f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{safe_title}</title>
+        </head>
+        <body style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
+            <div style="max-width:620px;margin:32px auto;padding:0 16px;">
+                <div style="background:#ffffff;border-radius:14px;padding:32px;box-shadow:0 3px 14px rgba(0,0,0,0.08);">
+                    <div style="font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#64748b;margin-bottom:10px;">CU-Portal</div>
+                    <h1 style="margin:0 0 18px;font-size:24px;line-height:1.3;color:#111827;">{safe_title}</h1>
+                    <p style="margin:0 0 14px;font-size:16px;line-height:1.7;">Hello {safe_name},</p>
+                    <p style="margin:0 0 24px;font-size:16px;line-height:1.7;">{safe_body}</p>
+                    <a href="{absolute_url}" style="display:inline-block;padding:12px 20px;border-radius:9px;background:#2563eb;color:#ffffff;text-decoration:none;font-size:15px;font-weight:700;">Open Notification</a>
+                    <p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:#64748b;word-break:break-word;">
+                        Direct link: <a href="{absolute_url}" style="color:#2563eb;">{absolute_url}</a>
+                    </p>
+                    <p style="margin:26px 0 0;font-size:12px;line-height:1.6;color:#94a3b8;">
+                        You are receiving this email because we could not deliver this notification to any active push-enabled device linked to your account.
+                    </p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+    async def _send_notification_email_fallback(
+        self, user: User, title: str, body: str, url: str | None
+    ) -> BaseResponseDto[bool]:
+        if not user.email:
+            await self._log(
+                action="SendNotificationEmailFallback",
+                entity="Notification",
+                level="warning",
+                code=400,
+                message=f"User {user.id} has no email address for notification fallback",
+                details={"user_id": user.id},
+            )
+            return BaseResponseDto(
+                success=False,
+                code=400,
+                data=False,
+                message="User email is not available for notification fallback",
+            )
+
+        response = await self.send_email(
+            to_email=user.email,
+            subject=f"CU Portal - {title}",
+            body=self._build_notification_email(user, title, body, url),
+        )
+        if not response.success:
+            await self._log(
+                action="SendNotificationEmailFallback",
+                entity="Notification",
+                level="error",
+                code=response.code or 500,
+                message=f"Failed to send notification email fallback to user {user.id}",
+                details={
+                    "user_id": user.id,
+                    "error": response.error,
+                },
+            )
+            return BaseResponseDto(
+                success=False,
+                code=response.code or 500,
+                data=False,
+                message=response.message
+                or "Failed to send notification email fallback",
+                error=response.error,
+            )
+
+        await self._log(
+            action="SendNotificationEmailFallback",
+            entity="Notification",
+            level="info",
+            code=200,
+            message=f"Notification email fallback sent to user {user.id}",
+            details={"user_id": user.id},
+        )
+        return BaseResponseDto(success=True, code=200, data=True)
+
     async def _send_push_notifications(
         self, session, user_ids, notification_id, notification_type, body, url=None
-    ):
+    ) -> BaseResponseDto[bool]:
         try:
-            title = "New Notification"
-            if "new" in body.lower():
-                if notification_type.lower() == "announcement":
-                    title = "New Announcement has been posted"
-                elif notification_type.lower() == "task":
-                    title = "New Task has been assigned"
-                elif notification_type.lower() == "exam":
-                    title = "New Exam has been scheduled"
-                elif notification_type.lower() == "event":
-                    title = "New Event has been created"
-            elif "updated" in body.lower():
-                if notification_type.lower() == "announcement":
-                    title = "Announcement has been updated"
-                elif notification_type.lower() == "task":
-                    title = "Task has been updated"
-                elif notification_type.lower() == "exam":
-                    title = "Exam has been updated"
-                elif notification_type.lower() == "event":
-                    title = "Event has been updated"
+            user_ids = list(user_ids or [])
+            title = self._get_notification_title(notification_type, body)
+            successful_push_users = 0
+            email_fallback_users = 0
+            email_fallback_failures = 0
+
             for user_id in user_ids:
-                user_response = await self.user_repository.find_one(User.id == user_id)
+                dynamic_includes = self.generate_dynamic_includes(User, ["devices"])
+                user_response = await self.user_repository.find_one(
+                    User.id == user_id, dynamic_includes, session=session
+                )
                 if not user_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=user_response.code,
-                        data=False,
-                        message=user_response.message,
+                    await self._log(
+                        action="SendPushNotifications",
+                        entity="Notification",
+                        level="error",
+                        code=user_response.code or 500,
+                        message=f"Failed to retrieve user {user_id} while sending notification",
+                        details={"error": user_response.error},
                     )
+                    continue
+
                 user = user_response.data
                 if not user:
                     await self._log(
@@ -1302,26 +1429,12 @@ class HelperService(IHelperService[U]):
                         code=404,
                         message=f"User with ID {user_id} not found while sending push notifications",
                     )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=False,
-                        message=f"User with ID {user_id} not found",
-                    )
-                devices_response = await self.device_repository.find(
-                    Device.user_id == user_id,
-                    limit=int(1e6),
-                    session=session,
-                )
-                if not devices_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=devices_response.code,
-                        data=False,
-                        message=devices_response.message,
-                    )
+                    continue
 
-                for device in devices_response.data or []:
+                devices = user.devices or []
+
+                push_sent = False
+                for device in devices:
                     device_token = device.device_token
                     if not device_token or not device_token.strip():
                         continue
@@ -1334,7 +1447,11 @@ class HelperService(IHelperService[U]):
                         notification_id=notification_id,
                     )
 
-                    if not send_response.success and send_response.code == 404:
+                    if send_response.success:
+                        push_sent = True
+                        continue
+
+                    if send_response.code == 404:
                         delete_response = await self.device_repository.delete(
                             device, session=session
                         )
@@ -1348,22 +1465,44 @@ class HelperService(IHelperService[U]):
                                 details={"error": delete_response.error},
                             )
 
-                    if not send_response.success:
-                        await self._log(
-                            action="SendPushNotifications",
-                            entity="Notification",
-                            level="error",
-                            code=send_response.code or 500,
-                            message=f"Failed to send push notification to user {user_id} for device {device.id}",
-                            details={"error": send_response.error},
-                        )
+                    await self._log(
+                        action="SendPushNotifications",
+                        entity="Notification",
+                        level="error",
+                        code=send_response.code or 500,
+                        message=f"Failed to send push notification to user {user_id} for device {device.id}",
+                        details={"error": send_response.error},
+                    )
+
+                if push_sent:
+                    successful_push_users += 1
+                    continue
+
+                email_response = await self._send_notification_email_fallback(
+                    user, title, body, url
+                )
+                if email_response.success:
+                    email_fallback_users += 1
+                else:
+                    email_fallback_failures += 1
 
             await self._log(
                 action="SendPushNotifications",
                 entity="Notification",
                 level="info",
                 code=200,
-                message=f"Push notifications sent successfully to {len(user_ids)} users",
+                message=(
+                    f"Notification delivery completed for {len(user_ids)} users: "
+                    f"{successful_push_users} via push, "
+                    f"{email_fallback_users} via email fallback, "
+                    f"{email_fallback_failures} delivery failures"
+                ),
+            )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=(email_fallback_failures == 0),
+                message="Notification delivery completed",
             )
         except Exception as ex:
             await self._log(
