@@ -506,7 +506,7 @@ class MaterialService(IMaterialService):
                     )
 
             unique_name_response = await self._generate_unique_name(
-                data.name, subject_id, parent_id
+                data.name, subject_id, parent_id, data.material_type
             )
             if not unique_name_response.success:
                 return BaseResponseDto(
@@ -1016,7 +1016,7 @@ class MaterialService(IMaterialService):
 
             if data.name and data.name != existing_material.name:
                 unique_name_response = await self._generate_unique_name(
-                    data.name, existing_material.subject_id, existing_material.parent_id
+                    data.name, existing_material.subject_id, existing_material.parent_id, existing_material.material_type, existing_material.id
                 )
                 if not unique_name_response.success:
                     return BaseResponseDto(
@@ -1643,7 +1643,9 @@ class MaterialService(IMaterialService):
                             message=move_response.message,
                         )
                     continue
-
+                existing_material.name = await self._generate_unique_name(
+                    existing_material.name, existing_material.subject_id, destination_id, existing_material.material_type, existing_material.id
+                )
                 existing_material.parent_id = destination_id
                 update_response = await self.material_repository.update(
                     existing_material, ["parent_id"]
@@ -2602,7 +2604,7 @@ class MaterialService(IMaterialService):
 
     # Helper Functions
     async def _generate_unique_name(
-        self, name: str | None, subject_id: int | None, parent_id: int | None
+        self, name: str | None, subject_id: int | None, parent_id: int | None, material_type: str | None, material_id: int | None = None
     ) -> BaseResponseDto[str]:
         try:
             if not name:
@@ -2620,6 +2622,7 @@ class MaterialService(IMaterialService):
                         Material.name == name,
                         Material.subject_id == subject_id,
                         Material.parent_id == parent_id,
+                        Material.material_type == material_type,
                     )
                 )
                 if not existing_material_response.success:
@@ -2630,7 +2633,7 @@ class MaterialService(IMaterialService):
                         message=existing_material_response.message,
                     )
                 existing_material = existing_material_response.data
-                if not existing_material:
+                if not existing_material or (material_id and existing_material.id == material_id):
                     return BaseResponseDto(
                         success=True,
                         code=200,
@@ -3059,7 +3062,7 @@ class MaterialService(IMaterialService):
 
             new_material = target_material
             unique_name_response = await self._generate_unique_name(
-                new_material.name, new_material.subject_id, new_material.parent_id
+                new_material.name, new_material.subject_id, new_material.parent_id, new_material.material_type, new_material.id
             )
             if not unique_name_response.success:
                 return BaseResponseDto(
@@ -3331,7 +3334,7 @@ class MaterialService(IMaterialService):
 
             new_material = target_material
             unique_name_response = await self._generate_unique_name(
-                new_material.name, new_material.subject_id, new_material.parent_id
+                new_material.name, new_material.subject_id, new_material.parent_id, new_material.material_type, new_material.id
             )
             if not unique_name_response.success:
                 return BaseResponseDto(

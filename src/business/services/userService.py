@@ -79,10 +79,14 @@ class UserService(IUserService):
                 User, data, ["name", "email", "phone"], is_and, starts_with, is_exact
             )
             if data and data.is_active_now:
-                active_predicate = User.logs.has(Log.created_at >= TimezoneHandler.add_hours(-1))
-                predicate = and_(
-                    predicate, active_predicate
-                ) if predicate is not None else active_predicate
+                active_predicate = User.logs.any(
+                    Log.created_at >= TimezoneHandler.add_hours(-1)
+                )
+                predicate = (
+                    and_(predicate, active_predicate)
+                    if predicate is not None
+                    else active_predicate
+                )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 User, includes
             )
@@ -142,10 +146,14 @@ class UserService(IUserService):
                 User, data, ["name", "email", "phone"], is_and, starts_with, is_exact
             )
             if data and data.is_active_now:
-                active_predicate = User.logs.any(Log.created_at >= TimezoneHandler.add_hours(-1))
-                predicate = and_(
-                    predicate, active_predicate
-                ) if predicate is not None else active_predicate
+                active_predicate = User.logs.any(
+                    Log.created_at >= TimezoneHandler.add_hours(-1)
+                )
+                predicate = (
+                    and_(predicate, active_predicate)
+                    if predicate is not None
+                    else active_predicate
+                )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 User, includes
             )

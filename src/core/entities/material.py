@@ -53,7 +53,9 @@ class Material(Base):
     )
 
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Relationships
     subject_id: Mapped[Optional[int]] = mapped_column(
@@ -102,10 +104,11 @@ class Material(Base):
     # Arguments
     __table_args__ = (
         Index(
-            "idx_material_name_subject_id_parent_id",
+            "idx_material_name_subject_id_parent_id_material_type",
             "name",
             "subject_id",
             "parent_id",
+            "material_type",
             unique=True,
         ),
     )
