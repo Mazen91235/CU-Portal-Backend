@@ -28,11 +28,27 @@ class TimezoneHandler:
         return iso_datetime + f"T00:00:00.000{formatted_offset}"
 
     @classmethod
-    def to_isoformat(cls, dt: datetime, timezone: str = "UTC") -> str:
+    def to_isoformat(cls, dt: datetime | None = None, timezone: str = "UTC") -> str:
+        if not dt:
+            dt = cls.now(timezone)
         if timezone.lower() == "cairo":
             return dt.astimezone(cls.CAIRO_TZ).isoformat()
         else:
             return dt.astimezone(cls.UTC_TZ).isoformat()
+
+    @classmethod
+    def format_datetime(
+        cls,
+        dt: datetime | None = None,
+        timezone: str = "UTC",
+        format: str = "%Y-%m-%d %H:%M:%S",
+    ) -> str:
+        if not dt:
+            dt = cls.now(timezone)
+        if timezone.lower() == "cairo":
+            return dt.astimezone(cls.CAIRO_TZ).strftime(format)
+        else:
+            return dt.astimezone(cls.UTC_TZ).strftime(format)
 
     @classmethod
     def now(cls, timezone: str = "UTC") -> datetime:
