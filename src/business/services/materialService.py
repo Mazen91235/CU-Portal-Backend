@@ -19,6 +19,7 @@ from core.entities.attachment import Attachment
 from core.dtos.baseDtos import BaseResponseDto
 from core.models.fileModels import FetchedModel
 from core.utils.validator import Validator
+from core.utils.timezoneHandler import TimezoneHandler
 
 
 class MaterialService(IMaterialService):
@@ -2383,7 +2384,7 @@ class MaterialService(IMaterialService):
                 code=200,
                 data={
                     "stream": self._stream_download_zip(roots),
-                    "filename": "archive.zip",
+                    "filename": f"archive_{TimezoneHandler.format_datetime(format='%Y-%m-%d_%H-%M-%S')}.zip",
                 },
                 message="Materials download prepared successfully",
             )
