@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from .subjectDtos import SubjectResponseDto
     from .userDtos import UserResponseDto
     from .weekDtos import WeekResponseDto
-    from .weekItemDtos import WeekItemMutationDto
+    from .weekItemDtos import WeekItemMutationDto, WeekItemResponseDto
     from .attachmentDtos import AttachmentResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
@@ -34,7 +34,8 @@ class MaterialCreateDto(BaseModel):
         default=None, description="Additional metadata about the material (like url)"
     )
     should_overwrite: bool = Field(
-        default=False, description="Whether to overwrite an existing material with the same name"
+        default=False,
+        description="Whether to overwrite an existing material with the same name",
     )
 
 
@@ -79,6 +80,9 @@ class MaterialResponseDto(BaseModel):
     weeks: list[WeekResponseDto] | None = Field(
         default=None, description="Weeks associated with the material"
     )
+    week_items: list[WeekItemResponseDto] | None = Field(
+        default=None, description="Week items associated with the material"
+    )
 
     # Pydantic Configuration
     model_config = {
@@ -100,7 +104,8 @@ class MaterialUpdateDto(BaseModel):
         description="Updated additional metadata about the material (like url)",
     )
     should_overwrite: bool = Field(
-        default=False, description="Whether to overwrite an existing material with the same name"
+        default=False,
+        description="Whether to overwrite an existing material with the same name",
     )
 
 
@@ -147,7 +152,8 @@ class MaterialsCopyOrMoveDto(BaseModel):
     subject_id: int = Field(..., description="ID of the subject for the operation")
     destination_id: int | None = Field(None, description="Destination parent ID")
     should_overwrite: bool = Field(
-        default=False, description="Whether to overwrite existing materials with matching names"
+        default=False,
+        description="Whether to overwrite existing materials with matching names",
     )
 
 
@@ -160,7 +166,8 @@ class MaterialsFetchFromDriveDto(BaseModel):
         None, description="ID of the parent material for the fetched materials"
     )
     should_overwrite: bool = Field(
-        default=False, description="Whether to overwrite existing materials with matching names"
+        default=False,
+        description="Whether to overwrite existing materials with matching names",
     )
 
 
