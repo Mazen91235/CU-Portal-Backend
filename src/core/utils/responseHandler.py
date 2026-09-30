@@ -2,7 +2,9 @@ import os
 import asyncio
 import urllib.parse
 from collections.abc import AsyncIterable, Iterable
+from fastapi import Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 from business.contextVars.requestContext import request_context
 
@@ -88,4 +90,26 @@ class ResponseHandler:
             task = asyncio.create_task(request.state.background)
             BACKGROUND_TASKS.add(task)
             task.add_done_callback(BACKGROUND_TASKS.discard)
+        return response
+
+    @classmethod
+    def generate_preflight_response(cls, request: Request, allowed_origins: list[str]):
+        response = Response(status_code=204)
+        return cls.attach_cors_headers(request, response, allowed_origins)
+
+    @staticmethod
+    def attach_cors_headers(
+        request: Request, response: Response | HTTPException, allowed_origins: list[str]
+    ):
+        origin = request.headers.get("origin")
+        real_origin = origin
+        if not real_origin or real_origin == "null":
+            real_origin = request.headers.get("referer")
+        real_origin = real_origin.rstrip("/") if real_origin else None
+        if not real_origin or real_origin not in allowed_origins:
+            raise HTTPException(status_code=403, detail="CORS policy violation")
+        setattr(response.headers, "Access-Control-Allow-Origin", origin or real_origin)
+        setattr(response.headers, "Access-Control-Allow-Methods", "*")
+        setattr(response.headers, "Access-Control-Allow-Headers", "*")
+        setattr(response.headers, "Access-Control-Allow-Credentials", "true")
         return response
