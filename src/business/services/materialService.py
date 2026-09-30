@@ -2631,7 +2631,15 @@ class MaterialService(IMaterialService):
             target_details.pop("url", None)
             existing_material.details = target_details or existing_material.details
             existing_material.author_id = current_user_id
-            existing_material.week_items = set(target_material.week_items or existing_material.week_items or set())
+            existing_week_items = existing_material.week_items or set()
+            target_week_items = target_material.week_items or set()
+            combined_week_items = {item.week_id: item for item in existing_week_items}
+            for item in target_week_items:
+                combined_week_items[item.week_id] = item
+            existing_material.week_items = set(
+                WeekItem(week_id=item.week_id, note=item.note)
+                for item in combined_week_items.values()
+            )
             update_response = await self.material_repository.update(
                 existing_material, ["details", "author_id", "week_items"]
             )
