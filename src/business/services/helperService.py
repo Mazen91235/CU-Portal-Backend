@@ -2983,6 +2983,7 @@ class HelperService(IHelperService[U]):
         self,
         attachment_id=None,
         attachment=None,
+        should_delete_file=True,
         session=None,
     ):
         try:
@@ -3037,7 +3038,9 @@ class HelperService(IHelperService[U]):
                     )
             to_be_removed = (
                 attachment.url
-                if attachment.is_file and not attachment.details.get("fetched", False)
+                if attachment.is_file
+                and not attachment.details.get("fetched", False)
+                and should_delete_file
                 else None
             )
             delete_response = await self.attachment_repository.delete(

@@ -1000,7 +1000,9 @@ class MaterialService(IMaterialService):
                 if overwrite_response.data:
                     overwritten_material = overwrite_response.data
                     old_attachment = existing_material.attachment
-                    delete_response = await self.material_repository.delete(existing_material)
+                    delete_response = await self.material_repository.delete(
+                        existing_material
+                    )
                     if not delete_response.success:
                         return BaseResponseDto(
                             success=False,
@@ -1010,7 +1012,7 @@ class MaterialService(IMaterialService):
                         )
                     if old_attachment:
                         await self.helper_service.delete_attachment(
-                            attachment=old_attachment
+                            attachment=old_attachment, should_delete_file=data.details.get("url", "") != old_attachment.url
                         )
                     share_link = (
                         f"/user/materials?subject_id={overwritten_material.subject_id}"
@@ -3010,9 +3012,7 @@ class MaterialService(IMaterialService):
                     message=delete_response.message,
                 )
             if old_attachment:
-                await self.helper_service.delete_attachment(
-                    attachment=old_attachment
-                )
+                await self.helper_service.delete_attachment(attachment=old_attachment, should_delete_file=target_details.get("url", "") != old_attachment.url)
             return BaseResponseDto(
                 success=True,
                 code=200,
