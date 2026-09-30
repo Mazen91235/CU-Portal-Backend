@@ -124,21 +124,16 @@ def create_app() -> FastAPI:
         request_token = request_context.set(request)
         try:
             response = await call_next(request)
-        except HTTPException as ex:
-            exception_response = ResponseHandler.attach_cors_headers(
-                request, ex, list(ALLOWED_ORIGINS)
-            )
-            if isinstance(exception_response, HTTPException):
-                raise exception_response
-            raise ex
-        except Exception:
+        except Exception as ex:
             session = session_context.get(None)
             if session is not None and session.in_transaction():
                 try:
                     await session.rollback()
                 except Exception:
                     pass
-            raise
+            return ResponseHandler.attach_cors_headers(
+                request, ex, list(ALLOWED_ORIGINS)
+            )
         finally:
             session = session_context.get(None)
             if session is not None:

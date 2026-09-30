@@ -97,19 +97,38 @@ class ResponseHandler:
         response = Response(status_code=204)
         return cls.attach_cors_headers(request, response, allowed_origins)
 
-    @staticmethod
+    @classmethod
     def attach_cors_headers(
-        request: Request, response: Response | HTTPException, allowed_origins: list[str]
+        cls,
+        request: Request,
+        response: Response | Exception,
+        allowed_origins: list[str],
     ):
         origin = request.headers.get("origin")
         real_origin = origin
         if not real_origin or real_origin == "null":
             real_origin = request.headers.get("referer")
         real_origin = real_origin.rstrip("/") if real_origin else None
-        if not real_origin or real_origin not in allowed_origins:
-            raise HTTPException(status_code=403, detail="CORS policy violation")
-        setattr(response.headers, "Access-Control-Allow-Origin", origin or real_origin)
-        setattr(response.headers, "Access-Control-Allow-Methods", "*")
-        setattr(response.headers, "Access-Control-Allow-Headers", "*")
-        setattr(response.headers, "Access-Control-Allow-Credentials", "true")
+        if real_origin and real_origin not in allowed_origins:
+            response = cls.generate_response(
+                success=False,
+                code=403,
+                message=f"CORS Policy Violation: Origin '{real_origin}' is not allowed.",
+            )
+        if isinstance(response, Exception):
+            status_code = getattr(response, "status_code", 500)
+            detail = (
+                response.detail
+                if isinstance(response, HTTPException)
+                else (repr(response) or str(response) or "Internal Server Error")
+            )
+            response = cls.generate_response(
+                success=False,
+                code=status_code,
+                message=detail,
+            )
+        response.headers["Access-Control-Allow-Origin"] = origin or real_origin or "*"
+        response.headers["Access-Control-Allow-Methods"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
         return response
