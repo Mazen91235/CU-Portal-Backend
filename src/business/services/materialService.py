@@ -999,6 +999,19 @@ class MaterialService(IMaterialService):
                     return overwrite_response
                 if overwrite_response.data:
                     overwritten_material = overwrite_response.data
+                    old_attachment = existing_material.attachment
+                    delete_response = await self.material_repository.delete(existing_material)
+                    if not delete_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=delete_response.code,
+                            data=None,
+                            message=delete_response.message,
+                        )
+                    if old_attachment:
+                        await self.helper_service.delete_attachment(
+                            attachment=old_attachment
+                        )
                     share_link = (
                         f"/user/materials?subject_id={overwritten_material.subject_id}"
                     )
@@ -2921,6 +2934,7 @@ class MaterialService(IMaterialService):
                 )
 
             target_material = Material(
+                id=source_material.id,
                 name=source_material.name,
                 material_type=source_material.material_type,
                 subject_id=subject_id,
@@ -2986,6 +3000,19 @@ class MaterialService(IMaterialService):
                             data=None,
                             message=recursive_move_response.message,
                         )
+            old_attachment = source_material.attachment
+            delete_response = await self.material_repository.delete(source_material)
+            if not delete_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=delete_response.code,
+                    data=None,
+                    message=delete_response.message,
+                )
+            if old_attachment:
+                await self.helper_service.delete_attachment(
+                    attachment=old_attachment
+                )
             return BaseResponseDto(
                 success=True,
                 code=200,
