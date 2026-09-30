@@ -429,8 +429,84 @@ class MaterialService(IMaterialService):
                     )
             data.author_id = logged_in_user.id
             data.details = data.details or {}
+            should_overwrite = bool(data.details.pop("should_overwrite", False))
+            if should_overwrite and data.material_type == "folder":
+                await self.logger.log(
+                    action="Create",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message="Folder materials cannot be overwritten during creation",
+                    details={
+                        "error": "Overwrite is not supported for create folder operations"
+                    },
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="You cannot overwrite a folder while creating a material.",
+                )
+
+            if should_overwrite:
+                logged_in_user_permissions_response = (
+                    await self.helper_service.get_logged_in_user_permissions()
+                )
+                if not logged_in_user_permissions_response.success:
+                    await self.logger.log(
+                        action="Create",
+                        entity="Material",
+                        level="error",
+                        code=logged_in_user_permissions_response.code or 500,
+                        message=f"Failed to get logged in user permissions for user {logged_in_user.id}: {logged_in_user_permissions_response.message}",
+                        details={"error": logged_in_user_permissions_response.error},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=logged_in_user_permissions_response.code,
+                        data=None,
+                        message=logged_in_user_permissions_response.message,
+                    )
+                logged_in_user_permissions = (
+                    logged_in_user_permissions_response.data or []
+                )
+                manage_all_materials = (
+                    "Manage All Materials" in logged_in_user_permissions
+                )
+                overwrite_response = await self._overwrite_material(
+                    data, logged_in_user.id, manage_all_materials
+                )
+                if not overwrite_response.success:
+                    return overwrite_response
+                if overwrite_response.data:
+                    overwritten_material = overwrite_response.data
+                    share_link = (
+                        f"/user/materials?subject_id={overwritten_material.subject_id}"
+                    )
+                    if overwritten_material.parent_id:
+                        share_link += f"&parent_id={overwritten_material.parent_id}"
+                    if overwritten_material.material_type == "file":
+                        share_link += f"&material_id={overwritten_material.id}"
+                    elif overwritten_material.material_type != "folder":
+                        share_link = overwritten_material.attachment.url
+                    await self.helper_service.send_notification(
+                        Notification.NotificationType.MATERIAL,
+                        overwritten_material.id,
+                        f"Material '{overwritten_material.name}' has been overwritten for subject {subject.name}.",
+                        share_link,
+                        subject_id=overwritten_material.subject_id,
+                    )
+                    return BaseResponseDto(
+                        success=True,
+                        code=201,
+                        data=overwritten_material,
+                        message="Material overwritten successfully",
+                    )
+
             unique_name_response = await self._generate_unique_name(
-                data.name, subject_id, parent_id
+                data.name, subject_id, parent_id, data.material_type
             )
             if not unique_name_response.success:
                 return BaseResponseDto(
@@ -651,6 +727,51 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Material with ID {data.id} not found",
                 )
+            if (
+                data.material_type == "folder"
+                and existing_material.material_type != "folder"
+            ) or (
+                data.material_type != "folder"
+                and existing_material.material_type == "folder"
+            ):
+                await self.logger.log(
+                    action="Update",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message=(
+                        f"Material type cannot be changed from {existing_material.material_type} "
+                        f"to {data.material_type}"
+                    ),
+                    details={"error": "Material type mismatch during update"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Material type cannot be changed. Folder materials must remain folders and non-folder materials must remain non-folders.",
+                )
+            data.details = data.details or {}
+            should_overwrite = bool(data.details.pop("should_overwrite", False))
+            if should_overwrite and data.material_type == "folder":
+                await self.logger.log(
+                    action="Update",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message="Folder materials cannot be overwritten during update",
+                    details={
+                        "error": "Overwrite is not supported for update folder operations"
+                    },
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="You cannot overwrite a folder while updating a material.",
+                )
             subject_response = await self.subject_repository.find_one(
                 Subject.id == existing_material.subject_id
             )
@@ -857,9 +978,72 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"You are not authorized to update this material.",
                     )
+            if should_overwrite:
+                manage_all_materials = (
+                    "Manage All Materials" in logged_in_user_permissions
+                )
+                overwrite_target = Material(
+                    id=data.id,
+                    name=data.name,
+                    material_type=data.material_type,
+                    subject_id=existing_material.subject_id,
+                    parent_id=existing_material.parent_id,
+                    week_id=data.week_id,
+                    details=data.details or existing_material.details,
+                    author_id=logged_in_user.id,
+                )
+                overwrite_response = await self._overwrite_material(
+                    overwrite_target, logged_in_user.id, manage_all_materials
+                )
+                if not overwrite_response.success:
+                    return overwrite_response
+                if overwrite_response.data:
+                    overwritten_material = overwrite_response.data
+                    old_attachment = existing_material.attachment
+                    delete_response = await self.material_repository.delete(
+                        existing_material
+                    )
+                    if not delete_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=delete_response.code,
+                            data=None,
+                            message=delete_response.message,
+                        )
+                    if old_attachment:
+                        await self.helper_service.delete_attachment(
+                            attachment=old_attachment, should_delete_file=data.details.get("url", "") != old_attachment.url
+                        )
+                    share_link = (
+                        f"/user/materials?subject_id={overwritten_material.subject_id}"
+                    )
+                    if overwritten_material.parent_id:
+                        share_link += f"&parent_id={overwritten_material.parent_id}"
+                    if overwritten_material.material_type == "file":
+                        share_link += f"&material_id={overwritten_material.id}"
+                    elif overwritten_material.material_type != "folder":
+                        share_link = overwritten_material.attachment.url
+                    await self.helper_service.send_notification(
+                        Notification.NotificationType.MATERIAL,
+                        overwritten_material.id,
+                        f"Material '{overwritten_material.name}' has been overwritten for subject {subject.name}.",
+                        share_link,
+                        subject_id=overwritten_material.subject_id,
+                    )
+                    return BaseResponseDto(
+                        success=True,
+                        code=200,
+                        data=overwritten_material,
+                        message="Material overwritten successfully",
+                    )
+
             if data.name and data.name != existing_material.name:
                 unique_name_response = await self._generate_unique_name(
-                    data.name, existing_material.subject_id, existing_material.parent_id
+                    data.name,
+                    existing_material.subject_id,
+                    existing_material.parent_id,
+                    existing_material.material_type,
+                    existing_material.id,
                 )
                 if not unique_name_response.success:
                     return BaseResponseDto(
@@ -1325,6 +1509,48 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Logged in user not found",
                 )
+            should_overwrite = data.should_overwrite
+            manage_all_materials = False
+            if should_overwrite:
+                logged_in_user_permissions_response = (
+                    await self.helper_service.get_logged_in_user_permissions()
+                )
+                if not logged_in_user_permissions_response.success:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=logged_in_user_permissions_response.code or 500,
+                        message=f"Failed to get logged in user permissions for user {logged_in_user.id}: {logged_in_user_permissions_response.message}",
+                        details={"error": logged_in_user_permissions_response.error},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=logged_in_user_permissions_response.code,
+                        data=None,
+                        message=logged_in_user_permissions_response.message,
+                    )
+                logged_in_user_permissions = logged_in_user_permissions_response.data
+                if not logged_in_user_permissions:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=403,
+                        message=f"Logged in user {logged_in_user.id} has no permissions",
+                        details={"error": "Logged in user has no permissions"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=403,
+                        data=None,
+                        message=f"You do not have the necessary permissions to move these materials.",
+                    )
+                manage_all_materials = (
+                    "Manage All Materials" in logged_in_user_permissions
+                )
             verify_restricted_access_response = (
                 await self.helper_service.verify_restricted_access(
                     subject_id=subject_id
@@ -1430,9 +1656,57 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=f"Cannot move material '{existing_material.name}' into itself.",
                     )
+                if should_overwrite:
+                    move_response = await self._recursive_move_with_overwrite(
+                        material_id,
+                        destination_id,
+                        subject_id,
+                        logged_in_user.id,
+                        manage_all_materials,
+                    )
+                    if not move_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=move_response.code,
+                            data=None,
+                            message=move_response.message,
+                        )
+                    continue
+                unique_name_response = await self._generate_unique_name(
+                    existing_material.name,
+                    existing_material.subject_id,
+                    destination_id,
+                    existing_material.material_type,
+                    existing_material.id,
+                )
+                if not unique_name_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=unique_name_response.code,
+                        data=None,
+                        message=unique_name_response.message,
+                    )
+                unique_name = unique_name_response.data
+                if not unique_name:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=500,
+                        message=f"Failed to generate unique name for material {existing_material.id}",
+                        details={"error": "Failed to generate unique name"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message=f"Failed to generate unique name for material '{existing_material.name}'.",
+                    )
+                existing_material.name = unique_name
                 existing_material.parent_id = destination_id
                 update_response = await self.material_repository.update(
-                    existing_material, ["parent_id"]
+                    existing_material, ["name", "parent_id"]
                 )
                 if not update_response.success:
                     return BaseResponseDto(
@@ -1591,6 +1865,48 @@ class MaterialService(IMaterialService):
                     message="Logged-in user not found",
                 )
             author_id = logged_in_user.id
+            should_overwrite = data.should_overwrite
+            manage_all_materials = False
+            if should_overwrite:
+                logged_in_user_permissions_response = (
+                    await self.helper_service.get_logged_in_user_permissions()
+                )
+                if not logged_in_user_permissions_response.success:
+                    await self.logger.log(
+                        action="CopyMany",
+                        entity="Material",
+                        level="error",
+                        code=logged_in_user_permissions_response.code or 500,
+                        message=f"Failed to get logged in user permissions for user {logged_in_user.id}: {logged_in_user_permissions_response.message}",
+                        details={"error": logged_in_user_permissions_response.error},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=logged_in_user_permissions_response.code,
+                        data=None,
+                        message=logged_in_user_permissions_response.message,
+                    )
+                logged_in_user_permissions = logged_in_user_permissions_response.data
+                if not logged_in_user_permissions:
+                    await self.logger.log(
+                        action="CopyMany",
+                        entity="Material",
+                        level="error",
+                        code=403,
+                        message=f"Logged in user {logged_in_user.id} has no permissions",
+                        details={"error": "Logged in user has no permissions"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=403,
+                        data=None,
+                        message=f"You do not have the necessary permissions to copy these materials.",
+                    )
+                manage_all_materials = (
+                    "Manage All Materials" in logged_in_user_permissions
+                )
             access_token_response = await self.helper_service.get_google_access_token(
                 logged_in_user.google_refresh_token
             )
@@ -1634,6 +1950,8 @@ class MaterialService(IMaterialService):
                     author_id,
                     access_token,
                     subject_id,
+                    should_overwrite,
+                    manage_all_materials,
                 )
                 if not copy_response.success:
                     return BaseResponseDto(
@@ -1849,6 +2167,48 @@ class MaterialService(IMaterialService):
                     message=f"Logged in user not found",
                 )
             author_id = logged_in_user.id
+            should_overwrite = data.should_overwrite
+            manage_all_materials = False
+            if should_overwrite:
+                logged_in_user_permissions_response = (
+                    await self.helper_service.get_logged_in_user_permissions()
+                )
+                if not logged_in_user_permissions_response.success:
+                    await self.logger.log(
+                        action="FetchMaterialsFromDrive",
+                        entity="Material",
+                        level="error",
+                        code=logged_in_user_permissions_response.code or 500,
+                        message=f"Failed to get logged in user permissions for user {logged_in_user.id}: {logged_in_user_permissions_response.message}",
+                        details={"error": logged_in_user_permissions_response.error},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=logged_in_user_permissions_response.code,
+                        data=None,
+                        message=logged_in_user_permissions_response.message,
+                    )
+                logged_in_user_permissions = logged_in_user_permissions_response.data
+                if not logged_in_user_permissions:
+                    await self.logger.log(
+                        action="FetchMaterialsFromDrive",
+                        entity="Material",
+                        level="error",
+                        code=403,
+                        message=f"Logged in user {logged_in_user.id} has no permissions",
+                        details={"error": "Logged in user has no permissions"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=403,
+                        data=None,
+                        message=f"You do not have the necessary permissions to fetch materials from Google Drive.",
+                    )
+                manage_all_materials = (
+                    "Manage All Materials" in logged_in_user_permissions
+                )
             fetched_data_response = await self.helper_service.fetch_from_drive(file_id)
             if not fetched_data_response.success:
                 await self.logger.log(
@@ -1884,7 +2244,12 @@ class MaterialService(IMaterialService):
                     message=f"Failed to fetch data from Google Drive, please try again later.",
                 )
             create_response = await self._recursive_create_from_drive(
-                fetched_data, subject_id, parent_id, author_id
+                fetched_data,
+                subject_id,
+                parent_id,
+                author_id,
+                should_overwrite,
+                manage_all_materials,
             )
             if not create_response.success:
                 return BaseResponseDto(
@@ -2040,9 +2405,273 @@ class MaterialService(IMaterialService):
                 error=repr(ex),
             )
 
+    async def _find_existing_material(self, target_material: Material):
+        predicate = and_(
+            Material.name == target_material.name,
+            Material.subject_id == target_material.subject_id,
+            Material.parent_id.is_not_distinct_from(target_material.parent_id),
+            Material.material_type == target_material.material_type,
+        )
+
+        dynamic_includes = self.helper_service.generate_dynamic_includes(
+            Material, ["attachment"]
+        )
+        response = await self.material_repository.find_one(predicate, dynamic_includes)
+        if not response.success:
+            return BaseResponseDto(
+                success=False,
+                code=response.code,
+                data=None,
+                message=response.message,
+            )
+        existing_material = response.data
+        if existing_material and (
+            not target_material.id or existing_material.id != target_material.id
+        ):
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=existing_material,
+                message="Existing material found",
+            )
+        return BaseResponseDto(
+            success=True,
+            code=200,
+            data=None,
+            message="No existing material found",
+        )
+
+    async def _overwrite_material(
+        self,
+        target_material: Material,
+        current_user_id: int,
+        manage_all_materials: bool,
+    ) -> BaseResponseDto[Material]:
+        try:
+            existing_response = await self._find_existing_material(target_material)
+            if not existing_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=existing_response.code,
+                    data=None,
+                    message=existing_response.message,
+                )
+
+            existing_material = existing_response.data
+            if not existing_material:
+                return BaseResponseDto(success=True, code=200, data=None)
+
+            if (
+                existing_material.author_id != current_user_id
+                and not manage_all_materials
+            ):
+                await self.logger.log(
+                    action="Overwrite",
+                    entity="Material",
+                    level="error",
+                    code=403,
+                    message=(
+                        f"User {current_user_id} is not authorized to overwrite material "
+                        f"{existing_material.id}"
+                    ),
+                    details={
+                        "error": "User not authorized to overwrite this material",
+                        "material_id": existing_material.id,
+                        "user_id": current_user_id,
+                    },
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=403,
+                    data=None,
+                    message="You are not authorized to overwrite this material.",
+                )
+
+            target_details = target_material.details or {}
+
+            if existing_material.material_type == "folder":
+                existing_material.author_id = current_user_id
+                update_response = await self.material_repository.update(
+                    existing_material, ["author_id"]
+                )
+                if not update_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=update_response.code,
+                        data=None,
+                        message=update_response.message,
+                    )
+                updated_material = update_response.data
+                if not updated_material:
+                    await self.logger.log(
+                        action="Overwrite",
+                        entity="Material",
+                        level="error",
+                        code=500,
+                        message=f"Failed to update author for folder material {existing_material.id}",
+                        details={
+                            "error": "Failed to update author for folder material"
+                        },
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="Failed to overwrite folder material.",
+                    )
+                await self.logger.log(
+                    action="Overwrite",
+                    entity="Material",
+                    level="info",
+                    code=200,
+                    message=f"Folder material {updated_material.id} merged for overwrite",
+                    details={"material_id": updated_material.id},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=True,
+                    code=200,
+                    data=updated_material,
+                    message="Material overwritten successfully",
+                )
+
+            target_url = target_details.get("url")
+            if not target_url:
+                await self.logger.log(
+                    action="Overwrite",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message=f"URL is required to overwrite material {existing_material.id}",
+                    details={"error": "URL is required for non-folder material"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="URL is required to overwrite a non-folder material.",
+                )
+
+            if (
+                not existing_material.attachment
+                or existing_material.attachment.url != target_url
+            ):
+                if existing_material.attachment:
+                    await self.helper_service.delete_attachment(
+                        attachment=existing_material.attachment
+                    )
+
+                attachment_response = await self.helper_service.create_attachment(
+                    is_file=target_material.material_type == "file",
+                    url=target_url,
+                    author_id=current_user_id,
+                    source_name="material_id",
+                    source_id=existing_material.id,
+                    fetched=bool(target_details.get("fetched", False)),
+                    link_title=(
+                        target_material.name
+                        if target_material.material_type != "file"
+                        else None
+                    ),
+                )
+                if not attachment_response.success:
+                    await self.logger.log(
+                        action="Overwrite",
+                        entity="Material",
+                        level="error",
+                        code=attachment_response.code or 500,
+                        message=f"Failed to create replacement attachment for material {existing_material.id}",
+                        details={"error": attachment_response.message},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=attachment_response.code,
+                        data=None,
+                        message=attachment_response.message,
+                    )
+                attachment = attachment_response.data
+                if not attachment:
+                    await self.logger.log(
+                        action="Overwrite",
+                        entity="Material",
+                        level="error",
+                        code=500,
+                        message=f"Failed to create replacement attachment for material {existing_material.id}",
+                        details={"error": "Attachment creation returned None"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message="Failed to create replacement attachment.",
+                    )
+                existing_material.attachment = attachment
+
+            target_details.pop("url", None)
+            existing_material.details = target_details or existing_material.details
+            existing_material.week_id = (
+                target_material.week_id or existing_material.week_id
+            )
+            existing_material.author_id = current_user_id
+            update_response = await self.material_repository.update(
+                existing_material, ["details", "week_id", "author_id"]
+            )
+            if not update_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=update_response.code,
+                    data=None,
+                    message=update_response.message,
+                )
+
+            updated_material = update_response.data or existing_material
+            if existing_material.attachment:
+                updated_material.attachment = existing_material.attachment
+            await self.logger.log(
+                action="Overwrite",
+                entity="Material",
+                level="info",
+                code=200,
+                message=f"Material {updated_material.id} overwritten successfully",
+                details={"material_id": updated_material.id},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=updated_material,
+                message="Material overwritten successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="Overwrite",
+                entity="Material",
+                level="error",
+                code=500,
+                message=f"An error occurred while overwriting material",
+                details={"error": repr(ex)},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while overwriting material",
+            )
+
     # Helper Functions
     async def _generate_unique_name(
-        self, name: str | None, subject_id: int | None, parent_id: int | None
+        self,
+        name: str | None,
+        subject_id: int | None,
+        parent_id: int | None,
+        material_type: str | None,
+        material_id: int | None = None,
     ) -> BaseResponseDto[str]:
         try:
             if not name:
@@ -2060,6 +2689,7 @@ class MaterialService(IMaterialService):
                         Material.name == name,
                         Material.subject_id == subject_id,
                         Material.parent_id == parent_id,
+                        Material.material_type == material_type,
                     )
                 )
                 if not existing_material_response.success:
@@ -2070,7 +2700,9 @@ class MaterialService(IMaterialService):
                         message=existing_material_response.message,
                     )
                 existing_material = existing_material_response.data
-                if not existing_material:
+                if not existing_material or (
+                    material_id and existing_material.id == material_id
+                ):
                     return BaseResponseDto(
                         success=True,
                         code=200,
@@ -2257,6 +2889,153 @@ class MaterialService(IMaterialService):
                 message=f"An error occurred while trying to fetch parent materials for material with ID {material_id}",
             )
 
+    async def _recursive_move_with_overwrite(
+        self,
+        material_id: int,
+        destination_id: int | None,
+        subject_id: int,
+        author_id: int,
+        manage_all_materials: bool,
+    ) -> BaseResponseDto[bool]:
+        try:
+            dynamic_includes = self.helper_service.generate_dynamic_includes(
+                Material, ["attachment"]
+            )
+            source_response = await self.material_repository.find_one(
+                Material.id == material_id, dynamic_includes
+            )
+            if not source_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=source_response.code,
+                    data=None,
+                    message=source_response.message,
+                )
+            source_material = source_response.data
+            if not source_material:
+                await self.logger.log(
+                    action="RecursiveMoveOverwrite",
+                    entity="Material",
+                    level="error",
+                    code=404,
+                    message=f"Material with ID {material_id} not found",
+                    details={"error": "Material not found"},
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=404,
+                    data=None,
+                    message=f"Material with ID {material_id} not found",
+                )
+
+            target_details = source_material.details or {}
+            if source_material.material_type != "folder":
+                target_details["url"] = (
+                    source_material.attachment.url if source_material.attachment else ""
+                )
+
+            target_material = Material(
+                id=source_material.id,
+                name=source_material.name,
+                material_type=source_material.material_type,
+                subject_id=subject_id,
+                parent_id=destination_id,
+                week_id=source_material.week_id,
+                details=target_details,
+                author_id=author_id,
+            )
+            overwrite_response = await self._overwrite_material(
+                target_material, author_id, manage_all_materials
+            )
+            if not overwrite_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=overwrite_response.code,
+                    data=None,
+                    message=overwrite_response.message,
+                )
+
+            overwritten_material = overwrite_response.data
+            if not overwritten_material:
+                source_material.parent_id = destination_id
+                update_response = await self.material_repository.update(
+                    source_material, ["parent_id"]
+                )
+                if not update_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=update_response.code,
+                        data=None,
+                        message=update_response.message,
+                    )
+                return BaseResponseDto(
+                    success=True,
+                    code=200,
+                    data=True,
+                    message="Material moved successfully",
+                )
+
+            if source_material.material_type == "folder":
+                child_materials_response = await self.material_repository.find(
+                    Material.parent_id == material_id
+                )
+                if not child_materials_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=child_materials_response.code,
+                        data=None,
+                        message=child_materials_response.message,
+                    )
+                for child in child_materials_response.data or []:
+                    recursive_move_response = await self._recursive_move_with_overwrite(
+                        child.id,
+                        overwritten_material.id,
+                        subject_id,
+                        author_id,
+                        manage_all_materials,
+                    )
+                    if not recursive_move_response.success:
+                        return BaseResponseDto(
+                            success=False,
+                            code=recursive_move_response.code,
+                            data=None,
+                            message=recursive_move_response.message,
+                        )
+            old_attachment = source_material.attachment
+            delete_response = await self.material_repository.delete(source_material)
+            if not delete_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=delete_response.code,
+                    data=None,
+                    message=delete_response.message,
+                )
+            if old_attachment:
+                await self.helper_service.delete_attachment(attachment=old_attachment, should_delete_file=target_details.get("url", "") != old_attachment.url)
+            return BaseResponseDto(
+                success=True,
+                code=200,
+                data=True,
+                message="Material moved successfully",
+            )
+        except Exception as ex:
+            await self.logger.log(
+                action="RecursiveMoveOverwrite",
+                entity="Material",
+                level="error",
+                code=500,
+                message=f"An error occurred while recursively moving material with ID {material_id} using overwrite",
+                details={"error": repr(ex)},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while moving material with overwrite",
+            )
+
     async def _recursive_copy(
         self,
         material_id: int,
@@ -2264,6 +3043,8 @@ class MaterialService(IMaterialService):
         author_id: int,
         access_token: str,
         subject_id: int,
+        should_overwrite: bool = False,
+        manage_all_materials: bool = False,
     ) -> BaseResponseDto[bool]:
         try:
             dynamic_includes = self.helper_service.generate_dynamic_includes(
@@ -2296,16 +3077,77 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Material with ID {material_id} not found",
                 )
-            new_material = Material(
+            target_details = existing_material.details or {}
+            if existing_material.material_type != "folder":
+                target_details["url"] = (
+                    existing_material.attachment.url
+                    if existing_material.attachment
+                    else ""
+                )
+            target_material = Material(
                 name=existing_material.name,
                 material_type=existing_material.material_type,
-                details=existing_material.details,
+                details=target_details,
                 subject_id=subject_id,
                 parent_id=destination_id,
+                week_id=existing_material.week_id,
                 author_id=author_id,
             )
+            if should_overwrite:
+                overwrite_response = await self._overwrite_material(
+                    target_material, author_id, manage_all_materials
+                )
+                if not overwrite_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=overwrite_response.code,
+                        data=None,
+                        message=overwrite_response.message,
+                    )
+                if overwrite_response.data:
+                    overwritten_material = overwrite_response.data
+                    if existing_material.material_type == "folder":
+                        child_materials_response = await self.material_repository.find(
+                            Material.parent_id == material_id
+                        )
+                        if not child_materials_response.success:
+                            return BaseResponseDto(
+                                success=False,
+                                code=child_materials_response.code,
+                                data=None,
+                                message=child_materials_response.message,
+                            )
+                        for child in child_materials_response.data or []:
+                            recursive_copy_response = await self._recursive_copy(
+                                child.id,
+                                overwritten_material.id,
+                                author_id,
+                                access_token,
+                                subject_id,
+                                should_overwrite,
+                                manage_all_materials,
+                            )
+                            if not recursive_copy_response.success:
+                                return BaseResponseDto(
+                                    success=False,
+                                    code=recursive_copy_response.code,
+                                    data=None,
+                                    message=recursive_copy_response.message,
+                                )
+                    return BaseResponseDto(
+                        success=True,
+                        code=200,
+                        data=True,
+                        message="Material copied successfully",
+                    )
+
+            new_material = target_material
             unique_name_response = await self._generate_unique_name(
-                new_material.name, new_material.subject_id, new_material.parent_id
+                new_material.name,
+                new_material.subject_id,
+                new_material.parent_id,
+                new_material.material_type,
+                new_material.id,
             )
             if not unique_name_response.success:
                 return BaseResponseDto(
@@ -2471,6 +3313,8 @@ class MaterialService(IMaterialService):
                     author_id,
                     access_token,
                     subject_id,
+                    should_overwrite,
+                    manage_all_materials,
                 )
                 if not recursive_copy_response.success:
                     return BaseResponseDto(
@@ -2508,6 +3352,8 @@ class MaterialService(IMaterialService):
         subject_id: int | None,
         parent_id: int | None,
         author_id: int,
+        should_overwrite: bool = False,
+        manage_all_materials: bool = False,
     ) -> BaseResponseDto[Material]:
         try:
             fetched_file = fetched_data.data
@@ -2517,15 +3363,67 @@ class MaterialService(IMaterialService):
                 and len(fetched_data.children) < 1
                 else "folder"
             )
-            new_material = Material(
+            target_details = {}
+            if fetched_file_type == "file":
+                target_details = {
+                    "url": self.helper_service.get_file_url_from_id(fetched_file.id)
+                    or "",
+                    "fetched": True,
+                }
+            target_material = Material(
                 name=fetched_file.name,
                 material_type=fetched_file_type,
                 subject_id=subject_id,
                 parent_id=parent_id,
                 author_id=author_id,
+                details=target_details,
             )
+            if should_overwrite:
+                overwrite_response = await self._overwrite_material(
+                    target_material, author_id, manage_all_materials
+                )
+                if not overwrite_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=overwrite_response.code,
+                        data=None,
+                        message=overwrite_response.message,
+                    )
+                if overwrite_response.data:
+                    overwritten_material = overwrite_response.data
+                    if fetched_file_type == "folder":
+                        for child in fetched_data.children or []:
+                            recursive_create_response = (
+                                await self._recursive_create_from_drive(
+                                    child,
+                                    subject_id,
+                                    overwritten_material.id,
+                                    author_id,
+                                    should_overwrite,
+                                    manage_all_materials,
+                                )
+                            )
+                            if not recursive_create_response.success:
+                                return BaseResponseDto(
+                                    success=False,
+                                    code=recursive_create_response.code,
+                                    data=None,
+                                    message=recursive_create_response.message,
+                                )
+                    return BaseResponseDto(
+                        success=True,
+                        code=200,
+                        data=overwritten_material,
+                        message="Material overwritten successfully",
+                    )
+
+            new_material = target_material
             unique_name_response = await self._generate_unique_name(
-                new_material.name, new_material.subject_id, new_material.parent_id
+                new_material.name,
+                new_material.subject_id,
+                new_material.parent_id,
+                new_material.material_type,
+                new_material.id,
             )
             if not unique_name_response.success:
                 return BaseResponseDto(
@@ -2605,7 +3503,12 @@ class MaterialService(IMaterialService):
                 created_material.attachment = attachment
             for child in fetched_data.children or []:
                 recursive_create_response = await self._recursive_create_from_drive(
-                    child, subject_id, created_material.id, author_id
+                    child,
+                    subject_id,
+                    created_material.id,
+                    author_id,
+                    should_overwrite,
+                    manage_all_materials,
                 )
                 if not recursive_create_response.success:
                     return BaseResponseDto(

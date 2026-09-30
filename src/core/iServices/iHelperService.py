@@ -244,6 +244,7 @@ class IHelperService(ABC, Generic[U]):
         self,
         attachment_id: int | None = None,
         attachment: Attachment | None = None,
+        should_delete_file: bool = True,
         session: AsyncSession | None = None,
     ) -> BaseResponseDto:
         pass

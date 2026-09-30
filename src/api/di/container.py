@@ -499,7 +499,9 @@ class Container(containers.DeclarativeContainer):
         AuthMiddleware,
         user_service=user_service,
         token_repository=token_repository,
+        log_repository=log_repository,
         logger=logger,
+        session_factory=session_factory,
     )
 
     request_limit_middleware = providers.Factory(

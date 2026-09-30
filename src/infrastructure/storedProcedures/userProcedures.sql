@@ -7,19 +7,20 @@ RETURNS JSON AS $$
 DECLARE
     v_two_hours_ago TIMESTAMP;
     v_this_month_start TIMESTAMP;
+    v_one_hour_ago TIMESTAMPTZ;
     
     v_total_users INT;
-    v_users_this_month INT;
+    v_users_this_month_count INT;
     v_percentage_increase INT;
-    v_active_now INT;
+    v_active_now_count INT;
     v_pending_users_count INT;
-    v_last_five_users_active JSON;
     
     v_result JSON;
 BEGIN
     -- 1. Setup Timeframes (UTC alignment)
     v_two_hours_ago := NOW() AT TIME ZONE 'UTC' - INTERVAL '2 hours';
     v_this_month_start := DATE_TRUNC('month', NOW() AT TIME ZONE 'UTC');
+    v_one_hour_ago := NOW() - INTERVAL '1 hour';
 
     -- 2. Get Total Users matching filters
     SELECT COUNT(id) INTO v_total_users
@@ -29,7 +30,7 @@ BEGIN
       AND (p_year_id IS NULL OR year_id = p_year_id);
 
     -- 3. Get Users Registered This Month matching filters
-    SELECT COUNT(id) INTO v_users_this_month
+    SELECT COUNT(id) INTO v_users_this_month_count
     FROM users
     WHERE (p_faculty_id IS NULL OR faculty_id = p_faculty_id)
       AND (p_department_id IS NULL OR department_id = p_department_id)
@@ -37,8 +38,8 @@ BEGIN
       AND created_at >= v_this_month_start;
 
     -- 4. Calculate Percentage Increase (Ceil logic applied)
-    IF (v_total_users - v_users_this_month) > 0 THEN
-        v_percentage_increase := CEIL(((v_users_this_month::NUMERIC / (v_total_users - v_users_this_month)) * 100));
+    IF (v_total_users - v_users_this_month_count) > 0 THEN
+        v_percentage_increase := CEIL(((v_users_this_month_count::NUMERIC / (v_total_users - v_users_this_month_count)) * 100));
     ELSE
         v_percentage_increase := 0;
     END IF;
@@ -57,12 +58,23 @@ BEGIN
       AND (p_department_id IS NULL OR u.department_id = p_department_id)
       AND (p_year_id IS NULL OR u.year_id = p_year_id);
 
+    -- 6. Count distinct users with any log in the last hour matching filters
+    SELECT COUNT(DISTINCT l.user_id) INTO v_active_now_count
+    FROM logs l
+    JOIN users u ON u.id = l.user_id
+    WHERE l.user_id IS NOT NULL
+      AND l.created_at >= v_one_hour_ago
+      AND (p_faculty_id IS NULL OR u.faculty_id = p_faculty_id)
+      AND (p_department_id IS NULL OR u.department_id = p_department_id)
+      AND (p_year_id IS NULL OR u.year_id = p_year_id);
+
     -- 6. Build final structured payload matching your exact schema output
     v_result := JSON_BUILD_OBJECT(
         'users_count', v_total_users,
-        'users_this_month', v_users_this_month,
+        'users_this_month_count', v_users_this_month_count,
         'percentage_increase', v_percentage_increase,
-        'pending_users_count', v_pending_users_count
+        'pending_users_count', v_pending_users_count,
+        'active_now_count', v_active_now_count
     );
 
     RETURN v_result;

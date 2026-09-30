@@ -3,7 +3,8 @@ import sys
 import uvicorn
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
+from fastapi.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from sqlalchemy.exc import IllegalStateChangeError
 
@@ -55,6 +56,7 @@ from core.entities.announcement import Announcement
 from core.entities.user import User
 from core.entities.event import Event
 from core.utils.firebaseHandler import FirebaseHandler
+from core.utils.responseHandler import ResponseHandler
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -109,25 +111,10 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_middleware(request: Request, call_next):
-        origin = request.headers.get("origin")
-        real_origin = origin
-        if not real_origin or real_origin == "null":
-            real_origin = request.headers.get("referer", "").rstrip("/")
         if request.method.upper() == "OPTIONS":
-            response = Response(status_code=204)
-            if real_origin and real_origin in ALLOWED_ORIGINS:
-                req_headers = request.headers.get(
-                    "access-control-request-headers", "content-type, authorization"
-                )
-                response.headers["Access-Control-Allow-Origin"] = origin or real_origin
-                response.headers["Access-Control-Allow-Credentials"] = "true"
-                response.headers["Access-Control-Allow-Methods"] = (
-                    "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-                )
-                response.headers["Access-Control-Allow-Headers"] = req_headers
-                response.headers["Vary"] = "Origin"
-            return response
-
+            return ResponseHandler.generate_preflight_response(
+                request, list(ALLOWED_ORIGINS)
+            )
         request.state.restrict_faculties = False
         request.state.restrict_departments = False
         request.state.restrict_years = False
@@ -137,14 +124,16 @@ def create_app() -> FastAPI:
         request_token = request_context.set(request)
         try:
             response = await call_next(request)
-        except Exception:
+        except Exception as ex:
             session = session_context.get(None)
             if session is not None and session.in_transaction():
                 try:
                     await session.rollback()
                 except Exception:
                     pass
-            raise
+            return ResponseHandler.attach_cors_headers(
+                request, ex, list(ALLOWED_ORIGINS)
+            )
         finally:
             session = session_context.get(None)
             if session is not None:
@@ -166,18 +155,9 @@ def create_app() -> FastAPI:
             session_context.reset(session_token)
             request_context.reset(request_token)
 
-        if real_origin and real_origin in ALLOWED_ORIGINS:
-            req_headers = request.headers.get(
-                "access-control-request-headers", "content-type, authorization"
-            )
-            response.headers["Access-Control-Allow-Origin"] = origin or real_origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Allow-Methods"] = (
-                "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-            )
-            response.headers["Access-Control-Allow-Headers"] = req_headers
-            response.headers["Vary"] = "Origin"
-        return response
+        return ResponseHandler.attach_cors_headers(
+            request, response, list(ALLOWED_ORIGINS)
+        )
 
     app.add_middleware(
         SessionMiddleware,
