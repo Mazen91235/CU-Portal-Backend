@@ -128,7 +128,11 @@ class ResponseHandler:
                 message=detail,
             )
         response.headers["Access-Control-Allow-Origin"] = origin or real_origin or "*"
-        response.headers["Access-Control-Allow-Methods"] = "*"
-        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = (
+            "OPTIONS, GET, POST, PUT, DELETE, PATCH"
+        )
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Authorization, Content-Type, X-API-Key"
+        )
         response.headers["Access-Control-Allow-Credentials"] = "true"
         return response
