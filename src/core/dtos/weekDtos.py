@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from core.dtos.departmentDtos import DepartmentResponseDto
     from core.dtos.yearDtos import YearResponseDto
     from core.dtos.materialDtos import MaterialResponseDto
+    from core.dtos.weekItemDtos import WeekItemResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
 
@@ -44,6 +45,9 @@ class WeekResponseDto(BaseModel):
     year: YearResponseDto | None = Field(default=None, description="Year details")
     materials: list[MaterialResponseDto] | None = Field(
         default=None, description="Materials associated with this week"
+    )
+    week_items: list[WeekItemResponseDto] | None = Field(
+        default=None, description="Week items associated with this week"
     )
 
     model_config = {

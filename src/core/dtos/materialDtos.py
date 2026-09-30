@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     from .subjectDtos import SubjectResponseDto
     from .userDtos import UserResponseDto
     from .weekDtos import WeekResponseDto
+    from .weekItemDtos import WeekItemMutationDto, WeekItemResponseDto
     from .attachmentDtos import AttachmentResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
@@ -26,12 +27,15 @@ class MaterialCreateDto(BaseModel):
     parent_id: int | None = Field(
         default=None, description="ID of the parent material (for hierarchy)"
     )
-    week_id: int | None = Field(default=None, description="ID of the associated week")
+    week_items: list[WeekItemMutationDto] = Field(
+        default_factory=list, description="Week associations for the material"
+    )
     details: dict | None = Field(
         default=None, description="Additional metadata about the material (like url)"
     )
     should_overwrite: bool = Field(
-        default=False, description="Whether to overwrite an existing material with the same name"
+        default=False,
+        description="Whether to overwrite an existing material with the same name",
     )
 
 
@@ -73,8 +77,11 @@ class MaterialResponseDto(BaseModel):
     attachment: AttachmentResponseDto | None = Field(
         default=None, description="Attachment associated with the material"
     )
-    week: WeekResponseDto | None = Field(
-        default=None, description="Week associated with the material"
+    weeks: list[WeekResponseDto] | None = Field(
+        default=None, description="Weeks associated with the material"
+    )
+    week_items: list[WeekItemResponseDto] | None = Field(
+        default=None, description="Week items associated with the material"
     )
 
     # Pydantic Configuration
@@ -84,17 +91,21 @@ class MaterialResponseDto(BaseModel):
 
 
 class MaterialUpdateDto(BaseModel):
+    id: int | None = Field(default=None, description="ID of the material to update")
     name: str = Field(..., max_length=200, description="Updated name of the material")
     material_type: str = Field(
         ..., max_length=30, description="Updated type of the material"
     )
-    week_id: int | None = Field(default=None, description="ID of the associated week")
+    week_items: list[WeekItemMutationDto] = Field(
+        default_factory=list, description="Updated week associations for the material"
+    )
     details: dict | None = Field(
         default=None,
         description="Updated additional metadata about the material (like url)",
     )
     should_overwrite: bool = Field(
-        default=False, description="Whether to overwrite an existing material with the same name"
+        default=False,
+        description="Whether to overwrite an existing material with the same name",
     )
 
 
@@ -116,9 +127,6 @@ class MaterialSearchDto(BaseSearchDto):
     )
     parent_id: int | None = Field(
         default=None, description="ID of the parent material to filter by"
-    )
-    week_id: int | None = Field(
-        default=None, description="ID of the associated week to filter by"
     )
     author_id: int | None = Field(
         default=None, description="ID of the author to filter by"
@@ -144,7 +152,8 @@ class MaterialsCopyOrMoveDto(BaseModel):
     subject_id: int = Field(..., description="ID of the subject for the operation")
     destination_id: int | None = Field(None, description="Destination parent ID")
     should_overwrite: bool = Field(
-        default=False, description="Whether to overwrite existing materials with matching names"
+        default=False,
+        description="Whether to overwrite existing materials with matching names",
     )
 
 
@@ -157,7 +166,8 @@ class MaterialsFetchFromDriveDto(BaseModel):
         None, description="ID of the parent material for the fetched materials"
     )
     should_overwrite: bool = Field(
-        default=False, description="Whether to overwrite existing materials with matching names"
+        default=False,
+        description="Whether to overwrite existing materials with matching names",
     )
 
 

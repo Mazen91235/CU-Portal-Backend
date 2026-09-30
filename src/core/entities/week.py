@@ -13,6 +13,8 @@ from .base import (
     TYPE_CHECKING,
     mapped_column,
     relationship,
+    AssociationProxy,
+    association_proxy,
     func,
     text,
     ExcludeConstraint,
@@ -23,6 +25,7 @@ if TYPE_CHECKING:
     from .department import Department
     from .year import Year
     from .material import Material
+    from .weekItem import WeekItem
 
 
 class Week(Base):
@@ -70,10 +73,17 @@ class Week(Base):
         nullable=False,
     )
     year: Mapped["Year"] = relationship("Year", back_populates="weeks")
-    materials: Mapped[set["Material"]] = relationship(
-        "Material",
+    materials: AssociationProxy[set["Material"]] = association_proxy(
+        "week_items",
+        "material",
+        creator=lambda material: __import__(
+            "core.entities.weekItem", fromlist=["WeekItem"]
+        ).WeekItem(material=material),
+    )
+    week_items: Mapped[set["WeekItem"]] = relationship(
+        "WeekItem",
         back_populates="week",
-        cascade="save-update, merge",
+        cascade="all, delete-orphan",
         collection_class=set,
     )
 

@@ -14,9 +14,11 @@ from core.entities.material import Material
 from core.entities.subject import Subject
 from core.entities.user import User
 from core.entities.week import Week
+from core.entities.weekItem import WeekItem
 from core.entities.notification import Notification
 from core.entities.attachment import Attachment
 from core.dtos.baseDtos import BaseResponseDto
+from core.dtos.weekItemDtos import WeekItemMutationDto
 from core.models.fileModels import FetchedModel
 from core.utils.validator import Validator
 from core.utils.timezoneHandler import TimezoneHandler
@@ -196,7 +198,8 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Invalid material type: {data.material_type}",
                 )
-            if data.material_type != "folder" and not data.details.get("url"):
+            details = dict(data.details or {})
+            if data.material_type != "folder" and not details.get("url"):
                 await self.logger.log(
                     action="Create",
                     entity="Material",
@@ -215,7 +218,7 @@ class MaterialService(IMaterialService):
             if (
                 data.material_type != "folder"
                 and not Validator.is_valid_url_based_on_type(
-                    data.details.get("url", ""), data.material_type
+                    details.get("url", ""), data.material_type
                 )
             ):
                 await self.logger.log(
@@ -362,75 +365,18 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=verify_restricted_access_response.message,
                 )
-            if data.week_id:
-                if data.material_type == "folder":
-                    await self.logger.log(
-                        action="Create",
-                        entity="Material",
-                        level="error",
-                        code=400,
-                        message=f"Week ID should not be provided for folder type materials",
-                        details={"error": "Week ID is not applicable for folders"},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message=f"Week ID should not be provided for folder type materials",
-                    )
-                week_response = await self.week_repository.find_one(
-                    Week.id == data.week_id
+            week_items_response = await self._build_week_items(
+                data.week_items, data.material_type, subject
+            )
+            if not week_items_response.success:
+                return BaseResponseDto(
+                    success=False,
+                    code=week_items_response.code,
+                    data=None,
+                    message=week_items_response.message,
                 )
-                if not week_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=week_response.code,
-                        data=None,
-                        message=week_response.message,
-                    )
-                week = week_response.data
-                if not week:
-                    await self.logger.log(
-                        action="Create",
-                        entity="Material",
-                        level="error",
-                        code=404,
-                        message=f"Week with ID {data.week_id} not found",
-                        details={"error": "Week not found"},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message=f"Week with ID {data.week_id} not found",
-                    )
-                if (
-                    week.faculty_id != subject.faculty_id
-                    or week.department_id != subject.department_id
-                    or week.year_id != subject.year_id
-                ):
-                    await self.logger.log(
-                        action="Create",
-                        entity="Material",
-                        level="error",
-                        code=400,
-                        message=f"Week with ID {data.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
-                        details={
-                            "error": "Week does not match subject's faculty, department, or year"
-                        },
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message=f"Week with ID {data.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
-                    )
-            data.author_id = logged_in_user.id
-            data.details = data.details or {}
-            should_overwrite = bool(data.details.pop("should_overwrite", False))
+            week_items = week_items_response.data or set()
+            should_overwrite = bool(data.should_overwrite)
             if should_overwrite and data.material_type == "folder":
                 await self.logger.log(
                     action="Create",
@@ -476,8 +422,17 @@ class MaterialService(IMaterialService):
                 manage_all_materials = (
                     "Manage All Materials" in logged_in_user_permissions
                 )
+                overwrite_target = Material(
+                    name=data.name,
+                    material_type=data.material_type,
+                    subject_id=subject_id,
+                    parent_id=parent_id,
+                    details=details,
+                    author_id=logged_in_user.id,
+                    week_items=week_items,
+                )
                 overwrite_response = await self._overwrite_material(
-                    data, logged_in_user.id, manage_all_materials
+                    overwrite_target, logged_in_user.id, manage_all_materials
                 )
                 if not overwrite_response.success:
                     return overwrite_response
@@ -516,10 +471,19 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=unique_name_response.message,
                 )
-            data.name = unique_name_response.data
-            url = data.details.get("url")
-            data.details.pop("url", None)
-            created_material_response = await self.material_repository.create(data)
+            material_name = unique_name_response.data
+            url = details.get("url")
+            details.pop("url", None)
+            material = Material(
+                name=material_name,
+                material_type=data.material_type,
+                subject_id=subject_id,
+                parent_id=parent_id,
+                details=details,
+                author_id=logged_in_user.id,
+                week_items=week_items,
+            )
+            created_material_response = await self.material_repository.create(material)
             if not created_material_response.success:
                 return BaseResponseDto(
                     success=False,
@@ -661,7 +625,8 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Invalid material type: {data.material_type}",
                 )
-            if data.material_type != "folder" and not data.details.get("url"):
+            details = dict(data.details or {})
+            if data.material_type != "folder" and not details.get("url"):
                 await self.logger.log(
                     action="Update",
                     entity="Material",
@@ -680,7 +645,7 @@ class MaterialService(IMaterialService):
             if (
                 data.material_type != "folder"
                 and not Validator.is_valid_url_based_on_type(
-                    data.details.get("url") or "", data.material_type
+                    details.get("url") or "", data.material_type
                 )
             ):
                 await self.logger.log(
@@ -699,7 +664,7 @@ class MaterialService(IMaterialService):
                     message=f"Invalid URL for material type: {data.material_type}",
                 )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Material, ["attachment"]
+                Material, ["attachment", "week_items.week"]
             )
             existing_material_response = await self.material_repository.find_one(
                 Material.id == data.id, dynamic_includes
@@ -753,8 +718,7 @@ class MaterialService(IMaterialService):
                     data=None,
                     message="Material type cannot be changed. Folder materials must remain folders and non-folder materials must remain non-folders.",
                 )
-            data.details = data.details or {}
-            should_overwrite = bool(data.details.pop("should_overwrite", False))
+            should_overwrite = bool(data.should_overwrite)
             if should_overwrite and data.material_type == "folder":
                 await self.logger.log(
                     action="Update",
@@ -855,75 +819,12 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=verify_restricted_access_response.message,
                 )
-            if data.week_id:
-                if (
-                    data.material_type == "folder"
-                    or existing_material.material_type == "folder"
-                ):
-                    await self.logger.log(
-                        action="Update",
-                        entity="Material",
-                        level="error",
-                        code=400,
-                        message=f"Week ID should not be provided for folder type materials",
-                        details={"error": "Week ID is not applicable for folders"},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message=f"Week ID should not be provided for folder type materials",
-                    )
-                week_response = await self.week_repository.find_one(
-                    Week.id == data.week_id
-                )
-                if not week_response.success:
-                    return BaseResponseDto(
-                        success=False,
-                        code=week_response.code,
-                        data=None,
-                        message=week_response.message,
-                    )
-                week = week_response.data
-                if not week:
-                    await self.logger.log(
-                        action="Update",
-                        entity="Material",
-                        level="error",
-                        code=404,
-                        message=f"Week with ID {data.week_id} not found",
-                        details={"error": "Week not found"},
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=404,
-                        data=None,
-                        message=f"Week with ID {data.week_id} not found",
-                    )
-                if (
-                    week.faculty_id != subject.faculty_id
-                    or week.department_id != subject.department_id
-                    or week.year_id != subject.year_id
-                ):
-                    await self.logger.log(
-                        action="Update",
-                        entity="Material",
-                        level="error",
-                        code=400,
-                        message=f"Week with ID {data.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
-                        details={
-                            "error": "Week does not match subject's faculty, department, or year"
-                        },
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message=f"Week with ID {data.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
-                    )
+            week_items_response = await self._build_week_items(
+                data.week_items, data.material_type, subject
+            )
+            if not week_items_response.success:
+                return week_items_response
+            week_items = week_items_response.data or set()
             logged_in_user_permissions_response = (
                 await self.helper_service.get_logged_in_user_permissions()
             )
@@ -989,8 +890,8 @@ class MaterialService(IMaterialService):
                     material_type=data.material_type,
                     subject_id=existing_material.subject_id,
                     parent_id=existing_material.parent_id,
-                    week_id=data.week_id,
-                    details=data.details or existing_material.details,
+                    details=details or existing_material.details,
+                    week_items=week_items,
                     author_id=logged_in_user.id,
                 )
                 overwrite_response = await self._overwrite_material(
@@ -1013,7 +914,9 @@ class MaterialService(IMaterialService):
                         )
                     if old_attachment:
                         await self.helper_service.delete_attachment(
-                            attachment=old_attachment, should_delete_file=data.details.get("url", "") != old_attachment.url
+                            attachment=old_attachment,
+                            should_delete_file=details.get("url", "")
+                            != old_attachment.url,
                         )
                     share_link = (
                         f"/user/materials?subject_id={overwritten_material.subject_id}"
@@ -1037,7 +940,7 @@ class MaterialService(IMaterialService):
                         data=overwritten_material,
                         message="Material overwritten successfully",
                     )
-
+            updated_name = data.name
             if data.name and data.name != existing_material.name:
                 unique_name_response = await self._generate_unique_name(
                     data.name,
@@ -1053,27 +956,26 @@ class MaterialService(IMaterialService):
                         data=None,
                         message=unique_name_response.message,
                     )
-                data.name = unique_name_response.data
+                updated_name = unique_name_response.data
             to_be_removed = None
-            url = data.details.get("url")
-            data.details.pop("url", None)
+            url = details.get("url")
+            details.pop("url", None)
             if (
                 data.material_type != "folder"
                 and existing_material.material_type != "folder"
                 and url != existing_material.attachment.url
             ):
                 to_be_removed = existing_material.attachment
-            data.author_id = logged_in_user.id
-            existing_material.name = data.name or existing_material.name
+            existing_material.name = updated_name or existing_material.name
             existing_material.material_type = (
                 data.material_type or existing_material.material_type
             )
-            existing_material.details = data.details or existing_material.details
-            existing_material.week_id = data.week_id or existing_material.week_id
-            existing_material.author_id = data.author_id or existing_material.author_id
+            existing_material.details = details or existing_material.details
+            existing_material.author_id = logged_in_user.id
+            existing_material.week_items = week_items
             updated_material_response = await self.material_repository.update(
                 existing_material,
-                ["name", "material_type", "details", "week_id", "author_id"],
+                ["name", "material_type", "details", "author_id", "week_items"],
             )
             if not updated_material_response.success:
                 return BaseResponseDto(
@@ -2406,6 +2308,119 @@ class MaterialService(IMaterialService):
                 error=repr(ex),
             )
 
+    # Helper Functions
+    async def _build_week_items(
+        self,
+        week_items: list[WeekItemMutationDto],
+        material_type: str,
+        subject: Subject,
+    ) -> BaseResponseDto[set[WeekItem]]:
+        try:
+            if not week_items:
+                return BaseResponseDto(success=True, code=200, data=set())
+
+            if material_type == "folder":
+                await self.logger.log(
+                    action="ValidateWeekItems",
+                    entity="Material",
+                    level="error",
+                    code=400,
+                    message="Week items should not be provided for folder type materials",
+                    details={
+                        "error": "Week associations are not applicable to folders"
+                    },
+                    source="MaterialService",
+                )
+                return BaseResponseDto(
+                    success=False,
+                    code=400,
+                    data=None,
+                    message="Week items should not be provided for folder type materials",
+                )
+
+            result: set[WeekItem] = set()
+            seen_week_ids: set[int] = set()
+            for item in week_items:
+                if item.week_id in seen_week_ids:
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Week ID {item.week_id} is duplicated in the week items",
+                    )
+                seen_week_ids.add(item.week_id)
+                week_response = await self.week_repository.find_one(
+                    Week.id == item.week_id
+                )
+                if not week_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=week_response.code,
+                        data=None,
+                        message=week_response.message,
+                    )
+
+                week = week_response.data
+                if not week:
+                    await self.logger.log(
+                        action="ValidateWeekItems",
+                        entity="Material",
+                        level="error",
+                        code=404,
+                        message=f"Week with ID {item.week_id} not found",
+                        details={"error": "Week not found"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=404,
+                        data=None,
+                        message=f"Week with ID {item.week_id} not found",
+                    )
+
+                if (
+                    week.faculty_id != subject.faculty_id
+                    or week.department_id != subject.department_id
+                    or week.year_id != subject.year_id
+                ):
+                    await self.logger.log(
+                        action="ValidateWeekItems",
+                        entity="Material",
+                        level="error",
+                        code=400,
+                        message=f"Week with ID {item.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
+                        details={
+                            "error": "Week does not match subject's faculty, department, or year"
+                        },
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=400,
+                        data=None,
+                        message=f"Week with ID {item.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
+                    )
+
+                result.add(WeekItem(note=item.note, week_id=week.id))
+
+            return BaseResponseDto(success=True, code=200, data=result)
+        except Exception as ex:
+            await self.logger.log(
+                action="ValidateWeekItems",
+                entity="Material",
+                level="error",
+                code=500,
+                message="An error occurred while validating material week items",
+                details={"error": repr(ex)},
+                source="MaterialService",
+            )
+            return BaseResponseDto(
+                success=False,
+                code=500,
+                data=None,
+                message="An error occurred while validating material week items",
+            )
+
     async def _find_existing_material(self, target_material: Material):
         predicate = and_(
             Material.name == target_material.name,
@@ -2415,7 +2430,7 @@ class MaterialService(IMaterialService):
         )
 
         dynamic_includes = self.helper_service.generate_dynamic_includes(
-            Material, ["attachment"]
+            Material, ["attachment", "week_items.week"]
         )
         response = await self.material_repository.find_one(predicate, dynamic_includes)
         if not response.success:
@@ -2615,12 +2630,18 @@ class MaterialService(IMaterialService):
 
             target_details.pop("url", None)
             existing_material.details = target_details or existing_material.details
-            existing_material.week_id = (
-                target_material.week_id or existing_material.week_id
-            )
             existing_material.author_id = current_user_id
+            existing_week_items = existing_material.week_items or set()
+            target_week_items = target_material.week_items or set()
+            combined_week_items = {item.week_id: item for item in existing_week_items}
+            for item in target_week_items:
+                combined_week_items[item.week_id] = item
+            existing_material.week_items = set(
+                WeekItem(week_id=item.week_id, note=item.note)
+                for item in combined_week_items.values()
+            )
             update_response = await self.material_repository.update(
-                existing_material, ["details", "week_id", "author_id"]
+                existing_material, ["details", "author_id", "week_items"]
             )
             if not update_response.success:
                 return BaseResponseDto(
@@ -2665,7 +2686,6 @@ class MaterialService(IMaterialService):
                 message="An error occurred while overwriting material",
             )
 
-    # Helper Functions
     async def _generate_unique_name(
         self,
         name: str | None,
@@ -2900,7 +2920,7 @@ class MaterialService(IMaterialService):
     ) -> BaseResponseDto[bool]:
         try:
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Material, ["attachment"]
+                Material, ["attachment", "week_items"]
             )
             source_response = await self.material_repository.find_one(
                 Material.id == material_id, dynamic_includes
@@ -2942,9 +2962,12 @@ class MaterialService(IMaterialService):
                 material_type=source_material.material_type,
                 subject_id=subject_id,
                 parent_id=destination_id,
-                week_id=source_material.week_id,
                 details=target_details,
                 author_id=author_id,
+                week_items=set(
+                    WeekItem(week_id=item.week_id, note=item.note)
+                    for item in source_material.week_items
+                ),
             )
             overwrite_response = await self._overwrite_material(
                 target_material, author_id, manage_all_materials
@@ -3013,7 +3036,11 @@ class MaterialService(IMaterialService):
                     message=delete_response.message,
                 )
             if old_attachment:
-                await self.helper_service.delete_attachment(attachment=old_attachment, should_delete_file=target_details.get("url", "") != old_attachment.url)
+                await self.helper_service.delete_attachment(
+                    attachment=old_attachment,
+                    should_delete_file=target_details.get("url", "")
+                    != old_attachment.url,
+                )
             return BaseResponseDto(
                 success=True,
                 code=200,
@@ -3091,8 +3118,11 @@ class MaterialService(IMaterialService):
                 details=target_details,
                 subject_id=subject_id,
                 parent_id=destination_id,
-                week_id=existing_material.week_id,
                 author_id=author_id,
+                week_items=set(
+                    WeekItem(week_id=item.week_id, note=item.note)
+                    for item in existing_material.week_items
+                ),
             )
             if should_overwrite:
                 overwrite_response = await self._overwrite_material(

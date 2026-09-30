@@ -26,7 +26,13 @@ class WeekController(IWeekController):
             )
             response = await self.week_service.find_one(
                 entity_search_dto,
-                ["faculty", "department", "year", "materials"],
+                [
+                    "faculty",
+                    "department",
+                    "year",
+                    "week_items.material.subject",
+                    "week_items.material.attachment",
+                ],
             )
             if not response.success:
                 return ResponseHandler.generate_response(

@@ -23,6 +23,8 @@ class Mapper(Generic[T, U]):
         "notification.users": "user_notifications",
         "user.going_events": "user_events",
         "event.attendees": "user_events",
+        "material.weeks": "week_items",
+        "week.materials": "week_items",
     }
 
     @classmethod

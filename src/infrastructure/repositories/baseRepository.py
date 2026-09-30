@@ -568,6 +568,18 @@ class BaseRepository(IBaseRepository):
                     if value is not None:
                         child_kwargs[column.key] = value
                 managed_child = child_class(**child_kwargs)
+            else:
+                # The unique identity tells us which existing child represents the
+                # requested item, but the remaining scalar attributes still need to be
+                # reconciled. This is important for association objects such as
+                # WeekItem, where (week_id, material_id) identifies the row while
+                # fields like note are mutable. Never overwrite primary keys or the
+                # optimistic-locking version from the source graph.
+                for column in child_mapper.columns:
+                    if column.primary_key or column.key == "version":
+                        continue
+                    if column.key in source_values:
+                        setattr(managed_child, column.key, source_values[column.key])
 
             managed_identity = self._identity_for_values(
                 child_mapper,

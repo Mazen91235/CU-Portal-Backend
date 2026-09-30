@@ -1,12 +1,12 @@
 from abc import abstractmethod
 from core.iServices.bases.iQueryableService import IQueryableService
-from core.iServices.bases.iCreatableService import ICreatableService
-from core.iServices.bases.iUpdatableService import IUpdatableService
 from core.entities.material import Material
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.materialDtos import (
     MaterialsDeleteDto,
     MaterialSearchDto,
+    MaterialCreateDto,
+    MaterialUpdateDto,
     MaterialsCopyOrMoveDto,
     MaterialsFetchFromDriveDto,
     MaterialDownloadManyDto,
@@ -15,9 +15,15 @@ from core.dtos.materialDtos import (
 
 class IMaterialService(
     IQueryableService[Material, MaterialSearchDto],
-    ICreatableService[Material],
-    IUpdatableService[Material],
 ):
+    @abstractmethod
+    async def create(self, data: MaterialCreateDto) -> BaseResponseDto[Material]:
+        pass
+
+    @abstractmethod
+    async def update(self, data: MaterialUpdateDto) -> BaseResponseDto[Material]:
+        pass
+
     @abstractmethod
     async def delete_many(self, data: MaterialsDeleteDto) -> BaseResponseDto[bool]:
         pass

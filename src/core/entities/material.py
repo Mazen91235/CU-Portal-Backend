@@ -15,6 +15,8 @@ from .base import (
     Optional,
     TimezoneHandler,
     TypedDict,
+    AssociationProxy,
+    association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
     from .user import User
     from .subject import Subject
     from .week import Week
+    from .weekItem import WeekItem
     from .attachment import Attachment
 
 
@@ -86,13 +89,18 @@ class Material(Base):
         cascade="all, delete-orphan",
         collection_class=set,
     )
-    week_id: Mapped[Optional[int]] = mapped_column(
-        Integer,
-        ForeignKey("weeks.id", ondelete="SET NULL", name="fk_week_material"),
-        nullable=True,
+    weeks: AssociationProxy[set["Week"]] = association_proxy(
+        "week_items",
+        "week",
+        creator=lambda week: __import__(
+            "core.entities.weekItem", fromlist=["WeekItem"]
+        ).WeekItem(week=week),
     )
-    week: Mapped[Optional["Week"]] = relationship(
-        "Week", back_populates="materials", cascade="save-update, merge"
+    week_items: Mapped[set["WeekItem"]] = relationship(
+        "WeekItem",
+        back_populates="material",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
     attachment: Mapped[Optional["Attachment"]] = relationship(
         "Attachment",
