@@ -2631,7 +2631,7 @@ class MaterialService(IMaterialService):
             target_details.pop("url", None)
             existing_material.details = target_details or existing_material.details
             existing_material.author_id = current_user_id
-            existing_material.week_items = set(target_material.week_items or set())
+            existing_material.week_items = set(target_material.week_items or existing_material.week_items or set())
             update_response = await self.material_repository.update(
                 existing_material, ["details", "author_id", "week_items"]
             )
