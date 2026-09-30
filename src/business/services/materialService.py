@@ -1657,13 +1657,38 @@ class MaterialService(IMaterialService):
                             message=move_response.message,
                         )
                     continue
-                existing_material.name = await self._generate_unique_name(
+                unique_name_response = await self._generate_unique_name(
                     existing_material.name,
                     existing_material.subject_id,
                     destination_id,
                     existing_material.material_type,
                     existing_material.id,
                 )
+                if not unique_name_response.success:
+                    return BaseResponseDto(
+                        success=False,
+                        code=unique_name_response.code,
+                        data=None,
+                        message=unique_name_response.message,
+                    )
+                unique_name = unique_name_response.data
+                if not unique_name:
+                    await self.logger.log(
+                        action="MoveMany",
+                        entity="Material",
+                        level="error",
+                        code=500,
+                        message=f"Failed to generate unique name for material {existing_material.id}",
+                        details={"error": "Failed to generate unique name"},
+                        source="MaterialService",
+                    )
+                    return BaseResponseDto(
+                        success=False,
+                        code=500,
+                        data=None,
+                        message=f"Failed to generate unique name for material '{existing_material.name}'.",
+                    )
+                existing_material.name = unique_name
                 existing_material.parent_id = destination_id
                 update_response = await self.material_repository.update(
                     existing_material, ["name", "parent_id"]
