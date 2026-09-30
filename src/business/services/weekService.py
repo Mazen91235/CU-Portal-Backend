@@ -547,7 +547,7 @@ class WeekService(IWeekService):
     async def delete(self, data):
         try:
             dynamic_includes = self.helper_service.generate_dynamic_includes(
-                Week, ["materials"]
+                Week, ["week_items.material"]
             )
             target_week_response = await self.week_repository.find_one(
                 Week.id == data.id, dynamic_includes

@@ -1,5 +1,4 @@
 import os
-from typing import cast
 from core.iControllers.iMaterialController import IMaterialController
 from core.iServices.iMaterialService import IMaterialService
 from core.iLoggers.iBaseLogger import IBaseLogger
@@ -36,6 +35,7 @@ class MaterialController(IMaterialController):
                 [
                     "author",
                     "attachment",
+                    "week_items.week",
                 ],
             )
             if not response.success:
@@ -148,10 +148,7 @@ class MaterialController(IMaterialController):
 
     async def create(self, request, data):
         try:
-            material = cast(Material, Mapper[MaterialCreateDto, Material].map(data, Material))
-            material.details = material.details or {}
-            material.details["should_overwrite"] = data.should_overwrite
-            response = await self.material_service.create(material)
+            response = await self.material_service.create(data)
             if not response.success:
                 await self.material_service.rollback_transaction()
                 return ResponseHandler.generate_response(
@@ -203,14 +200,8 @@ class MaterialController(IMaterialController):
 
     async def update(self, request, id, data):
         try:
-            material = cast(
-                Material,
-                Mapper[MaterialUpdateDto, Material].map(data, Material),
-            )
-            material.id = id
-            material.details = material.details or {}
-            material.details["should_overwrite"] = data.should_overwrite
-            response = await self.material_service.update(material)
+            data.id = id
+            response = await self.material_service.update(data)
             if not response.success:
                 await self.material_service.rollback_transaction()
                 return ResponseHandler.generate_response(

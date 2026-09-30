@@ -25,6 +25,7 @@ from core.entities.userNotification import UserNotification
 from core.entities.userSubjectLink import UserSubjectLink
 from core.entities.version import Version
 from core.entities.week import Week
+from core.entities.weekItem import WeekItem
 from core.entities.year import Year
 
 
@@ -57,6 +58,7 @@ class EntitiesHandler:
         "UserSubjectLink": UserSubjectLink,
         "Version": Version,
         "Week": Week,
+        "WeekItem": WeekItem,
         "Year": Year,
     }
 

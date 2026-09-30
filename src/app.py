@@ -45,6 +45,7 @@ from core.dtos.userNotificationDtos import *
 from core.dtos.userSubjectLinkDtos import *
 from core.dtos.versionDtos import *
 from core.dtos.weekDtos import *
+from core.dtos.weekItemDtos import *
 from core.dtos.yearDtos import *
 from core.entities.department import Department
 from core.entities.faculty import Faculty
@@ -55,6 +56,7 @@ from core.entities.task import Task
 from core.entities.announcement import Announcement
 from core.entities.user import User
 from core.entities.event import Event
+from core.entities.weekItem import WeekItem
 from core.utils.firebaseHandler import FirebaseHandler
 from core.utils.responseHandler import ResponseHandler
 
@@ -88,6 +90,7 @@ def rebuild_response_dtos() -> None:
         ReleaseItem=ReleaseItem,
         User=User,
         Event=Event,
+        WeekItem=WeekItem,
     )
     for dto in response_dtos:
         dto.model_rebuild(_types_namespace=dto_namespace)
