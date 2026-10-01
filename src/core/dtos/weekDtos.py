@@ -5,9 +5,6 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
-    from core.dtos.facultyDtos import FacultyResponseDto
-    from core.dtos.departmentDtos import DepartmentResponseDto
-    from core.dtos.yearDtos import YearResponseDto
     from core.dtos.materialDtos import MaterialResponseDto
     from core.dtos.weekItemDtos import WeekItemResponseDto
 
@@ -17,11 +14,6 @@ from core.dtos.baseDtos import BaseSearchDto
 class WeekCreateDto(BaseModel):
     week_number: int = Field(..., ge=1, description="Week number")
     start_date: datetime = Field(..., description="Start date of the week")
-    faculty_id: int = Field(..., description="Faculty ID associated with the week")
-    department_id: int = Field(
-        ..., description="Department ID associated with the week"
-    )
-    year_id: int = Field(..., description="Year ID associated with the week")
 
 
 class WeekResponseDto(BaseModel):
@@ -36,13 +28,6 @@ class WeekResponseDto(BaseModel):
     )
 
     # Relationships
-    faculty: FacultyResponseDto | None = Field(
-        default=None, description="Faculty details"
-    )
-    department: DepartmentResponseDto | None = Field(
-        default=None, description="Department details"
-    )
-    year: YearResponseDto | None = Field(default=None, description="Year details")
     materials: list[MaterialResponseDto] | None = Field(
         default=None, description="Materials associated with this week"
     )
@@ -58,21 +43,12 @@ class WeekResponseDto(BaseModel):
 class WeekUpdateDto(BaseModel):
     week_number: int = Field(..., ge=1, description="Week number")
     start_date: datetime = Field(..., description="Start date of the week")
-    faculty_id: int = Field(..., description="Faculty ID")
-    department_id: int = Field(..., description="Department ID")
-    year_id: int = Field(..., description="Year ID")
-
 
 class WeekSearchDto(BaseSearchDto):
     id: int | None = Field(default=None, description="ID of the week to filter by")
     week_number: int | None = Field(
         default=None, description="Week number to filter by"
     )
-    faculty_id: int | None = Field(default=None, description="Faculty ID to filter by")
-    department_id: int | None = Field(
-        default=None, description="Department ID to filter by"
-    )
-    year_id: int | None = Field(default=None, description="Year ID to filter by")
     start_date_from: datetime | None = Field(
         default=None, description="Filter weeks starting after this date"
     )

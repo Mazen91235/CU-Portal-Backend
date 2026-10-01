@@ -177,9 +177,6 @@ def create_week_admin_router(
                 _validate(
                     "week_number",
                     "start_date",
-                    "faculty_id",
-                    "department_id",
-                    "year_id",
                 )
             ),
         ],
@@ -205,9 +202,6 @@ def create_week_admin_router(
                 _validate(
                     "week_number",
                     "start_date",
-                    "faculty_id",
-                    "department_id",
-                    "year_id",
                 )
             ),
         ],

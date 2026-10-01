@@ -166,70 +166,10 @@ class WeekService(IWeekService):
 
     async def create(self, data):
         try:
-            verify_restricted_access_response = (
-                await self.helper_service.verify_restricted_access(
-                    faculty_id=data.faculty_id,
-                    department_id=data.department_id,
-                    year_id=data.year_id,
-                )
-            )
-            if not verify_restricted_access_response.success:
-                await self.logger.log(
-                    action="Create",
-                    entity="Week",
-                    level="error",
-                    code=verify_restricted_access_response.code or 500,
-                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
-                    details={"error": verify_restricted_access_response.error},
-                    source="WeekService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=verify_restricted_access_response.code,
-                    data=None,
-                    message=verify_restricted_access_response.message,
-                )
-            existing_week_response = await self.week_repository.find_one(
-                and_(
-                    Week.faculty_id == data.faculty_id,
-                    Week.department_id == data.department_id,
-                    Week.year_id == data.year_id,
-                    Week.week_number == data.week_number,
-                )
-            )
-            if not existing_week_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=existing_week_response.code,
-                    data=None,
-                    message=existing_week_response.message,
-                )
-            existing_week = existing_week_response.data
-            if existing_week:
-                await self.logger.log(
-                    action="Create",
-                    entity="Week",
-                    level="warning",
-                    code=400,
-                    message="Week already exists with the same details",
-                    details={"week_number": data.week_number},
-                    source="WeekService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Week already exists with the same details",
-                )
             nearest_distance = func.abs(
                 func.extract("epoch", Week.start_date - data.start_date)
             )
             existing_week_withing_date_response = await self.week_repository.find_one(
-                and_(
-                    Week.faculty_id == data.faculty_id,
-                    Week.department_id == data.department_id,
-                    Week.year_id == data.year_id,
-                ),
                 order_by=[nearest_distance.asc()],
             )
             if not existing_week_withing_date_response.success:
@@ -352,97 +292,10 @@ class WeekService(IWeekService):
                     data=None,
                     message="Week not found",
                 )
-            verify_restricted_access_response = (
-                await self.helper_service.verify_restricted_access(
-                    faculty_id=target_week.faculty_id,
-                    department_id=target_week.department_id,
-                    year_id=target_week.year_id,
-                )
-            )
-            if not verify_restricted_access_response.success:
-                await self.logger.log(
-                    action="Update",
-                    entity="Week",
-                    level="error",
-                    code=verify_restricted_access_response.code or 500,
-                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
-                    details={"error": verify_restricted_access_response.error},
-                    source="WeekService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=verify_restricted_access_response.code,
-                    data=None,
-                    message=verify_restricted_access_response.message,
-                )
-            if (
-                data.faculty_id != target_week.faculty_id
-                or data.department_id != target_week.department_id
-                or data.year_id != target_week.year_id
-            ):
-                await self.logger.log(
-                    action="Update",
-                    entity="Week",
-                    level="error",
-                    code=400,
-                    message="Faculty, Department, and Year cannot be changed during update",
-                    details={
-                        "original_faculty_id": target_week.faculty_id,
-                        "original_department_id": target_week.department_id,
-                        "original_year_id": target_week.year_id,
-                        "new_faculty_id": data.faculty_id,
-                        "new_department_id": data.department_id,
-                        "new_year_id": data.year_id,
-                    },
-                    source="WeekService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Faculty, Department, and Year cannot be changed during update",
-                )
-            existing_week_response = await self.week_repository.find_one(
-                and_(
-                    Week.faculty_id == data.faculty_id,
-                    Week.department_id == data.department_id,
-                    Week.year_id == data.year_id,
-                    Week.week_number == data.week_number,
-                )
-            )
-            if not existing_week_response.success:
-                return BaseResponseDto(
-                    success=False,
-                    code=existing_week_response.code,
-                    data=None,
-                    message=existing_week_response.message,
-                )
-            existing_week = existing_week_response.data
-            if existing_week and existing_week.id != data.id:
-                await self.logger.log(
-                    action="Update",
-                    entity="Week",
-                    level="warning",
-                    code=400,
-                    message="Another week already exists with the same details",
-                    details={"week_number": data.week_number},
-                    source="WeekService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=400,
-                    data=None,
-                    message="Another week already exists with the same details",
-                )
             nearest_distance = func.abs(
                 func.extract("epoch", Week.start_date - data.start_date)
             )
             existing_weeks_withing_date_response = await self.week_repository.find(
-                and_(
-                    Week.faculty_id == data.faculty_id,
-                    Week.department_id == data.department_id,
-                    Week.year_id == data.year_id,
-                ),
                 order_by=[nearest_distance.asc()],
                 limit=2,
             )
@@ -594,29 +447,6 @@ class WeekService(IWeekService):
                     code=400,
                     data=None,
                     message="Cannot delete week with associated materials",
-                )
-            verify_restricted_access_response = (
-                await self.helper_service.verify_restricted_access(
-                    faculty_id=target_week.faculty_id,
-                    department_id=target_week.department_id,
-                    year_id=target_week.year_id,
-                )
-            )
-            if not verify_restricted_access_response.success:
-                await self.logger.log(
-                    action="Delete",
-                    entity="Week",
-                    level="error",
-                    code=verify_restricted_access_response.code or 500,
-                    message=f"Failed to verify restricted access for user: {verify_restricted_access_response.message}",
-                    details={"error": verify_restricted_access_response.error},
-                    source="WeekService",
-                )
-                return BaseResponseDto(
-                    success=False,
-                    code=verify_restricted_access_response.code,
-                    data=None,
-                    message=verify_restricted_access_response.message,
                 )
             delete_response = await self.week_repository.delete(target_week)
             if not delete_response.success:
