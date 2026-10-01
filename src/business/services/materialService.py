@@ -72,6 +72,8 @@ class MaterialService(IMaterialService):
                 starts_with,
                 is_exact,
             )
+            if data and data.week_id:
+                predicate = and_(predicate, Material.week_items.any(WeekItem.week_id == data.week_id)) if predicate is not None else Material.week_items.any(WeekItem.week_id == data.week_id)
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Material, includes
             )
@@ -135,6 +137,8 @@ class MaterialService(IMaterialService):
                 starts_with,
                 is_exact,
             )
+            if data and data.week_id:
+                            predicate = and_(predicate, Material.week_items.any(WeekItem.week_id == data.week_id)) if predicate is not None else Material.week_items.any(WeekItem.week_id == data.week_id)
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Material, includes
             )
