@@ -99,6 +99,11 @@ class CachingHandler:
             [x in module for x in ["task", "exam", "announcement", "event", "note"]]
         ):
             await self.invalidate_module_cache("calendar")
+        if any([x in module for x in ["course", "subject"]]):
+            await self.invalidate_module_cache("material")
+            await self.invalidate_module_cache("task")
+            await self.invalidate_module_cache("exam")
+            await self.invalidate_module_cache("announcement")
         if any([x in module for x in ["auth"]]):
             await self.invalidate_module_cache("user")
         if any([x in module for x in ["material"]]):
