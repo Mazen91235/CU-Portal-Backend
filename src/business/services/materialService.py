@@ -15,7 +15,6 @@ from core.entities.subject import Subject
 from core.entities.user import User
 from core.entities.week import Week
 from core.entities.weekItem import WeekItem
-from core.entities.notification import Notification
 from core.entities.attachment import Attachment
 from core.dtos.baseDtos import BaseResponseDto
 from core.dtos.weekItemDtos import WeekItemMutationDto
@@ -438,24 +437,6 @@ class MaterialService(IMaterialService):
                     return overwrite_response
                 if overwrite_response.data:
                     overwritten_material = overwrite_response.data
-                    share_link = (
-                        f"/user/materials?subject_id={overwritten_material.subject_id}"
-                    )
-                    if overwritten_material.material_type == "folder":
-                        share_link += f"&parent_id={overwritten_material.id}"
-                    elif overwritten_material.parent_id:
-                        share_link += f"&parent_id={overwritten_material.parent_id}"
-                    if overwritten_material.material_type == "file":
-                        share_link += f"&material_id={overwritten_material.id}"
-                    elif overwritten_material.material_type != "folder":
-                        share_link = overwritten_material.attachment.url
-                    await self.helper_service.send_notification(
-                        Notification.NotificationType.MATERIAL,
-                        overwritten_material.id,
-                        f"Material '{overwritten_material.name}' has been overwritten for subject {subject.name}.",
-                        share_link,
-                        subject_id=overwritten_material.subject_id,
-                    )
                     return BaseResponseDto(
                         success=True,
                         code=201,
@@ -563,22 +544,6 @@ class MaterialService(IMaterialService):
                         message=f"Failed to create attachment for material, please try again later.",
                     )
                 created_material.attachment = attachment
-            share_link = f"/user/materials?subject_id={subject_id}"
-            if data.material_type == "folder":
-                share_link += f"&parent_id={created_material.id}"
-            elif parent_id:
-                share_link += f"&parent_id={parent_id}"
-            if data.material_type == "file":
-                share_link += f"&material_id={created_material.id}"
-            elif data.material_type != "folder":
-                share_link = created_material.attachment.url
-            await self.helper_service.send_notification(
-                Notification.NotificationType.MATERIAL,
-                created_material.id,
-                f"New material '{created_material.name}' has been created for subject {subject.name}.",
-                share_link,
-                subject_id=created_material.subject_id,
-            )
             await self.logger.log(
                 action="Create",
                 entity="Material",
@@ -922,24 +887,6 @@ class MaterialService(IMaterialService):
                             should_delete_file=details.get("url", "")
                             != old_attachment.url,
                         )
-                    share_link = (
-                        f"/user/materials?subject_id={overwritten_material.subject_id}"
-                    )
-                    if overwritten_material.material_type == "folder":
-                        share_link += f"&parent_id={overwritten_material.id}"
-                    elif overwritten_material.parent_id:
-                        share_link += f"&parent_id={overwritten_material.parent_id}"
-                    if overwritten_material.material_type == "file":
-                        share_link += f"&material_id={overwritten_material.id}"
-                    elif overwritten_material.material_type != "folder":
-                        share_link = overwritten_material.attachment.url
-                    await self.helper_service.send_notification(
-                        Notification.NotificationType.MATERIAL,
-                        overwritten_material.id,
-                        f"Material '{overwritten_material.name}' has been overwritten for subject {subject.name}.",
-                        share_link,
-                        subject_id=overwritten_material.subject_id,
-                    )
                     return BaseResponseDto(
                         success=True,
                         code=200,
@@ -1060,22 +1007,6 @@ class MaterialService(IMaterialService):
                         message=f"Failed to create attachment for material, please try again later.",
                     )
                 updated_material.attachment = attachment
-            share_link = f"/user/materials?subject_id={updated_material.subject_id}"
-            if updated_material.material_type == "folder":
-                share_link += f"&parent_id={updated_material.id}"
-            elif updated_material.parent_id:
-                share_link += f"&parent_id={updated_material.parent_id}"
-            if updated_material.material_type == "file":
-                share_link += f"&material_id={updated_material.id}"
-            elif updated_material.material_type != "folder":
-                share_link = updated_material.attachment.url
-            await self.helper_service.send_notification(
-                Notification.NotificationType.MATERIAL,
-                updated_material.id,
-                f"Material '{updated_material.name}' has been updated for subject {subject.name}.",
-                share_link,
-                subject_id=updated_material.subject_id,
-            )
             await self.logger.log(
                 action="Update",
                 entity="Material",
@@ -2186,20 +2117,6 @@ class MaterialService(IMaterialService):
                     data=None,
                     message=f"Failed to create materials from Google Drive data, please try again later.",
                 )
-            share_link = f"/user/materials?subject_id={subject_id}"
-            if created_data.material_type == "folder":
-                share_link += f"&parent_id={created_data.id}"
-            elif parent_id:
-                share_link += f"&parent_id={parent_id}"
-            if len(fetched_data.children) == 0:
-                share_link += f"&material_id={created_data.id}"
-            await self.helper_service.send_notification(
-                notification_type=Notification.NotificationType.MATERIAL,
-                parent_id=created_data.id,
-                content=f"New material '{created_data.name}' has been fetched from drive to subject '{subject.name}'",
-                url=share_link,
-                subject_id=created_data.subject_id,
-            )
             await self.logger.log(
                 action="FetchMaterialsFromDrive",
                 entity="Material",
