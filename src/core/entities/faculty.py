@@ -22,10 +22,8 @@ if TYPE_CHECKING:
     from .user import User
     from .department import Department
     from .announcement import Announcement
-    from .task import Task
     from .subject import Subject
     from .event import Event
-    from .week import Week
 
 
 class Faculty(Base):
@@ -70,9 +68,6 @@ class Faculty(Base):
     )
     events: Mapped[set["Event"]] = relationship(
         "Event", back_populates="faculty", cascade="all, delete-orphan", collection_class=set
-    )
-    weeks: Mapped[set["Week"]] = relationship(
-        "Week", back_populates="faculty", cascade="all, delete-orphan", collection_class=set
     )
 
     # Arguments

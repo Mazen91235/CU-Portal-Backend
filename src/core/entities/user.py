@@ -41,6 +41,8 @@ if TYPE_CHECKING:
     from .userSubjectLink import UserSubjectLink
     from .event import Event
     from .userEvent import UserEvent
+    from .userCompletion import UserCompletion
+    from .weekItem import WeekItem
     from .note import Note
     from .attachment import Attachment
     from .device import Device
@@ -205,6 +207,26 @@ class User(Base):
     )
     user_events: Mapped[set["UserEvent"]] = relationship(
         "UserEvent",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        collection_class=set,
+    )
+    completed_week_items: AssociationProxy[set["WeekItem"]] = association_proxy(
+        "user_completions",
+        "week_item",
+        creator=lambda week_item: __import__(
+            "core.entities.userCompletion", fromlist=["UserCompletion"]
+        ).UserCompletion(week_item=week_item),
+    )
+    completed_tasks: AssociationProxy[set["Task"]] = association_proxy(
+        "user_completions",
+        "task",
+        creator=lambda task: __import__(
+            "core.entities.userCompletion", fromlist=["UserCompletion"]
+        ).UserCompletion(task=task),
+    )
+    user_completions: Mapped[set["UserCompletion"]] = relationship(
+        "UserCompletion",
         back_populates="user",
         cascade="all, delete-orphan",
         collection_class=set,

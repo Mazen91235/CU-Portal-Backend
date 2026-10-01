@@ -23,7 +23,9 @@ from core.entities.faculty import Faculty
 from core.entities.department import Department
 from core.entities.year import Year
 from core.entities.subject import Subject
+from core.entities.weekItem import WeekItem
 from core.entities.userSubjectLink import UserSubjectLink
+from core.entities.userCompletion import UserCompletion
 from core.entities.notification import Notification
 from core.entities.userNotification import UserNotification
 from core.entities.attachment import Attachment
@@ -54,6 +56,7 @@ class HelperService(IHelperService[U]):
         user_notification_repository: IBaseRepository[UserNotification],
         user_repository: IBaseRepository[User],
         device_repository: IBaseRepository[Device],
+        user_completion_repository: IBaseRepository[UserCompletion],
         role_repository: IBaseRepository[Role],
         faculty_repository: IBaseRepository[Faculty],
         department_repository: IBaseRepository[Department],
@@ -67,6 +70,7 @@ class HelperService(IHelperService[U]):
         self.user_notification_repository = user_notification_repository
         self.user_repository = user_repository
         self.device_repository = device_repository
+        self.user_completion_repository = user_completion_repository
         self.role_repository = role_repository
         self.faculty_repository = faculty_repository
         self.department_repository = department_repository
@@ -732,6 +736,9 @@ class HelperService(IHelperService[U]):
         else:
             return None
 
+        request = request_context.get(None)
+        user = user_context.get(None)
+
         conditions = []
         for key, value in data_dict.items():
             is_range_key = key.endswith("_from") or key.endswith("_to")
@@ -769,6 +776,14 @@ class HelperService(IHelperService[U]):
             column = getattr(cls, field_name, None)
 
             if not column:
+                if field_name == "week_id" and hasattr(cls, "week_items"):
+                    conditions.append(
+                        getattr(cls, "week_items").any(WeekItem.week_id == value)
+                    )
+                    if request and "user/" in request.url.path:
+                        request.state.restrict_courses = True
+                    continue
+
                 if field_name not in [
                     "faculty_id",
                     "department_id",
@@ -866,9 +881,6 @@ class HelperService(IHelperService[U]):
 
         if conditions:
             result = and_(*conditions) if is_and else or_(*conditions)
-
-        request = request_context.get(None)
-        user = user_context.get(None)
 
         if not request or not user:
             return result
@@ -1166,6 +1178,45 @@ class HelperService(IHelperService[U]):
                                 user_ids.intersection_update(
                                     [user.id for user in (subject.users or [])]
                                 )
+                # Skip task/exam reminders for users who already completed the item
+                notification_type_value = getattr(
+                    notification_type, "value", notification_type
+                )
+                notification_type_value = str(notification_type_value).lower()
+                if (
+                    notification_type_value in {"task", "exam"}
+                    and "reminder:" in (content or "").lower()
+                    and parent_id
+                    and len(user_ids) > 0
+                ):
+                    completions_response = await self.user_completion_repository.find(
+                        UserCompletion.task_id == parent_id,
+                        limit=int(1e6),
+                        session=session,
+                    )
+                    if not completions_response.success:
+                        await session.rollback()
+                        return_response = BaseResponseDto(
+                            success=False,
+                            code=completions_response.code,
+                            message=completions_response.message,
+                        )
+                        return return_response
+                    completed_user_ids = {
+                        completion.user_id
+                        for completion in (completions_response.data or [])
+                    }
+                    user_ids.difference_update(completed_user_ids)
+                    if len(user_ids) < 1:
+                        await session.rollback()
+                        return_response = BaseResponseDto(
+                            success=True,
+                            code=200,
+                            data=None,
+                            message="All users have already completed this item",
+                        )
+                        return return_response
+
                 if len(user_ids) < 1:
                     await session.rollback()
                     return_response = BaseResponseDto(

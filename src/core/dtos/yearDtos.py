@@ -7,9 +7,7 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from core.dtos.userDtos import UserResponseDto
     from core.dtos.subjectDtos import SubjectResponseDto
-    from core.dtos.taskDtos import TaskResponseDto
     from core.dtos.announcementDtos import AnnouncementResponseDto
-    from core.dtos.weekDtos import WeekResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
 
@@ -38,9 +36,6 @@ class YearResponseDto(BaseModel):
     )
     announcements: list[AnnouncementResponseDto] | None = Field(
         default=None, description="Announcements in this year"
-    )
-    weeks: list[WeekResponseDto] | None = Field(
-        default=None, description="Weeks in this year"
     )
 
     model_config = {

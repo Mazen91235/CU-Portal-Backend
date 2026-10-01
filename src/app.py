@@ -42,6 +42,7 @@ from core.dtos.subjectDtos import *
 from core.dtos.taskDtos import *
 from core.dtos.userDtos import *
 from core.dtos.userNotificationDtos import *
+from core.dtos.userCompletionDtos import *
 from core.dtos.userSubjectLinkDtos import *
 from core.dtos.versionDtos import *
 from core.dtos.weekDtos import *
@@ -56,7 +57,6 @@ from core.entities.task import Task
 from core.entities.announcement import Announcement
 from core.entities.user import User
 from core.entities.event import Event
-from core.entities.weekItem import WeekItem
 from core.utils.firebaseHandler import FirebaseHandler
 from core.utils.responseHandler import ResponseHandler
 
@@ -90,7 +90,6 @@ def rebuild_response_dtos() -> None:
         ReleaseItem=ReleaseItem,
         User=User,
         Event=Event,
-        WeekItem=WeekItem,
     )
     for dto in response_dtos:
         dto.model_rebuild(_types_namespace=dto_namespace)
@@ -197,6 +196,7 @@ def create_app() -> FastAPI:
     year_user_routes = container.year_user_routes()
     week_user_routes = container.week_user_routes()
     event_user_routes = container.event_user_routes()
+    user_completion_user_routes = container.user_completion_user_routes()
 
     exam_admin_routes = container.exam_admin_routes()
     attachment_public_routes = container.attachment_public_routes()
@@ -231,6 +231,7 @@ def create_app() -> FastAPI:
     main_user_routes.include_router(year_user_routes)
     main_user_routes.include_router(week_user_routes)
     main_user_routes.include_router(event_user_routes)
+    main_user_routes.include_router(user_completion_user_routes)
     main_admin_routes.include_router(user_admin_routes)
     main_admin_routes.include_router(role_admin_routes)
     main_admin_routes.include_router(faculty_admin_routes)

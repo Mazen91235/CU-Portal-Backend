@@ -13,6 +13,8 @@ from .base import (
     Mapped,
     Optional,
     TimezoneHandler,
+    AssociationProxy,
+    association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
@@ -26,6 +28,7 @@ if TYPE_CHECKING:
     from .faculty import Faculty
     from .subject import Subject
     from .attachment import Attachment
+    from .userCompletion import UserCompletion
 
 
 class Task(Base):
@@ -81,9 +84,24 @@ class Task(Base):
         cascade="save-update, merge",
         collection_class=set,
     )
+    completed_by_users: AssociationProxy[set["User"]] = association_proxy(
+        "user_completions",
+        "user",
+        creator=lambda user: __import__(
+            "core.entities.userCompletion", fromlist=["UserCompletion"]
+        ).UserCompletion(user=user),
+    )
+    user_completions: Mapped[set["UserCompletion"]] = relationship(
+        "UserCompletion",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        collection_class=set,
+    )
 
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Arguments
     __table_args__ = (
@@ -95,7 +113,9 @@ class Task(Base):
             "subject_id",
             unique=True,
         ),
-        Index("idx_task_type_subject_id_deadline", "task_type", "subject_id", "deadline"),
+        Index(
+            "idx_task_type_subject_id_deadline", "task_type", "subject_id", "deadline"
+        ),
     )
     __mapper_args__ = {
         "version_id_col": version,

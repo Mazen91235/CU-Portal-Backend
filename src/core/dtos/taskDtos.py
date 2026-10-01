@@ -6,10 +6,8 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from .userDtos import UserResponseDto
     from .subjectDtos import SubjectResponseDto
-    from .facultyDtos import FacultyResponseDto
-    from .departmentDtos import DepartmentResponseDto
-    from .yearDtos import YearResponseDto
     from .attachmentDtos import AttachmentResponseDto
+    from .userCompletionDtos import UserCompletionResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
 
@@ -64,6 +62,12 @@ class TaskResponseDto(BaseModel):
     )
     attachments: list[AttachmentResponseDto] | None = Field(
         default=None, description="List of attachments associated with the task"
+    )
+    completed_by_users: list[UserResponseDto] | None = Field(
+        default=None, description="List of users who have completed the task"
+    )
+    user_completions: list[UserCompletionResponseDto] | None = Field(
+        default=None, description="List of user completions associated with the task"
     )
 
     # Pydantic Configuration

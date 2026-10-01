@@ -122,6 +122,9 @@ class MaterialSearchDto(BaseSearchDto):
         max_length=30,
         description="Type of the material to filter by (file, folder, youtube, drive, external.)",
     )
+    week_id: int | None = Field(
+        default=None, description="ID of the associated week to filter by"
+    )
     subject_id: int | None = Field(
         default=None, description="ID of the associated subject to filter by"
     )

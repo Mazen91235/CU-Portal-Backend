@@ -441,7 +441,9 @@ class MaterialService(IMaterialService):
                     share_link = (
                         f"/user/materials?subject_id={overwritten_material.subject_id}"
                     )
-                    if overwritten_material.parent_id:
+                    if overwritten_material.material_type == "folder":
+                        share_link += f"&parent_id={overwritten_material.id}"
+                    elif overwritten_material.parent_id:
                         share_link += f"&parent_id={overwritten_material.parent_id}"
                     if overwritten_material.material_type == "file":
                         share_link += f"&material_id={overwritten_material.id}"
@@ -562,7 +564,9 @@ class MaterialService(IMaterialService):
                     )
                 created_material.attachment = attachment
             share_link = f"/user/materials?subject_id={subject_id}"
-            if parent_id:
+            if data.material_type == "folder":
+                share_link += f"&parent_id={created_material.id}"
+            elif parent_id:
                 share_link += f"&parent_id={parent_id}"
             if data.material_type == "file":
                 share_link += f"&material_id={created_material.id}"
@@ -921,7 +925,9 @@ class MaterialService(IMaterialService):
                     share_link = (
                         f"/user/materials?subject_id={overwritten_material.subject_id}"
                     )
-                    if overwritten_material.parent_id:
+                    if overwritten_material.material_type == "folder":
+                        share_link += f"&parent_id={overwritten_material.id}"
+                    elif overwritten_material.parent_id:
                         share_link += f"&parent_id={overwritten_material.parent_id}"
                     if overwritten_material.material_type == "file":
                         share_link += f"&material_id={overwritten_material.id}"
@@ -1055,7 +1061,9 @@ class MaterialService(IMaterialService):
                     )
                 updated_material.attachment = attachment
             share_link = f"/user/materials?subject_id={updated_material.subject_id}"
-            if updated_material.parent_id:
+            if updated_material.material_type == "folder":
+                share_link += f"&parent_id={updated_material.id}"
+            elif updated_material.parent_id:
                 share_link += f"&parent_id={updated_material.parent_id}"
             if updated_material.material_type == "file":
                 share_link += f"&material_id={updated_material.id}"
@@ -2179,7 +2187,9 @@ class MaterialService(IMaterialService):
                     message=f"Failed to create materials from Google Drive data, please try again later.",
                 )
             share_link = f"/user/materials?subject_id={subject_id}"
-            if parent_id:
+            if created_data.material_type == "folder":
+                share_link += f"&parent_id={created_data.id}"
+            elif parent_id:
                 share_link += f"&parent_id={parent_id}"
             if len(fetched_data.children) == 0:
                 share_link += f"&material_id={created_data.id}"
@@ -2376,29 +2386,6 @@ class MaterialService(IMaterialService):
                         code=404,
                         data=None,
                         message=f"Week with ID {item.week_id} not found",
-                    )
-
-                if (
-                    week.faculty_id != subject.faculty_id
-                    or week.department_id != subject.department_id
-                    or week.year_id != subject.year_id
-                ):
-                    await self.logger.log(
-                        action="ValidateWeekItems",
-                        entity="Material",
-                        level="error",
-                        code=400,
-                        message=f"Week with ID {item.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
-                        details={
-                            "error": "Week does not match subject's faculty, department, or year"
-                        },
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message=f"Week with ID {item.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
                     )
 
                 result.add(WeekItem(note=item.note, week_id=week.id))

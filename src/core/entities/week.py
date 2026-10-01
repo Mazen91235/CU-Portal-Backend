@@ -53,26 +53,6 @@ class Week(Base):
     )
 
     # Relationships
-    faculty_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("faculties.id", ondelete="CASCADE", name="fk_faculty_week"),
-        nullable=False,
-    )
-    faculty: Mapped["Faculty"] = relationship("Faculty", back_populates="weeks")
-    department_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("departments.id", ondelete="CASCADE", name="fk_department_week"),
-        nullable=False,
-    )
-    department: Mapped["Department"] = relationship(
-        "Department", back_populates="weeks"
-    )
-    year_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("years.id", ondelete="CASCADE", name="fk_year_week"),
-        nullable=False,
-    )
-    year: Mapped["Year"] = relationship("Year", back_populates="weeks")
     materials: AssociationProxy[set["Material"]] = association_proxy(
         "week_items",
         "material",
@@ -92,18 +72,7 @@ class Week(Base):
 
     # Arguments
     __table_args__ = (
-        Index(
-            "idx_week_faculty_id_department_id_year_id_week_number",
-            "faculty_id",
-            "department_id",
-            "year_id",
-            "week_number",
-            unique=True,
-        ),
         ExcludeConstraint(
-            ("faculty_id", "="),
-            ("department_id", "="),
-            ("year_id", "="),
             (
                 func.daterange(
                     start_date, start_date + text("INTERVAL '7 days'"), "[)"
