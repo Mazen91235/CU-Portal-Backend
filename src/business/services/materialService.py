@@ -459,7 +459,9 @@ class MaterialService(IMaterialService):
                     share_link = (
                         f"/user/materials?subject_id={overwritten_material.subject_id}"
                     )
-                    if overwritten_material.parent_id:
+                    if overwritten_material.material_type == "folder":
+                        share_link += f"&parent_id={overwritten_material.id}"
+                    elif overwritten_material.parent_id:
                         share_link += f"&parent_id={overwritten_material.parent_id}"
                     if overwritten_material.material_type == "file":
                         share_link += f"&material_id={overwritten_material.id}"
@@ -580,7 +582,9 @@ class MaterialService(IMaterialService):
                     )
                 created_material.attachment = attachment
             share_link = f"/user/materials?subject_id={subject_id}"
-            if parent_id:
+            if data.material_type == "folder":
+                share_link += f"&parent_id={created_material.id}"
+            elif parent_id:
                 share_link += f"&parent_id={parent_id}"
             if data.material_type == "file":
                 share_link += f"&material_id={created_material.id}"
@@ -939,7 +943,9 @@ class MaterialService(IMaterialService):
                     share_link = (
                         f"/user/materials?subject_id={overwritten_material.subject_id}"
                     )
-                    if overwritten_material.parent_id:
+                    if overwritten_material.material_type == "folder":
+                        share_link += f"&parent_id={overwritten_material.id}"
+                    elif overwritten_material.parent_id:
                         share_link += f"&parent_id={overwritten_material.parent_id}"
                     if overwritten_material.material_type == "file":
                         share_link += f"&material_id={overwritten_material.id}"
@@ -1073,7 +1079,9 @@ class MaterialService(IMaterialService):
                     )
                 updated_material.attachment = attachment
             share_link = f"/user/materials?subject_id={updated_material.subject_id}"
-            if updated_material.parent_id:
+            if updated_material.material_type == "folder":
+                share_link += f"&parent_id={updated_material.id}"
+            elif updated_material.parent_id:
                 share_link += f"&parent_id={updated_material.parent_id}"
             if updated_material.material_type == "file":
                 share_link += f"&material_id={updated_material.id}"
@@ -2197,7 +2205,9 @@ class MaterialService(IMaterialService):
                     message=f"Failed to create materials from Google Drive data, please try again later.",
                 )
             share_link = f"/user/materials?subject_id={subject_id}"
-            if parent_id:
+            if created_data.material_type == "folder":
+                share_link += f"&parent_id={created_data.id}"
+            elif parent_id:
                 share_link += f"&parent_id={parent_id}"
             if len(fetched_data.children) == 0:
                 share_link += f"&material_id={created_data.id}"
