@@ -73,7 +73,14 @@ class MaterialService(IMaterialService):
                 is_exact,
             )
             if data and data.week_id:
-                predicate = and_(predicate, Material.week_items.any(WeekItem.week_id == data.week_id)) if predicate is not None else Material.week_items.any(WeekItem.week_id == data.week_id)
+                predicate = (
+                    and_(
+                        predicate,
+                        Material.week_items.any(WeekItem.week_id == data.week_id),
+                    )
+                    if predicate is not None
+                    else Material.week_items.any(WeekItem.week_id == data.week_id)
+                )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Material, includes
             )
@@ -138,7 +145,14 @@ class MaterialService(IMaterialService):
                 is_exact,
             )
             if data and data.week_id:
-                            predicate = and_(predicate, Material.week_items.any(WeekItem.week_id == data.week_id)) if predicate is not None else Material.week_items.any(WeekItem.week_id == data.week_id)
+                predicate = (
+                    and_(
+                        predicate,
+                        Material.week_items.any(WeekItem.week_id == data.week_id),
+                    )
+                    if predicate is not None
+                    else Material.week_items.any(WeekItem.week_id == data.week_id)
+                )
             dynamic_includes = self.helper_service.generate_dynamic_includes(
                 Material, includes
             )
@@ -2380,29 +2394,6 @@ class MaterialService(IMaterialService):
                         code=404,
                         data=None,
                         message=f"Week with ID {item.week_id} not found",
-                    )
-
-                if (
-                    week.faculty_id != subject.faculty_id
-                    or week.department_id != subject.department_id
-                    or week.year_id != subject.year_id
-                ):
-                    await self.logger.log(
-                        action="ValidateWeekItems",
-                        entity="Material",
-                        level="error",
-                        code=400,
-                        message=f"Week with ID {item.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
-                        details={
-                            "error": "Week does not match subject's faculty, department, or year"
-                        },
-                        source="MaterialService",
-                    )
-                    return BaseResponseDto(
-                        success=False,
-                        code=400,
-                        data=None,
-                        message=f"Week with ID {item.week_id} does not belong to the same faculty, department, or year as the subject {subject.id}",
                     )
 
                 result.add(WeekItem(note=item.note, week_id=week.id))
