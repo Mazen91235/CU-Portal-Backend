@@ -23,6 +23,7 @@ from core.entities.faculty import Faculty
 from core.entities.department import Department
 from core.entities.year import Year
 from core.entities.subject import Subject
+from core.entities.weekItem import WeekItem
 from core.entities.userSubjectLink import UserSubjectLink
 from core.entities.userCompletion import UserCompletion
 from core.entities.notification import Notification
@@ -735,6 +736,9 @@ class HelperService(IHelperService[U]):
         else:
             return None
 
+        request = request_context.get(None)
+        user = user_context.get(None)
+
         conditions = []
         for key, value in data_dict.items():
             is_range_key = key.endswith("_from") or key.endswith("_to")
@@ -772,6 +776,14 @@ class HelperService(IHelperService[U]):
             column = getattr(cls, field_name, None)
 
             if not column:
+                if field_name == "week_id" and hasattr(cls, "week_items"):
+                    conditions.append(
+                        getattr(cls, "week_items").any(WeekItem.week_id == value)
+                    )
+                    if request and "user/" in request.url.path:
+                        request.state.restrict_courses = True
+                    continue
+
                 if field_name not in [
                     "faculty_id",
                     "department_id",
@@ -869,9 +881,6 @@ class HelperService(IHelperService[U]):
 
         if conditions:
             result = and_(*conditions) if is_and else or_(*conditions)
-
-        request = request_context.get(None)
-        user = user_context.get(None)
 
         if not request or not user:
             return result
