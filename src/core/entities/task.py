@@ -99,7 +99,9 @@ class Task(Base):
     )
 
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Arguments
     __table_args__ = (
@@ -111,7 +113,9 @@ class Task(Base):
             "subject_id",
             unique=True,
         ),
-        Index("idx_task_type_subject_id_deadline", "task_type", "subject_id", "deadline"),
+        Index(
+            "idx_task_type_subject_id_deadline", "task_type", "subject_id", "deadline"
+        ),
     )
     __mapper_args__ = {
         "version_id_col": version,

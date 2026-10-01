@@ -3,9 +3,12 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
     from core.dtos.materialDtos import MaterialResponseDto
     from core.dtos.weekDtos import WeekResponseDto
+    from core.dtos.userDtos import UserResponseDto
+    from core.dtos.userCompletionDtos import UserCompletionResponseDto
 
 
 class WeekItemMutationDto(BaseModel):
@@ -27,6 +30,12 @@ class WeekItemResponseDto(BaseModel):
     )
     material: MaterialResponseDto | None = Field(
         None, description="Material associated with this item"
+    )
+    completed_by_users: list[UserResponseDto] | None = Field(
+        None, description="Users who have completed this week item"
+    )
+    user_completions: list[UserCompletionResponseDto] | None = Field(
+        None, description="User completions associated with this week item"
     )
 
     model_config = {
