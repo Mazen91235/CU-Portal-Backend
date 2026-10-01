@@ -56,6 +56,7 @@ from api.routes.eventRoutes import (
     create_event_user_router,
     create_event_admin_router,
 )
+from api.routes.userCompletionRoutes import create_user_completion_user_router
 from api.routes.yearRoutes import create_year_user_router, create_year_admin_router
 from api.routes.departmentRoutes import (
     create_department_user_router,
@@ -90,6 +91,7 @@ from api.controllers.departmentController import DepartmentController
 from api.controllers.releaseController import ReleaseController
 from api.controllers.weekController import WeekController
 from api.controllers.eventController import EventController
+from api.controllers.userCompletionController import UserCompletionController
 from api.controllers.attachmentController import AttachmentController
 from api.controllers.systemController import SystemController
 from business.services.userService import UserService
@@ -109,6 +111,7 @@ from business.services.yearService import YearService
 from business.services.departmentService import DepartmentService
 from business.services.weekService import WeekService
 from business.services.eventService import EventService
+from business.services.userCompletionService import UserCompletionService
 from business.services.examService import ExamService
 from business.services.releaseService import ReleaseService
 from business.services.attachmentService import AttachmentService
@@ -141,8 +144,10 @@ from core.entities.version import Version
 from core.entities.releaseItem import ReleaseItem
 from core.entities.eventOrganizer import EventOrganizer
 from core.entities.week import Week
+from core.entities.weekItem import WeekItem
 from core.entities.event import Event
 from core.entities.userEvent import UserEvent
+from core.entities.userCompletion import UserCompletion
 from core.entities.eventOrganizer import EventOrganizer
 from core.entities.attachment import Attachment
 from core.utils.databaseHandler import DatabaseHandler
@@ -303,6 +308,18 @@ class Container(containers.DeclarativeContainer):
         model=UserEvent,
         session_factory=session_factory,
     )
+    user_completion_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=UserCompletion,
+        session_factory=session_factory,
+    )
+    week_item_repository = providers.Factory(
+        BaseRepository,
+        session=db_session,
+        model=WeekItem,
+        session_factory=session_factory,
+    )
     event_organizer_repository = providers.Factory(
         BaseRepository,
         session=db_session,
@@ -323,6 +340,7 @@ class Container(containers.DeclarativeContainer):
         user_notification_repository=user_notification_repository,
         user_repository=user_repository,
         device_repository=device_repository,
+        user_completion_repository=user_completion_repository,
         role_repository=role_repository,
         faculty_repository=faculty_repository,
         department_repository=department_repository,
@@ -417,6 +435,14 @@ class Container(containers.DeclarativeContainer):
         event_repository=event_repository,
         user_event_repository=user_event_repository,
         event_organizer_repository=event_organizer_repository,
+        logger=logger,
+        helper_service=helper_service,
+    )
+    user_completion_service = providers.Factory(
+        UserCompletionService,
+        user_completion_repository=user_completion_repository,
+        week_item_repository=week_item_repository,
+        task_repository=task_repository,
         logger=logger,
         helper_service=helper_service,
     )
@@ -577,6 +603,12 @@ class Container(containers.DeclarativeContainer):
 
     event_controller = providers.Factory(
         EventController, event_service=event_service, logger=logger
+    )
+
+    user_completion_controller = providers.Factory(
+        UserCompletionController,
+        user_completion_service=user_completion_service,
+        logger=logger,
     )
 
     subject_controller = providers.Factory(
@@ -843,6 +875,12 @@ class Container(containers.DeclarativeContainer):
         controller_provider=event_controller.provider,
         auth_middleware_provider=auth_middleware.provider,
         validation_middleware_provider=validation_middleware.provider,
+    )
+
+    user_completion_user_routes = providers.Factory(
+        create_user_completion_user_router,
+        controller_provider=user_completion_controller.provider,
+        auth_middleware_provider=auth_middleware.provider,
     )
 
     event_admin_routes = providers.Factory(

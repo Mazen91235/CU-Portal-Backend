@@ -13,6 +13,8 @@ from .base import (
     Mapped,
     Optional,
     TimezoneHandler,
+    AssociationProxy,
+    association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
@@ -26,6 +28,7 @@ if TYPE_CHECKING:
     from .faculty import Faculty
     from .subject import Subject
     from .attachment import Attachment
+    from .userCompletion import UserCompletion
 
 
 class Task(Base):
@@ -79,6 +82,19 @@ class Task(Base):
         "Attachment",
         back_populates="task",
         cascade="save-update, merge",
+        collection_class=set,
+    )
+    completed_by_users: AssociationProxy[set["User"]] = association_proxy(
+        "user_completions",
+        "user",
+        creator=lambda user: __import__(
+            "core.entities.userCompletion", fromlist=["UserCompletion"]
+        ).UserCompletion(user=user),
+    )
+    user_completions: Mapped[set["UserCompletion"]] = relationship(
+        "UserCompletion",
+        back_populates="task",
+        cascade="all, delete-orphan",
         collection_class=set,
     )
 

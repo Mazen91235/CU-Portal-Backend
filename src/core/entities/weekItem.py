@@ -12,6 +12,8 @@ from .base import (
     Optional,
     TimezoneHandler,
     TypedDict,
+    AssociationProxy,
+    association_proxy,
     TYPE_CHECKING,
     mapped_column,
     relationship,
@@ -20,6 +22,8 @@ from .base import (
 if TYPE_CHECKING:
     from .week import Week
     from .material import Material
+    from .user import User
+    from .userCompletion import UserCompletion
 
 
 class WeekItem(Base):
@@ -57,6 +61,19 @@ class WeekItem(Base):
     )
     material: Mapped["Material"] = relationship(
         "Material", back_populates="week_items"
+    )
+    completed_by_users: AssociationProxy[set["User"]] = association_proxy(
+        "user_completions",
+        "user",
+        creator=lambda user: __import__(
+            "core.entities.userCompletion", fromlist=["UserCompletion"]
+        ).UserCompletion(user=user),
+    )
+    user_completions: Mapped[set["UserCompletion"]] = relationship(
+        "UserCompletion",
+        back_populates="week_item",
+        cascade="all, delete-orphan",
+        collection_class=set,
     )
 
     # Versioning

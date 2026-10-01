@@ -20,6 +20,7 @@ from core.entities.subject import Subject
 from core.entities.task import Task
 from core.entities.token import Token
 from core.entities.user import User
+from core.entities.userCompletion import UserCompletion
 from core.entities.userEvent import UserEvent
 from core.entities.userNotification import UserNotification
 from core.entities.userSubjectLink import UserSubjectLink
@@ -53,6 +54,7 @@ class EntitiesHandler:
         "Task": Task,
         "Token": Token,
         "User": User,
+        "UserCompletion": UserCompletion,
         "UserEvent": UserEvent,
         "UserNotification": UserNotification,
         "UserSubjectLink": UserSubjectLink,
