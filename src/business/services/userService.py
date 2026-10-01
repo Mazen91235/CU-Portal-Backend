@@ -2807,12 +2807,6 @@ class UserService(IUserService):
                             details={"error": email_response.error},
                             source="UserService",
                         )
-                        return BaseResponseDto(
-                            success=False,
-                            code=email_response.code or 500,
-                            data=False,
-                            message=f"An error occurred while sending account approval email to user with ID {user.id}, please try again.",
-                        )
             await self.logger.log(
                 action="UpdateMany",
                 entity="User",
