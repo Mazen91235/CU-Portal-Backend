@@ -8,8 +8,6 @@ if TYPE_CHECKING:
     from core.dtos.subjectDtos import SubjectResponseDto
     from core.dtos.announcementDtos import AnnouncementResponseDto
     from core.dtos.departmentDtos import DepartmentResponseDto
-    from core.dtos.taskDtos import TaskResponseDto
-    from core.dtos.weekDtos import WeekResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
 
@@ -42,9 +40,6 @@ class FacultyResponseDto(BaseModel):
     )
     subjects: list[SubjectResponseDto] | None = Field(
         default=None, description="List of subjects associated with the faculty"
-    )
-    weeks: list[WeekResponseDto] | None = Field(
-        default=None, description="List of weeks associated with the faculty"
     )
 
     # Pydantic Configuration

@@ -9,9 +9,7 @@ if TYPE_CHECKING:
     from core.dtos.userDtos import UserResponseDto
     from core.dtos.facultyDtos import FacultyResponseDto
     from core.dtos.subjectDtos import SubjectResponseDto
-    from core.dtos.taskDtos import TaskResponseDto
     from core.dtos.announcementDtos import AnnouncementResponseDto
-    from core.dtos.weekDtos import WeekResponseDto
 
 from core.dtos.baseDtos import BaseSearchDto
 
@@ -56,9 +54,6 @@ class DepartmentResponseDto(BaseModel):
     )
     announcements: list[AnnouncementResponseDto] | None = Field(
         default=None, description="Announcements in this department"
-    )
-    weeks: list[WeekResponseDto] | None = Field(
-        default=None, description="Weeks in this department"
     )
 
     model_config = {
