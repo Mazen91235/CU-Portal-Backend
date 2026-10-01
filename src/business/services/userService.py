@@ -2627,6 +2627,7 @@ class UserService(IUserService):
                 user_response = await self.user_repository.find_one(
                     User.id == record.id, dynamic_includes
                 )
+                should_send_email = False
                 if not user_response.success:
                     return BaseResponseDto(
                         success=False,
@@ -2697,6 +2698,7 @@ class UserService(IUserService):
                         data=False,
                         message=f"User with ID {user.id} is suspended not pending approval, and their status cannot be updated.",
                     )
+                should_send_email = not user.status and record.approved
                 user.status = record.approved if not user.status else user.status
                 if record.role_id:
                     dynamic_includes = self.helper_service.generate_dynamic_includes(
@@ -2787,6 +2789,29 @@ class UserService(IUserService):
                             code=update_user_response.code,
                             data=False,
                             message=update_user_response.message,
+                        )
+                if should_send_email:
+                    message = f"Your account has been approved. You can now log in."
+                    email_response = await self.helper_service.send_email(
+                        to_email=user.email,
+                        subject="CU - Portal - Account Approved",
+                        body=message,
+                    )
+                    if not email_response.success:
+                        await self.logger.log(
+                            action="UpdateMany",
+                            entity="User",
+                            level="error",
+                            code=email_response.code or 500,
+                            message=f"Failed to send account approval email to user with ID {user.id}",
+                            details={"error": email_response.error},
+                            source="UserService",
+                        )
+                        return BaseResponseDto(
+                            success=False,
+                            code=email_response.code or 500,
+                            data=False,
+                            message=f"An error occurred while sending account approval email to user with ID {user.id}, please try again.",
                         )
             await self.logger.log(
                 action="UpdateMany",
