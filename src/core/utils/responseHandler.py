@@ -109,7 +109,11 @@ class ResponseHandler:
         if not real_origin or real_origin == "null":
             real_origin = request.headers.get("referer")
         real_origin = real_origin.rstrip("/") if real_origin else None
-        if real_origin and real_origin not in allowed_origins:
+        if (
+            real_origin
+            and real_origin not in allowed_origins
+            and "google" not in real_origin
+        ):
             response = cls.generate_response(
                 success=False,
                 code=403,
