@@ -160,18 +160,13 @@ async def _generate_cache_key_from_template(
         request.state.cached_user_access = user_cached_response
         access_data = user_cached_response.get("access", user_cached_response)
         SUBS["{registered_subjects}"] = ",".join(
-            str(subject_id)
-            for subject_id in access_data.get("registered_subjects", [])
+            str(subject_id) for subject_id in access_data.get("registered_subjects", [])
         )
         SUBS["{restrict_courses}"] = access_data.get("restrict_courses", "1")
         SUBS["{faculty}"] = access_data.get("faculty", "")
-        SUBS["{restrict_faculties}"] = access_data.get(
-            "restrict_faculties", "1"
-        )
+        SUBS["{restrict_faculties}"] = access_data.get("restrict_faculties", "1")
         SUBS["{department}"] = access_data.get("department", "")
-        SUBS["{restrict_departments}"] = access_data.get(
-            "restrict_departments", "1"
-        )
+        SUBS["{restrict_departments}"] = access_data.get("restrict_departments", "1")
         SUBS["{year}"] = access_data.get("year", "")
         SUBS["{restrict_years}"] = access_data.get("restrict_years", "1")
         for key, value in SUBS.items():
@@ -256,6 +251,10 @@ async def _update_cache(request: Request, response: Response):
             and str(response.status_code)[0] == "2"
             and issubclass(type(response), JSONResponse)
         ):
+            if "logout" in request.url.path:
+                module = "auth"
+                await caching_handler.invalidate_module_cache(module)
+                return None
             cache_key = getattr(request.state, "cache_key", None)
             if cache_key is None:
                 cache_key = await _resolve_cache_key(request)
@@ -316,16 +315,12 @@ async def _update_user_cache(request: Request):
                 "1" if "Access All Departments" in user_permissions else "0"
             ),
             "year": str(user.year_id or ""),
-            "restrict_years": (
-                "1" if "Access All Years" in user_permissions else "0"
-            ),
+            "restrict_years": ("1" if "Access All Years" in user_permissions else "0"),
         }
 
         cached = build_auth_cache(user, user_permissions)
         cached["access"] = access
-        await caching_handler.set(
-            f"system:{refresh_token}", cached, expire=CACHE_TTL
-        )
+        await caching_handler.set(f"system:{refresh_token}", cached, expire=CACHE_TTL)
         return None
     except Exception as e:
         await _log(
