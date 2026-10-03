@@ -2748,7 +2748,7 @@ class UserService(IUserService):
                             data=False,
                             message=f"You do not have sufficient permissions to assign the role specified for user with ID {user.id}.",
                         )
-                    user.role = role
+                    user.role_id = role.id
                 if user.pending_user:
                     attachment = user.pending_user.attachment
                     delete_pending_user_response = (
