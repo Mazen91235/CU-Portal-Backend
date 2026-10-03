@@ -252,8 +252,12 @@ async def _update_cache(request: Request, response: Response):
             and issubclass(type(response), JSONResponse)
         ):
             if "logout" in request.url.path:
-                module = "auth"
-                await caching_handler.invalidate_module_cache(module)
+                user = user_context.get(None)
+                refresh_token = getattr(user, "refresh_token", None) if user else None
+                if not refresh_token:
+                    refresh_token = request.cookies.get("token", None)
+                if refresh_token:
+                    await caching_handler.invalidate_module_cache(refresh_token)
                 return None
             cache_key = getattr(request.state, "cache_key", None)
             if cache_key is None:

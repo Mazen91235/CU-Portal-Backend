@@ -87,7 +87,7 @@ class CachingHandler:
             return
 
         batch: list[str] = []
-        async for key in self.redis_client.scan_iter(match=f"*/{module}*", count=500):
+        async for key in self.redis_client.scan_iter(match=f"*{module}*", count=500):
             batch.append(key)
             if len(batch) >= 500:
                 await self.redis_client.delete(*batch)
