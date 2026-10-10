@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.exceptions import HTTPException
 from pydantic import BaseModel
 from business.contextVars.requestContext import request_context
+from core.utils.validator import Validator
 
 BACKGROUND_TASKS: set[asyncio.Task] = set()
 
@@ -25,7 +26,7 @@ class ResponseHandler:
         if isinstance(data, BaseModel):
             data = data.model_dump(mode="json")
         response = JSONResponse(
-            status_code=code or (200 if success else 500),
+            status_code=int(code) if code and Validator.is_int(str(code)) else (200 if success else 500),
             content={
                 "success": success,
                 "message": message,
