@@ -475,6 +475,8 @@ class NotificationService(INotificationService):
                     content = f"Reminder: Event '{event.title}' that you registered for is scheduled to start in {due}."
                     share_link = f"/user/events/{event.id}"
                     user_ids = {ue.user_id for ue in event.user_events}
+                    if len(user_ids) < 1:
+                        continue
                     response = await self.helper_service.send_notification(
                         notification_type=Notification.NotificationType.EVENT,
                         parent_id=event.id,
