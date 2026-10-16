@@ -2749,24 +2749,12 @@ class UserService(IUserService):
                             message=f"You do not have sufficient permissions to assign the role specified for user with ID {user.id}.",
                         )
                     user.role_id = role.id
-                if user.pending_user:
-                    attachment = user.pending_user.attachment
-                    delete_pending_user_response = (
-                        await self.pending_user_repository.delete(user.pending_user)
-                    )
-                    if not delete_pending_user_response.success:
-                        return BaseResponseDto(
-                            success=False,
-                            code=delete_pending_user_response.code,
-                            data=False,
-                            message=delete_pending_user_response.message,
-                        )
-                    if attachment:
-                        await self.helper_service.delete_attachment(
-                            attachment=attachment
-                        )
+                to_be_removed = []
+                if user.pending_user and user.pending_user.attachment:
+                    to_be_removed.append(user.pending_user.attachment)
                 if not user.status:
-                    attachment = user.avatar
+                    if user.avatar:
+                        to_be_removed.append(user.avatar)
                     delete_user_response = await self.user_repository.delete(user)
                     if not delete_user_response.success:
                         return BaseResponseDto(
@@ -2774,10 +2762,6 @@ class UserService(IUserService):
                             code=delete_user_response.code,
                             data=False,
                             message=delete_user_response.message,
-                        )
-                    if attachment:
-                        await self.helper_service.delete_attachment(
-                            attachment=attachment
                         )
                 else:
                     update_user_response = await self.user_repository.update(
@@ -2790,6 +2774,19 @@ class UserService(IUserService):
                             data=False,
                             message=update_user_response.message,
                         )
+                    if user.pending_user:
+                        delete_pending_user_response = (
+                            await self.pending_user_repository.delete(user.pending_user)
+                        )
+                        if not delete_pending_user_response.success:
+                            return BaseResponseDto(
+                                success=False,
+                                code=delete_pending_user_response.code,
+                                data=False,
+                                message=delete_pending_user_response.message,
+                            )
+                for attachment in to_be_removed:
+                    await self.helper_service.delete_attachment(attachment=attachment)
                 if should_send_email:
                     message = f"Your account has been approved. You can now log in."
                     email_response = await self.helper_service.send_email(
