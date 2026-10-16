@@ -2622,7 +2622,7 @@ class UserService(IUserService):
                 )
             for record in data.data_to_update:
                 dynamic_includes = self.helper_service.generate_dynamic_includes(
-                    User, ["pending_user.attachment", "attachment"]
+                    User, ["pending_user.attachment", "avatar"]
                 )
                 user_response = await self.user_repository.find_one(
                     User.id == record.id, dynamic_includes
@@ -2766,7 +2766,7 @@ class UserService(IUserService):
                             attachment=attachment
                         )
                 if not user.status:
-                    attachment = user.attachment
+                    attachment = user.avatar
                     delete_user_response = await self.user_repository.delete(user)
                     if not delete_user_response.success:
                         return BaseResponseDto(
