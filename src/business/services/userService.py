@@ -2752,9 +2752,11 @@ class UserService(IUserService):
                 to_be_removed = []
                 if user.pending_user and user.pending_user.attachment:
                     to_be_removed.append(user.pending_user.attachment)
+                if not user.status and user.avatar:
+                    to_be_removed.append(user.avatar)
+                for attachment in to_be_removed:
+                    await self.helper_service.delete_attachment(attachment=attachment)
                 if not user.status:
-                    if user.avatar:
-                        to_be_removed.append(user.avatar)
                     delete_user_response = await self.user_repository.delete(user)
                     if not delete_user_response.success:
                         return BaseResponseDto(
@@ -2785,8 +2787,6 @@ class UserService(IUserService):
                                 data=False,
                                 message=delete_pending_user_response.message,
                             )
-                for attachment in to_be_removed:
-                    await self.helper_service.delete_attachment(attachment=attachment)
                 if should_send_email:
                     message = f"Your account has been approved. You can now log in."
                     email_response = await self.helper_service.send_email(
