@@ -36,7 +36,7 @@ class Announcement(Base):
     # Columns
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    content: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    content: Mapped[Optional[str]] = mapped_column(String(3000), nullable=True)
     date: Mapped[Optional[datetime]] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )
@@ -58,7 +58,9 @@ class Announcement(Base):
     )
 
     # Versioning
-    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
 
     # Relationships
     year_id: Mapped[Optional[int]] = mapped_column(
