@@ -19,7 +19,7 @@ class AnnouncementCreateDto(BaseModel):
         ..., min_length=1, max_length=255, description="Title of the announcement"
     )
     content: str = Field(
-        ..., min_length=1, max_length=1000, description="Content of the announcement"
+        ..., min_length=1, max_length=3000, description="Content of the announcement"
     )
     date: datetime | None = Field(default=None, description="Date for the announcement")
     subject_id: int | None = Field(
@@ -91,7 +91,7 @@ class AnnouncementUpdateDto(BaseModel):
     content: str = Field(
         ...,
         min_length=1,
-        max_length=1000,
+        max_length=3000,
         description="Content of the announcement",
     )
     date: datetime | None = Field(default=None, description="Date for the announcement")
