@@ -4,8 +4,6 @@ CU Portal Backend is an asynchronous, modular API for a university student porta
 
 The project is designed around Clean Architecture ideas: HTTP concerns stay in the API layer, business rules live in services, domain contracts live in `core`, and database/cloud integrations live in infrastructure. The application is composed through dependency injection rather than having controllers construct their own dependencies.
 
-> This README documents the implementation currently present in the repository. It intentionally does not claim that automated tests exist or that every deployment concern is production-ready.
-
 ## Architecture At A Glance
 
 ```mermaid
@@ -343,10 +341,6 @@ Create a local `.env` file. Never commit it. The values below describe what each
 | `GOOGLE_CLIENT_SECRET`   | Google OAuth client secret                           |
 | `GOOGLE_TOKEN_API_KEY`   | Google token API key                                 |
 
-### Configuration safety
-
-The repository's local environment files contain credential-shaped values. Treat all existing secret values as compromised if they have ever been shared, committed, or uploaded. Rotate them with the relevant providers, replace `.env.example` values with placeholders, and keep only non-secret names and safe defaults in version control. A README should describe secret names and formats, never publish the secret values themselves.
-
 ## Local Development
 
 ### Prerequisites
@@ -433,14 +427,6 @@ This project demonstrates practical backend engineering beyond basic CRUD:
 - Standard response envelopes and centralized response/error handling.
 - Operational logging around authentication, cache failures, timeouts, throttling, and user activity.
 
-## Current Limitations And Honest Next Steps
-
-- No automated test suite was found in the repository. Adding focused unit tests for services, repository transactions, cache-key isolation, authorization middleware, and integration tests for representative routes would be the highest-value next step.
-- API contract tests would protect the shared response envelope and pagination behavior.
-- Secrets should be removed from any tracked environment example and rotated if exposed.
-- Redis availability and cache failures should be covered by explicit resilience tests.
-- Deployment health checks, observability dashboards, and CI quality gates should be documented alongside the hosting configuration.
-
-## Portfolio Summary
+## Summary
 
 CU Portal Backend is a production-oriented academic platform API built with FastAPI, SQLAlchemy, PostgreSQL, Redis, Pydantic, Alembic, Firebase, Google integrations, and dependency injection. Its most important design characteristic is the separation of concerns: HTTP adapters remain thin, business rules are testable in services, persistence is replaceable behind repositories, and cross-cutting concerns such as authorization, caching, throttling, timeouts, and transaction cleanup are applied consistently at the application boundary.
