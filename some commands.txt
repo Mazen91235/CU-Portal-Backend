@@ -1,2 +1,0 @@
-Clear __pycache__ folders:
-Set-Location "c:/Users/MazenDev/Desktop/CMPG Data/Second Year Second Term/Selected Topics/backend"; $dirs = Get-ChildItem -Path . -Recurse -Directory -Filter __pycache__; $count = @($dirs).Count; if ($count -gt 0) { $dirs | Remove-Item -Recurse -Force }; Write-Output "REMOVED_PYCACHE_COUNT=$count"
